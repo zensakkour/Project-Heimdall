@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Heimdall UI</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="hero">
+        <h1>Project Heimdall</h1>
+        <p class="subtitle">Local test + score dashboard</p>
+        <div class="actions">
+          <button id="refresh">Refresh</button>
+          <span id="last-updated" class="muted"></span>
+        </div>
+      </header>
+
+      <section class="card">
+        <h2>Test Status</h2>
+        <div id="test-status" class="status">Loading…</div>
+        <div id="test-details" class="muted"></div>
+      </section>
+
+      <section class="card">
+        <h2>Scores</h2>
+        <div class="stats">
+          <div><span class="label">Images</span><span id="count">0</span></div>
+          <div><span class="label">Avg score</span><span id="avg">0.000</span></div>
+          <div><span class="label">High tier</span><span id="high">0</span></div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Image</th>
+              <th>Score</th>
+              <th>Geo tier</th>
+              <th>Geo conf</th>
+              <th>Uncertainty (m)</th>
+            </tr>
+          </thead>
+          <tbody id="scores-body"></tbody>
+        </table>
+      </section>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
