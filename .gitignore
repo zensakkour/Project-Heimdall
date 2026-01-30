@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+*.pyo
+*.pdb
+*.egg-info/
+.venv/
+.venv*/
+.uv/
+.env
+.env.*
+# Pytest
+.pytest_cache/
+# UI generated data
+/dashboard/data/*.json
+/dashboard/data/*.jsonl
+# C++ build artifacts
+build/
+out/
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+*.exe
+# Data and weights
+/data/dota/*
+/data/weights/*
+/data/samples/*
+/yolo11x-obb.pt
+/runs/
+!**/.gitkeep
+# OS
+.DS_Store
+Thumbs.db

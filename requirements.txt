@@ -1,0 +1,11 @@
+# Pin versions once dependencies are selected
+telethon
+pyrogram
+pytest
+jsonschema
+pillow
+fastapi
+uvicorn
+python-multipart
+opencv-python
+ultralytics

@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Heimdall Live Analysis</title>
+    <link rel="stylesheet" href="/static/live.css" />
+  </head>
+  <body>
+    <div class="layout">
+      <header class="hero">
+        <div class="hero-left">
+          <div class="glyph">
+            <div class="eye"></div>
+            <div class="globe"></div>
+          </div>
+          <div>
+            <h1>Heimdall Live Analysis</h1>
+            <p>Upload a photo or video to see detections, scores, and geo analysis.</p>
+          </div>
+        </div>
+        <div class="hero-right">
+          <div class="chip">OBB</div>
+          <div class="chip">Shadow</div>
+          <div class="chip">Geo Tier</div>
+        </div>
+      </header>
+
+      <section class="card">
+        <h2>Inputs</h2>
+        <div class="inputs">
+          <label>
+            Image
+            <input type="file" id="image-file" accept="image/*" />
+          </label>
+          <button id="analyze-image">Analyze Image</button>
+        </div>
+
+        <div class="inputs">
+          <label>
+            Video
+            <input type="file" id="video-file" accept="video/*" />
+          </label>
+          <label>
+            Snapshot interval (seconds)
+            <input type="number" id="interval" value="2" min="1" step="1" />
+          </label>
+          <label>
+            Max frames
+            <input type="number" id="max-frames" value="12" min="1" step="1" />
+          </label>
+          <button id="analyze-video">Analyze Video</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Result</h2>
+        <div id="summary" class="summary">Waiting for analysis…</div>
+        <div class="toolbar">
+          <button id="zoom-in">Zoom In</button>
+          <button id="zoom-out">Zoom Out</button>
+          <button id="zoom-reset">Reset</button>
+          <span class="muted">Scroll to zoom, drag to pan</span>
+        </div>
+        <div class="result-grid">
+          <div class="preview">
+            <canvas id="canvas" width="960" height="640"></canvas>
+          </div>
+          <div class="panel">
+            <h3>Detections</h3>
+            <div id="detection-list" class="list"></div>
+            <h3>Details</h3>
+            <pre id="details" class="details">Select a detection to inspect details.</pre>
+            <h3>DOTA v1 Eval</h3>
+            <div class="eval">
+              <button id="run-eval">Run Eval</button>
+              <div id="eval-status" class="muted">Status: idle</div>
+              <pre id="eval-results" class="details">No results yet.</pre>
+              <div id="eval-metrics" class="metrics"></div>
+              <div id="eval-classes" class="class-table"></div>
+            </div>
+          </div>
+        </div>
+        <div id="frames" class="frames"></div>
+      </section>
+    </div>
+
+    <script src="/static/live.js"></script>
+  </body>
+</html>

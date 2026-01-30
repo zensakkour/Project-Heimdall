@@ -1,0 +1,28 @@
+{
+  "detector": {
+    "weights_path": "yolo11x-obb.pt",
+    "min_confidence": 0.25,
+    "nms_iou": 0.5,
+    "max_detections": 100,
+    "use_sidecar": true,
+    "use_classic": false,
+    "imgsz": 1280
+  },
+  "geolocator": {
+    "model_path": null,
+    "use_sidecar": true,
+    "use_exif": true
+  },
+  "score": {
+    "detection_weight": 0.4,
+    "geo_weight": 0.4,
+    "shadow_weight": 0.1,
+    "topo_weight": 0.1,
+    "detection_top_k": 3
+  },
+  "verification": {
+    "use_shadow": true,
+    "use_shadow_length": true,
+    "use_shadow_heading": true
+  }
+}
