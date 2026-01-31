@@ -1,13 +1,60 @@
 ﻿.inputs {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  display: flex;
+  align-items: center;
   gap: 12px;
   margin-bottom: 12px;
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.section-title h2 {
+  margin: 0;
+}
+
+.section-title .muted {
+  margin: 4px 0 0;
 }
 
 .summary {
   margin-bottom: 12px;
   color: var(--muted);
+}
+
+.legend-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 6px;
+}
+
+.legend-dot.candidate {
+  background: rgba(79, 209, 197, 0.7);
+}
+
+.legend-dot.mean {
+  background: #ffffff;
+}
+
+.legend-dot.ring {
+  border: 2px dashed rgba(52, 245, 197, 0.7);
+  background: transparent;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
 }
 
 .progress {
@@ -35,6 +82,41 @@
   width: 35%;
   background: var(--accent);
   animation: progress-sweep 1.1s ease-in-out infinite;
+}
+
+.list-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.list-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.confidence {
+  font-size: 12px;
+  color: var(--muted);
+  min-width: 44px;
+  text-align: right;
+}
+
+.confidence-bar {
+  width: 120px;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.confidence-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
 }
 
 @keyframes progress-sweep {
@@ -261,7 +343,16 @@
 
 /* Alignment overrides for symmetry */
 .inputs {
-  align-items: end;
+  align-items: center;
+}
+
+.inputs label {
+  flex: 1;
+  min-width: 240px;
+}
+
+.inputs button {
+  flex: 0 0 220px;
 }
 
 .inputs button,

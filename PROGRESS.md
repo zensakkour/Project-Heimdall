@@ -221,3 +221,9 @@ Do not delete or edit past entries. Append new work at the end.
 ## 2026-01-31
 - Replaced Leaflet maps with canvas-based globe view for fusion and track displays.
 - Added top-N candidate selector (2/5/10/20) persisted in localStorage.
+
+## 2026-01-31
+- Simplified analysis UI to focus on single-image analysis (removed batch/video/eval sections).
+- Restored a real world map view using Leaflet tiles for fusion candidates and uncertainty ring.
+- Added top-N filtering, hover/click tooltips for geo candidates, and geo confidence in the summary.
+- Added detection confidence bars and UI legend explaining dots/mean/ring.

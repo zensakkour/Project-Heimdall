@@ -3,126 +3,29 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Heimdall UI</title>
+    <title>Heimdall Analysis</title>
+    <meta http-equiv="refresh" content="0; url=analysis/" />
     <link rel="stylesheet" href="theme.css" />
-    <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <div class="wrap">
       <header class="hero">
         <div class="hero-left">
-          <div class="brand-mark" aria-hidden="true"></div>
+          <div class="brand-mark" aria-hidden="true">
+            <img class="brand-logo" src="assets/logo.svg" alt="Heimdall logo" />
+          </div>
           <div class="hero-text">
             <h1>Project Heimdall</h1>
-            <p class="subtitle">Local test + score dashboard</p>
-          </div>
-        </div>
-        <div class="hero-right">
-          <div class="nav-tabs">
-            <a class="active" href="./">Dashboard</a>
-            <a href="analysis/">Analysis</a>
-          </div>
-          <div class="actions">
-            <button id="refresh">Refresh</button>
-            <span id="last-updated" class="muted"></span>
+            <p class="subtitle">Redirecting to analysis…</p>
           </div>
         </div>
       </header>
-
       <section class="card">
-        <h2>Test Status</h2>
-        <div id="test-status" class="status">Loading...</div>
-        <div id="test-details" class="muted"></div>
-      </section>
-
-      <section class="card">
-        <h2>Scores</h2>
-        <div class="stats">
-          <div><span class="label">Images</span><span id="count">0</span></div>
-          <div><span class="label">Avg score</span><span id="avg">0.000</span></div>
-          <div><span class="label">High tier</span><span id="high">0</span></div>
-        </div>
-        <table>
-          <thead>
-            <tr>
-              <th>Image</th>
-              <th>Score</th>
-              <th>Geo tier</th>
-              <th>Geo conf</th>
-              <th>Uncertainty (m)</th>
-              <th>Fusion radius (m)</th>
-            </tr>
-          </thead>
-          <tbody id="scores-body"></tbody>
-        </table>
-      </section>
-
-      <section class="card">
-        <h2>Globe View</h2>
-        <div class="map-wrap">
-          <canvas id="map-canvas" class="globe-canvas" aria-label="Geo globe"></canvas>
-          <div class="map-legend muted">
-            <span class="legend-dot candidate"></span> Candidate
-            <span class="legend-dot mean"></span> Fused mean
-            <span class="legend-dot track"></span> Track
-            <span class="legend-sep"></span>
-            <label class="legend-control">
-              Show top
-              <select id="map-topn">
-                <option value="2">2</option>
-                <option value="5">5</option>
-                <option value="10">10</option>
-                <option value="20" selected>20</option>
-              </select>
-            </label>
-          </div>
-        </div>
-      </section>
-
-      <section class="card">
-        <h2>Fusion Detail</h2>
-        <div id="fusion-summary" class="muted">Select a row to see candidate evidence.</div>
-        <table class="compact">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Lat</th>
-              <th>Lon</th>
-              <th>Weight</th>
-              <th>Retrieval</th>
-              <th>Shadow resid</th>
-              <th>Terrain resid</th>
-              <th>Match</th>
-            </tr>
-          </thead>
-          <tbody id="candidate-table-body"></tbody>
-        </table>
-        <div id="fusion-candidates" class="fusion-grid"></div>
-      </section>
-
-      <section class="card">
-        <h2>Object View</h2>
-        <div id="verification-summary" class="muted">Verification status will appear here.</div>
-        <table class="compact">
-          <thead>
-            <tr>
-              <th>Label</th>
-              <th>Confidence</th>
-            </tr>
-          </thead>
-          <tbody id="object-table-body"></tbody>
-        </table>
-      </section>
-
-      <section class="card">
-        <h2>Track Globe</h2>
-        <div class="map-wrap">
-          <canvas id="track-canvas" class="globe-canvas small" aria-label="Track globe"></canvas>
-          <div class="muted" id="track-summary">Track uses fused mean points across the score list.</div>
-        </div>
+        <p class="muted">
+          The dashboard has been merged into the analysis page.
+          If you are not redirected, open <a href="analysis/">/analysis/</a>.
+        </p>
       </section>
     </div>
-
-    <script src="app.js"></script>
   </body>
 </html>
