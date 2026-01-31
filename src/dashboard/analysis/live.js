@@ -139,12 +139,14 @@ function ensureLiveMap() {
     worldCopyJump: true,
   }).setView([20, 0], 2);
 
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 6,
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+    maxZoom: 7,
   }).addTo(liveLeaflet);
 
   liveLayerGroup = L.layerGroup().addTo(liveLeaflet);
+  setTimeout(() => liveLeaflet.invalidateSize(), 0);
 }
+
 function renderLiveMap(result) {
   ensureLiveMap();
   if (!result || !result.result) {
@@ -170,7 +172,7 @@ function renderLiveMap(result) {
     const rawWeight = weightFrom(item);
     const weight = maxWeight > 0 ? rawWeight / maxWeight : 0;
     const color = weightColor(weight);
-    const radius = idx === 0 ? 8 : 4 + weight * 6;
+    const radius = idx === 0 ? 9 : 4 + weight * 7;
     const marker = L.circleMarker([cand.latitude, cand.longitude], {
       radius,
       color,
@@ -201,8 +203,8 @@ function renderLiveMap(result) {
 
   if (meanLat !== undefined && meanLon !== undefined) {
     liveMeanMarker = L.circleMarker([meanLat, meanLon], {
-      radius: 6,
-      color: "#ffffff",
+      radius: 7,
+      color: "#d7f2de",
       weight: 2,
       fillOpacity: 0.9,
     }).addTo(liveLeaflet);
@@ -214,7 +216,7 @@ function renderLiveMap(result) {
     if (ringRadius) {
       liveCircle = L.circle([meanLat, meanLon], {
         radius: ringRadius,
-        color: "#34f5c5",
+        color: "#7fb88a",
         weight: 1.5,
         fillOpacity: 0.05,
         dashArray: "6 6",
@@ -367,16 +369,33 @@ window.addEventListener("mousemove", (e) => {
 });
 
 byId("zoom-in").addEventListener("click", () => {
+  scale = Math.min(6, scale * 1.15);
+  drawScene(null);
+});
+
+byId("zoom-out").addEventListener("click", () => {
+  scale = Math.max(0.2, scale * 0.87);
+  drawScene(null);
+});
+
+byId("zoom-reset").addEventListener("click", () => {
+  scale = 1;
+  offsetX = 0;
+  offsetY = 0;
+  drawScene(null);
+});
+
+byId("map-zoom-in").addEventListener("click", () => {
   ensureLiveMap();
   liveLeaflet.zoomIn();
 });
 
-byId("zoom-out").addEventListener("click", () => {
+byId("map-zoom-out").addEventListener("click", () => {
   ensureLiveMap();
   liveLeaflet.zoomOut();
 });
 
-byId("zoom-reset").addEventListener("click", () => {
+byId("map-zoom-reset").addEventListener("click", () => {
   ensureLiveMap();
   liveLeaflet.setView([20, 0], 2, { animate: false });
 });
