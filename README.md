@@ -145,8 +145,16 @@ python -m uvicorn src.tools.ui_server:app --reload --port 8000
 ```
 
 Open:
-- `http://127.0.0.1:8000/` (Dashboard)
+- `http://127.0.0.1:8000/` (Redirects to Analysis)
 - `http://127.0.0.1:8000/analysis/` (Analysis)
+
+#### Map legend & confidence
+- **Green dots** = geo candidates (size reflects confidence; brighter = higher confidence).
+- **White dot** = fused mean location.
+- **Dashed ring** = uncertainty radius around the fused mean (approx. distance where the true location is likely to fall).
+- **Geo confidence** is shown in the summary (top candidate fusion weight or retrieval score).
+- **Detection confidence** is shown next to each detection with a percent bar.
+- **Hover/click** a candidate to see rank, lat/lon, and confidence details.
 
 ### Setup
 ```powershell

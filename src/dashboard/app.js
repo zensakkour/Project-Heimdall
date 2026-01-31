@@ -1,4 +1,4 @@
-﻿const summaryPath = "data/summary.json";
+const summaryPath = "/data/summary.json";
 
 function $(id) {
   return document.getElementById(id);
@@ -33,6 +33,16 @@ function weightColor(weight) {
   const lightness = 35 + w * 35;
   return `hsl(172, 75%, ${lightness}%)`;
 }
+
+const LAND_BLOBS = [
+  { lat: 50, lon: -105, rLat: 22, rLon: 40 },
+  { lat: 15, lon: -75, rLat: 25, rLon: 18 },
+  { lat: 55, lon: 10, rLat: 16, rLon: 20 },
+  { lat: 5, lon: 20, rLat: 28, rLon: 22 },
+  { lat: 35, lon: 85, rLat: 20, rLon: 45 },
+  { lat: -25, lon: 135, rLat: 12, rLon: 18 },
+  { lat: -65, lon: 0, rLat: 8, rLon: 50 },
+];
 
 class GlobeView {
   constructor(canvas) {
@@ -155,6 +165,38 @@ class GlobeView {
     }
   }
 
+  _drawLandmasses(cx, cy, r) {
+    const ctx = this.ctx;
+    ctx.fillStyle = "rgba(120, 140, 135, 0.22)";
+    ctx.strokeStyle = "rgba(160, 180, 175, 0.25)";
+    ctx.lineWidth = 1;
+    LAND_BLOBS.forEach((blob) => {
+      ctx.beginPath();
+      let started = false;
+      for (let a = 0; a <= 360; a += 8) {
+        const ang = (a * Math.PI) / 180;
+        const lat = blob.lat + blob.rLat * Math.sin(ang);
+        const lon = blob.lon + blob.rLon * Math.cos(ang);
+        const p = this._project(lat, lon, r);
+        if (!p) {
+          started = false;
+          continue;
+        }
+        const x = cx + p.x;
+        const y = cy + p.y;
+        if (!started) {
+          ctx.moveTo(x, y);
+          started = true;
+        } else {
+          ctx.lineTo(x, y);
+        }
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    });
+  }
+
   _drawRing(cx, cy, r, center, radiusM) {
     if (!center || !radiusM) return;
     const earth = 6371000;
@@ -216,6 +258,7 @@ class GlobeView {
     ctx.stroke();
 
     this._drawGraticule(cx, cy, r);
+    this._drawLandmasses(cx, cy, r);
 
     if (this.track.length > 1) {
       ctx.beginPath();
@@ -315,8 +358,10 @@ function renderMap(row) {
 }
 
 function renderTrack(scores) {
+  const canvas = $("track-canvas");
+  if (!canvas) return;
   if (!trackView) {
-    trackView = new GlobeView($("track-canvas"));
+    trackView = new GlobeView(canvas);
   }
   const points = (scores || [])
     .map((row) => {
@@ -516,14 +561,22 @@ $("refresh").addEventListener("click", loadSummary);
 loadSummary();
 
 const topSelect = $("map-topn");
+const topLabel = $("map-topn-label");
 if (topSelect) {
   const stored = Number(localStorage.getItem("heimdallTopN") || "20");
   topSelect.value = String(stored);
   topLimit = stored;
+  if (topLabel) {
+    topLabel.textContent = `Showing top ${topLimit} candidates on globe`;
+  }
   topSelect.addEventListener("change", () => {
     topLimit = Number(topSelect.value || "20");
     localStorage.setItem("heimdallTopN", String(topLimit));
+    if (topLabel) {
+      topLabel.textContent = `Showing top ${topLimit} candidates on globe`;
+    }
     if (currentRow) renderMap(currentRow);
   });
 }
+
 
