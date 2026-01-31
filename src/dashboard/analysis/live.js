@@ -25,6 +25,34 @@ function setLoading(active, text) {
   if (analyzeImage) analyzeImage.disabled = active;
 }
 
+const fileInput = byId("image-file");
+const fileName = byId("image-file-name");
+const fileButton = document.querySelector(".file-button");
+const filePicker = fileName ? fileName.closest(".file-picker") : null;
+if (fileInput && fileName) {
+  const getName = () => {
+    const file = fileInput.files && fileInput.files[0];
+    if (file && file.name) return file.name;
+    const val = fileInput.value || "";
+    const fallback = val.split(/[/\\\\]/).pop();
+    return fallback || "No file selected";
+  };
+  const update = () => {
+    const name = getName();
+    fileName.textContent = name;
+    const hasFile = name !== "No file selected";
+    if (filePicker) filePicker.classList.toggle("has-file", hasFile);
+    if (fileButton) fileButton.textContent = hasFile ? name : "Choose file";
+  };
+  const scheduleUpdate = () => requestAnimationFrame(update);
+  fileInput.addEventListener("change", scheduleUpdate);
+  fileInput.addEventListener("input", scheduleUpdate);
+  if (filePicker) {
+    filePicker.addEventListener("click", () => setTimeout(update, 0));
+  }
+  update();
+}
+
 function renderSummary(result) {
   const summary = byId("summary");
   const geo = result.result.geo;
