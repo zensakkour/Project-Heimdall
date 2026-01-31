@@ -45,6 +45,7 @@ class VerificationConfig:
 @dataclass(frozen=True)
 class FusionConfig:
     retrieval_temperature: float = 0.2
+    retrieval_score_norm: str = "none"
     shadow_sigma_deg: float = 20.0
     terrain_sigma: float = 100.0
     use_shadow: bool = True
@@ -102,6 +103,7 @@ def load_config(path: str) -> HeimdallConfig:
         ),
         fusion=FusionConfig(
             retrieval_temperature=fusion.get("retrieval_temperature", 0.2),
+            retrieval_score_norm=fusion.get("retrieval_score_norm", "none"),
             shadow_sigma_deg=fusion.get("shadow_sigma_deg", 20.0),
             terrain_sigma=fusion.get("terrain_sigma", 100.0),
             use_shadow=fusion.get("use_shadow", True),
