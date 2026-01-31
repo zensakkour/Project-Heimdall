@@ -4,12 +4,6 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Heimdall UI</title>
-    <link
-      rel="stylesheet"
-      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-      crossorigin=""
-    />
     <link rel="stylesheet" href="theme.css" />
     <link rel="stylesheet" href="styles.css" />
   </head>
@@ -64,13 +58,23 @@
       </section>
 
       <section class="card">
-        <h2>Map View</h2>
+        <h2>Globe View</h2>
         <div class="map-wrap">
-          <div id="map-canvas" class="leaflet-map"></div>
+          <canvas id="map-canvas" class="globe-canvas" aria-label="Geo globe"></canvas>
           <div class="map-legend muted">
             <span class="legend-dot candidate"></span> Candidate
             <span class="legend-dot mean"></span> Fused mean
             <span class="legend-dot track"></span> Track
+            <span class="legend-sep"></span>
+            <label class="legend-control">
+              Show top
+              <select id="map-topn">
+                <option value="2">2</option>
+                <option value="5">5</option>
+                <option value="10">10</option>
+                <option value="20" selected>20</option>
+              </select>
+            </label>
           </div>
         </div>
       </section>
@@ -111,19 +115,14 @@
       </section>
 
       <section class="card">
-        <h2>Track View</h2>
+        <h2>Track Globe</h2>
         <div class="map-wrap">
-          <div id="track-canvas" class="leaflet-map"></div>
+          <canvas id="track-canvas" class="globe-canvas small" aria-label="Track globe"></canvas>
           <div class="muted" id="track-summary">Track uses fused mean points across the score list.</div>
         </div>
       </section>
     </div>
 
-    <script
-      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-      crossorigin=""
-    ></script>
     <script src="app.js"></script>
   </body>
 </html>

@@ -209,3 +209,15 @@ Do not delete or edit past entries. Append new work at the end.
 - Updated imports to use src.* package paths and adjusted default config/dashboard paths accordingly.
 - Updated README and reproducibility docs for new module paths and run commands.
 - Updated .gitignore for new dashboard data paths.
+
+## 2026-01-31
+- Added retrieval-based geo candidate provider (CLIP embeddings) with multi-provider fusion.
+- Added open geo demo downloader (Wikimedia Commons) and retrieval index builder.
+- Added retrieval config fields (index path, model, top_k, min_score) and wired across UI/CLI/batch/run_all.
+- Default config now points to the open_geo retrieval index for immediate testing.
+- Updated README/GEO_TECH for retrieval workflow and open demo dataset.
+- Refined map confidence display (top candidate emphasis, ranked markers, dashed uncertainty ring).
+
+## 2026-01-31
+- Replaced Leaflet maps with canvas-based globe view for fusion and track displays.
+- Added top-N candidate selector (2/5/10/20) persisted in localStorage.

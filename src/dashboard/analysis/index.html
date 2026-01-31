@@ -4,12 +4,6 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Heimdall Analysis</title>
-    <link
-      rel="stylesheet"
-      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-      crossorigin=""
-    />
     <link rel="stylesheet" href="../theme.css" />
     <link rel="stylesheet" href="live.css?v=3" />
   </head>
@@ -73,12 +67,23 @@
         </div>
         <div class="geo-grid">
           <div>
-            <h3 class="panel-title">Fusion Map</h3>
-            <div id="live-map" class="leaflet-map"></div>
+            <div class="panel-head">
+              <h3 class="panel-title">Fusion Globe</h3>
+              <label class="legend-control muted">
+                Show top
+                <select id="live-topn">
+                  <option value="2">2</option>
+                  <option value="5">5</option>
+                  <option value="10">10</option>
+                  <option value="20" selected>20</option>
+                </select>
+              </label>
+            </div>
+            <canvas id="live-map" class="globe-canvas" aria-label="Fusion globe"></canvas>
           </div>
           <div>
-            <h3 class="panel-title">Track Map</h3>
-            <div id="live-track" class="leaflet-map small"></div>
+            <h3 class="panel-title">Track Globe</h3>
+            <canvas id="live-track" class="globe-canvas small" aria-label="Track globe"></canvas>
           </div>
         </div>
         <div class="toolbar">
@@ -110,11 +115,6 @@
       </section>
     </div>
 
-    <script
-      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-      crossorigin=""
-    ></script>
     <script src="live.js?v=3"></script>
   </body>
 </html>
