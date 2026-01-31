@@ -35,9 +35,10 @@ def fuse_candidates(
 
     capture_time = extract_capture_time(image_path)
     observed_shadow = _mean_shadow_azimuth(detections)
+    retrieval_scores = _normalized_retrieval_scores(candidates, cfg.retrieval_score_norm)
 
-    for cand in candidates:
-        retrieval_logp = _temperature_scaled_logprob(cand.retrieval_score, cfg.retrieval_temperature)
+    for cand, norm_score in zip(candidates, retrieval_scores):
+        retrieval_logp = _temperature_scaled_logprob(norm_score, cfg.retrieval_temperature)
         shadow_residual = None
         shadow_like = None
         if cfg.use_shadow and capture_time is not None and observed_shadow is not None:
@@ -63,12 +64,12 @@ def fuse_candidates(
         log_weights.append(logp)
         evidences.append(
             Evidence(
-                retrieval_score=cand.retrieval_score,
+                retrieval_score=norm_score,
                 shadow_residual_deg=shadow_residual,
                 terrain_residual=terrain_residual,
                 likelihoods=likelihoods,
                 posterior_weight=0.0,
-                explanation=_explain_candidate(cand, shadow_residual, terrain_residual, likelihoods),
+                explanation=_explain_candidate(cand, norm_score, shadow_residual, terrain_residual, likelihoods),
             )
         )
 
@@ -123,6 +124,60 @@ def _softmax(logits: Iterable[float]) -> List[float]:
     if total <= 0.0:
         return [1.0 / len(values) for _ in values]
     return [v / total for v in exp_vals]
+
+
+def _normalized_retrieval_scores(candidates: Sequence[GeoCandidate], mode: str) -> List[float]:
+    if mode == "none":
+        return [cand.retrieval_score for cand in candidates]
+    if mode == "zscore_sigmoid":
+        return _zscore_sigmoid_by_source(candidates)
+    return [cand.retrieval_score for cand in candidates]
+
+
+def _candidate_source(cand: GeoCandidate) -> str:
+    match_id = cand.match_id or ""
+    if match_id.startswith("exif:"):
+        return "exif"
+    if match_id == "geoclip":
+        return "geoclip"
+    return "retrieval"
+
+
+def _zscore_sigmoid(values: List[float]) -> List[float]:
+    if not values:
+        return []
+    mean = sum(values) / len(values)
+    var = sum((v - mean) ** 2 for v in values) / len(values)
+    std = math.sqrt(var)
+    if std < 1e-6:
+        return values[:]
+    out = []
+    for v in values:
+        z = (v - mean) / std
+        out.append(1.0 / (1.0 + math.exp(-z)))
+    return out
+
+
+def _zscore_sigmoid_by_source(candidates: Sequence[GeoCandidate]) -> List[float]:
+    if not candidates:
+        return []
+    grouped = {}
+    order = []
+    for idx, cand in enumerate(candidates):
+        src = _candidate_source(cand)
+        order.append(src)
+        grouped.setdefault(src, []).append((idx, cand.retrieval_score))
+
+    scores = [cand.retrieval_score for cand in candidates]
+    for items in grouped.values():
+        idxs = [idx for idx, _ in items]
+        vals = [val for _, val in items]
+        if len(vals) < 2:
+            continue
+        norm = _zscore_sigmoid(vals)
+        for idx, val in zip(idxs, norm):
+            scores[idx] = val
+    return scores
 
 
 def _expected_shadow_azimuth(captured, latitude: float, longitude: float) -> float:
@@ -198,11 +253,12 @@ def _covariance_to_ellipse(cov: Tuple[Tuple[float, float], Tuple[float, float]])
 
 def _explain_candidate(
     cand: GeoCandidate,
+    normalized_score: float,
     shadow_residual: Optional[float],
     terrain_residual: Optional[float],
     likelihoods: dict[str, float],
 ) -> str:
-    parts = [f"retrieval={cand.retrieval_score:.3f}"]
+    parts = [f"retrieval={cand.retrieval_score:.3f} (norm={normalized_score:.3f})"]
     if shadow_residual is not None:
         parts.append(f"shadow_residual={shadow_residual:.1f}deg")
     if terrain_residual is not None:
