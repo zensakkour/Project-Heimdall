@@ -11,7 +11,11 @@
   "geolocator": {
     "model_path": null,
     "use_sidecar": true,
-    "use_exif": true
+    "use_exif": true,
+    "top_n": 20,
+    "model_id": "sdan/geospot-base",
+    "model_cache_dir": "data/models/geospot-base",
+    "encoder_name": null
   },
   "score": {
     "detection_weight": 0.4,
@@ -24,5 +28,13 @@
     "use_shadow": true,
     "use_shadow_length": true,
     "use_shadow_heading": true
+  },
+  "fusion": {
+    "retrieval_temperature": 0.12,
+    "shadow_sigma_deg": 20.0,
+    "terrain_sigma": 100.0,
+    "use_shadow": true,
+    "use_terrain": false,
+    "top_k": 10
   }
 }

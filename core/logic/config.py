@@ -23,8 +23,12 @@ class DetectorConfig:
 @dataclass(frozen=True)
 class GeoConfig:
     model_path: Optional[str] = None
+    model_id: Optional[str] = None
+    model_cache_dir: Optional[str] = None
+    encoder_name: Optional[str] = None
     use_sidecar: bool = True
     use_exif: bool = True
+    top_n: int = 5
 
 
 @dataclass(frozen=True)
@@ -32,6 +36,16 @@ class VerificationConfig:
     use_shadow: bool = True
     use_shadow_length: bool = True
     use_shadow_heading: bool = True
+
+
+@dataclass(frozen=True)
+class FusionConfig:
+    retrieval_temperature: float = 0.2
+    shadow_sigma_deg: float = 20.0
+    terrain_sigma: float = 100.0
+    use_shadow: bool = True
+    use_terrain: bool = False
+    top_k: int = 5
 
 
 @dataclass(frozen=True)
@@ -47,6 +61,7 @@ class ScoreConfig:
 class HeimdallConfig:
     detector: DetectorConfig
     geolocator: GeoConfig
+    fusion: FusionConfig
     score: ScoreConfig
     verification: VerificationConfig
 
@@ -55,6 +70,7 @@ def load_config(path: str) -> HeimdallConfig:
     raw = json.loads(Path(path).read_text(encoding="utf-8"))
     det = raw.get("detector", {})
     geo = raw.get("geolocator", {})
+    fusion = raw.get("fusion", {})
     score = raw.get("score", {})
     ver = raw.get("verification", {})
     return HeimdallConfig(
@@ -69,8 +85,20 @@ def load_config(path: str) -> HeimdallConfig:
         ),
         geolocator=GeoConfig(
             model_path=geo.get("model_path"),
+            model_id=geo.get("model_id"),
+            model_cache_dir=geo.get("model_cache_dir"),
+            encoder_name=geo.get("encoder_name"),
             use_sidecar=geo.get("use_sidecar", True),
             use_exif=geo.get("use_exif", True),
+            top_n=geo.get("top_n", 5),
+        ),
+        fusion=FusionConfig(
+            retrieval_temperature=fusion.get("retrieval_temperature", 0.2),
+            shadow_sigma_deg=fusion.get("shadow_sigma_deg", 20.0),
+            terrain_sigma=fusion.get("terrain_sigma", 100.0),
+            use_shadow=fusion.get("use_shadow", True),
+            use_terrain=fusion.get("use_terrain", False),
+            top_k=fusion.get("top_k", 5),
         ),
         score=ScoreConfig(
             detection_weight=score.get("detection_weight", 0.4),

@@ -147,3 +147,59 @@ Do not delete or edit past entries. Append new work at the end.
 ## 2026-01-30
 - Enhanced DOTA eval reporting with overall mAP/mAP50 and per-class metrics; added UI tables for eval results.
 
+
+## 2026-01-30
+- Aligned README with the 2026-01-30 engineering spec (modules A-G and non-goals).
+- Added pydantic schemas for detection, geo candidates, fusion output, evidence, and tracks.
+- Implemented GeoCLIP/GeoFT candidate provider stub and candidate interface.
+- Added probabilistic fusion engine with likelihoods, uncertainty ellipse, and evidence text.
+- Added tracking/filtering stubs plus new tooling stubs (geo candidates, fusion calibration, sequence eval, audit export, full run, metrics).
+- Added reproducibility doc and extended default config with fusion/top-N settings.
+
+## 2026-01-30
+- Extended UI summary generator to include fusion candidates, evidence, and uncertainty ellipse fields when present.
+- Added tests for fusion likelihood helpers and geo candidate sidecar parsing.
+- Ran pytest (13 passed).
+
+## 2026-01-30
+- Expanded tools/run_all.py fusion output to include candidates, evidence, covariance, and ellipse metadata.
+- Updated dashboard table and detail panel to display fusion uncertainty + per-candidate evidence.
+
+## 2026-01-30
+- Wired fusion candidates into pipeline outputs and batch schema, including evidence and uncertainty ellipse serialization.
+- Added map/table/track views in the dashboard and interactive fusion detail rendering.
+- Implemented evaluation metrics with ground truth ingestion (CSV/JSON/JSONL) and updated reproducibility docs.
+- Ran pytest (13 passed).
+
+## 2026-01-30
+- Switched dashboard and live UI maps to Leaflet tiles with fusion ellipse/candidate overlays and track polylines.
+- Updated run_all to emit full pipeline results (detections, verification, fusion) using config-driven pipeline.
+- Extended UI summary payloads with detections/verification for object lists.
+- Live UI pipeline now includes candidate provider + fusion config.
+- Ran pytest (13 passed).
+
+## 2026-01-30
+- Merged static dashboard and live UI into the FastAPI server with / (dashboard) and /live routes.
+- Updated dashboard and live HTML asset paths to serve from the unified server.
+- Ran pytest (13 passed).
+
+## 2026-01-30
+- Added shared theme and navigation tabs to switch between dashboard and live UI.
+- Unified dark theme across both UIs via shared theme stylesheet.
+
+## 2026-01-30
+- Added GeoCLIP provider support for real model loading (GeoSpot Base) with HF download fallback.
+- Extended geolocator config with model_id/model_cache_dir defaults and added download helper.
+- Updated requirements and README for GeoSpot Base setup.
+
+## 2026-01-30
+- Switched shared theme to near-black and aligned header layout across dashboard and live UI.
+- Unified hero layout with shared hero-left/hero-right structure for consistent top spacing.
+
+## 2026-01-31
+- Renamed live UI to analysis (/analysis) and updated server routing + asset paths for FastAPI and static usage.
+- Unified full-black theme, headers, and button sizing across dashboard and analysis pages; added progress indicator on analysis runs.
+- Added GeoCLIP debug metadata to analysis responses and UI summary line for candidate visibility.
+- Added geolocator encoder_name support in config and pipeline wiring; improved geo fallback from fusion output.
+- Integrated GeoSpot Base via SigLIP2 image encoder, including required SigLIP2 inputs and CLIP output patching.
+- Tuned geo candidate counts and fusion settings for higher-accuracy defaults.
