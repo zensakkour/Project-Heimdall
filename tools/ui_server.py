@@ -17,7 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from PIL import Image
 
 from core.detection.factory import create_detector
-from core.geo import GeoLocator
+from core.geo import GeoCLIPProvider, GeoLocator
 from core.logic.config import HeimdallConfig, load_config
 from core.logic.pipeline import HeimdallPipeline
 from core.logic.serialize import assessment_to_dict
@@ -26,10 +26,10 @@ from tools.run_dota_eval import main as run_dota_eval
 
 
 APP_ROOT = Path(__file__).resolve().parents[1]
-STATIC_DIR = APP_ROOT / "dashboard" / "live"
+LIVE_DIR = APP_ROOT / "dashboard" / "analysis"
+DASHBOARD_DIR = APP_ROOT / "dashboard"
 
 app = FastAPI()
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 _EVAL_STATE = {"status": "idle", "last_result": None}
 
@@ -43,9 +43,20 @@ def build_pipeline(cfg: Optional[HeimdallConfig]) -> HeimdallPipeline:
         use_sidecar=cfg.geolocator.use_sidecar,
         use_exif=cfg.geolocator.use_exif,
     )
+    candidate_provider = GeoCLIPProvider(
+        model_path=cfg.geolocator.model_path,
+        model_id=cfg.geolocator.model_id,
+        model_cache_dir=cfg.geolocator.model_cache_dir,
+        encoder_name=cfg.geolocator.encoder_name,
+        top_n=cfg.geolocator.top_n,
+        use_sidecar=cfg.geolocator.use_sidecar,
+        use_exif=cfg.geolocator.use_exif,
+    )
     return HeimdallPipeline(
         detector=detector,
         geolocator=geolocator,
+        candidate_provider=candidate_provider,
+        fusion_config=cfg.fusion,
         score_config=cfg.score,
         verification_config=cfg.verification,
     )
@@ -60,7 +71,12 @@ def _load_config_from_env() -> Optional[HeimdallConfig]:
 
 @app.get("/")
 def index() -> FileResponse:
-    return FileResponse(STATIC_DIR / "index.html")
+    return FileResponse(DASHBOARD_DIR / "index.html")
+
+
+@app.get("/analysis")
+def analysis_index() -> FileResponse:
+    return FileResponse(LIVE_DIR / "index.html")
 
 
 @app.post("/analyze/image")
@@ -85,10 +101,16 @@ async def analyze_image(
 
         result = pipeline.run(str(image_path))
         annotated = draw_detections(str(image_path), result.detections)
+        geo_debug = {
+            "candidate_count": len(result.candidates),
+            "fusion": bool(result.fusion),
+            "error": getattr(pipeline.candidate_provider, "last_error", None),
+        }
         payload = {
             "generated_at": datetime.utcnow().isoformat() + "Z",
             "result": assessment_to_dict(result),
             "image_data": _image_to_data_url(annotated),
+            "geo_debug": geo_debug,
         }
         return JSONResponse(payload)
 
@@ -183,3 +205,9 @@ def start_eval() -> JSONResponse:
 @app.get("/eval/dota/status")
 def eval_status() -> JSONResponse:
     return JSONResponse(_EVAL_STATE)
+
+
+# Static mounts come last so API routes are not shadowed.
+app.mount("/dashboard", StaticFiles(directory=DASHBOARD_DIR), name="dashboard")
+app.mount("/analysis", StaticFiles(directory=LIVE_DIR, html=True), name="analysis")
+app.mount("/", StaticFiles(directory=DASHBOARD_DIR, html=True), name="root")

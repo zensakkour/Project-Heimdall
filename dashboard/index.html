@@ -1,25 +1,43 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Heimdall UI</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <link rel="stylesheet" href="theme.css" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <div class="wrap">
       <header class="hero">
-        <h1>Project Heimdall</h1>
-        <p class="subtitle">Local test + score dashboard</p>
-        <div class="actions">
-          <button id="refresh">Refresh</button>
-          <span id="last-updated" class="muted"></span>
+        <div class="hero-left">
+          <div class="brand-mark" aria-hidden="true"></div>
+          <div class="hero-text">
+            <h1>Project Heimdall</h1>
+            <p class="subtitle">Local test + score dashboard</p>
+          </div>
+        </div>
+        <div class="hero-right">
+          <div class="nav-tabs">
+            <a class="active" href="./">Dashboard</a>
+            <a href="analysis/">Analysis</a>
+          </div>
+          <div class="actions">
+            <button id="refresh">Refresh</button>
+            <span id="last-updated" class="muted"></span>
+          </div>
         </div>
       </header>
 
       <section class="card">
         <h2>Test Status</h2>
-        <div id="test-status" class="status">Loading…</div>
+        <div id="test-status" class="status">Loading...</div>
         <div id="test-details" class="muted"></div>
       </section>
 
@@ -38,13 +56,74 @@
               <th>Geo tier</th>
               <th>Geo conf</th>
               <th>Uncertainty (m)</th>
+              <th>Fusion radius (m)</th>
             </tr>
           </thead>
           <tbody id="scores-body"></tbody>
         </table>
       </section>
+
+      <section class="card">
+        <h2>Map View</h2>
+        <div class="map-wrap">
+          <div id="map-canvas" class="leaflet-map"></div>
+          <div class="map-legend muted">
+            <span class="legend-dot candidate"></span> Candidate
+            <span class="legend-dot mean"></span> Fused mean
+            <span class="legend-dot track"></span> Track
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Fusion Detail</h2>
+        <div id="fusion-summary" class="muted">Select a row to see candidate evidence.</div>
+        <table class="compact">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Lat</th>
+              <th>Lon</th>
+              <th>Weight</th>
+              <th>Retrieval</th>
+              <th>Shadow resid</th>
+              <th>Terrain resid</th>
+              <th>Match</th>
+            </tr>
+          </thead>
+          <tbody id="candidate-table-body"></tbody>
+        </table>
+        <div id="fusion-candidates" class="fusion-grid"></div>
+      </section>
+
+      <section class="card">
+        <h2>Object View</h2>
+        <div id="verification-summary" class="muted">Verification status will appear here.</div>
+        <table class="compact">
+          <thead>
+            <tr>
+              <th>Label</th>
+              <th>Confidence</th>
+            </tr>
+          </thead>
+          <tbody id="object-table-body"></tbody>
+        </table>
+      </section>
+
+      <section class="card">
+        <h2>Track View</h2>
+        <div class="map-wrap">
+          <div id="track-canvas" class="leaflet-map"></div>
+          <div class="muted" id="track-summary">Track uses fused mean points across the score list.</div>
+        </div>
+      </section>
     </div>
 
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
     <script src="app.js"></script>
   </body>
 </html>

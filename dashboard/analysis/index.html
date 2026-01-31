@@ -1,28 +1,37 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Heimdall Live Analysis</title>
-    <link rel="stylesheet" href="/static/live.css" />
+    <title>Heimdall Analysis</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <link rel="stylesheet" href="../theme.css" />
+    <link rel="stylesheet" href="live.css?v=3" />
   </head>
   <body>
     <div class="layout">
       <header class="hero">
         <div class="hero-left">
-          <div class="glyph">
-            <div class="eye"></div>
-            <div class="globe"></div>
-          </div>
-          <div>
-            <h1>Heimdall Live Analysis</h1>
-            <p>Upload a photo or video to see detections, scores, and geo analysis.</p>
+          <div class="brand-mark" aria-hidden="true"></div>
+          <div class="hero-text">
+            <h1>Project Heimdall</h1>
+            <p class="subtitle">Local test + score dashboard</p>
           </div>
         </div>
         <div class="hero-right">
-          <div class="chip">OBB</div>
-          <div class="chip">Shadow</div>
-          <div class="chip">Geo Tier</div>
+          <div class="nav-tabs">
+            <a href="../">Dashboard</a>
+            <a class="active" href="./">Analysis</a>
+          </div>
+          <div class="actions">
+            <button id="refresh">Refresh</button>
+            <span id="last-updated" class="muted"></span>
+          </div>
         </div>
       </header>
 
@@ -55,7 +64,23 @@
 
       <section class="card">
         <h2>Result</h2>
-        <div id="summary" class="summary">Waiting for analysis…</div>
+        <div id="summary" class="summary">Waiting for analysis...</div>
+        <div id="progress" class="progress" aria-live="polite">
+          <div class="progress-track">
+            <div id="progress-bar" class="progress-bar"></div>
+          </div>
+          <span id="progress-text" class="muted">Analyzing...</span>
+        </div>
+        <div class="geo-grid">
+          <div>
+            <h3 class="panel-title">Fusion Map</h3>
+            <div id="live-map" class="leaflet-map"></div>
+          </div>
+          <div>
+            <h3 class="panel-title">Track Map</h3>
+            <div id="live-track" class="leaflet-map small"></div>
+          </div>
+        </div>
         <div class="toolbar">
           <button id="zoom-in">Zoom In</button>
           <button id="zoom-out">Zoom Out</button>
@@ -85,6 +110,11 @@
       </section>
     </div>
 
-    <script src="/static/live.js"></script>
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script src="live.js?v=3"></script>
   </body>
 </html>
