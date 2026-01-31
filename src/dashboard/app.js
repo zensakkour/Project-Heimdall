@@ -18,6 +18,7 @@ let mapInstance = null;
 let mapLayer = null;
 let trackInstance = null;
 let trackLayer = null;
+const MAX_MAP_CANDIDATES = 20;
 
 function ensureMap() {
   if (mapInstance) return;
@@ -58,6 +59,21 @@ function ellipsePolygon(lat, lon, majorM, minorM, orientationDeg) {
   return points;
 }
 
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function weightFrom(item) {
+  const cand = item.candidate || {};
+  return item.posterior_weight ?? cand.retrieval_score ?? 0;
+}
+
+function weightColor(weight) {
+  const w = clamp(weight, 0, 1);
+  const lightness = 38 + w * 30;
+  return `hsl(172, 75%, ${lightness}%)`;
+}
+
 function renderMap(row) {
   ensureMap();
   mapLayer.clearLayers();
@@ -70,18 +86,25 @@ function renderMap(row) {
   }
 
   const bounds = L.latLngBounds([]);
-  candidates.forEach((item) => {
+  const sorted = [...candidates].sort((a, b) => weightFrom(b) - weightFrom(a));
+  const maxWeight = sorted.length ? Math.max(...sorted.map(weightFrom)) : 1;
+  const visible = sorted.slice(0, MAX_MAP_CANDIDATES);
+
+  visible.forEach((item, idx) => {
     const cand = item.candidate || {};
     if (cand.latitude === undefined || cand.longitude === undefined) return;
-    const weight = item.posterior_weight ?? cand.retrieval_score ?? 0.2;
+    const rawWeight = weightFrom(item);
+    const weight = maxWeight > 0 ? rawWeight / maxWeight : 0;
+    const color = weightColor(weight);
+    const radius = idx === 0 ? 9 : 3 + weight * 6;
     const marker = L.circleMarker([cand.latitude, cand.longitude], {
-      radius: 4 + Math.min(8, weight * 12),
-      color: "rgba(79, 209, 197, 0.9)",
-      fillColor: "rgba(79, 209, 197, 0.7)",
-      fillOpacity: 0.7,
-      weight: 1,
+      radius,
+      color,
+      fillColor: color,
+      fillOpacity: idx === 0 ? 0.85 : 0.4 + weight * 0.35,
+      weight: idx === 0 ? 2 : 1,
     }).addTo(mapLayer);
-    marker.bindPopup(`Candidate<br/>w=${formatMaybe(weight, 3)}`);
+    marker.bindPopup(`Candidate<br/>w=${formatMaybe(rawWeight, 3)}`);
     bounds.extend([cand.latitude, cand.longitude]);
   });
 
@@ -89,9 +112,9 @@ function renderMap(row) {
   const meanLon = fusion.mean_longitude;
   if (meanLat !== undefined && meanLon !== undefined) {
     const meanMarker = L.circleMarker([meanLat, meanLon], {
-      radius: 7,
-      color: "#ffd166",
-      fillColor: "#ffd166",
+      radius: 8,
+      color: "rgba(255, 255, 255, 0.9)",
+      fillColor: "rgba(255, 255, 255, 0.9)",
       fillOpacity: 0.9,
       weight: 2,
     }).addTo(mapLayer);
@@ -104,19 +127,21 @@ function renderMap(row) {
     const polygon = L.polygon(
       ellipsePolygon(meanLat, meanLon, ellipse.major_axis_m, ellipse.minor_axis_m, ellipse.orientation_deg),
       {
-        color: "rgba(255, 209, 102, 0.9)",
-        weight: 1.5,
-        fillColor: "rgba(255, 209, 102, 0.2)",
-        fillOpacity: 0.2,
+        color: "rgba(52, 245, 197, 0.7)",
+        weight: 1.4,
+        dashArray: "6 6",
+        fillColor: "rgba(52, 245, 197, 0.08)",
+        fillOpacity: 0.12,
       }
     ).addTo(mapLayer);
     polygon.bindPopup("Uncertainty ellipse");
   } else if (fusion.uncertainty_radius_m && meanLat !== undefined && meanLon !== undefined) {
     L.circle([meanLat, meanLon], {
       radius: fusion.uncertainty_radius_m,
-      color: "rgba(255, 209, 102, 0.7)",
+      color: "rgba(52, 245, 197, 0.6)",
       weight: 1.2,
-      fillOpacity: 0.08,
+      dashArray: "6 6",
+      fillOpacity: 0.05,
     }).addTo(mapLayer);
   }
 

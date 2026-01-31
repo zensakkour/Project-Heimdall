@@ -6,7 +6,35 @@ This doc describes the current geolocation and object localization stack, how it
 ## Dataset (Current)
 - University-1652 (HF mirror): `layumi/university-1652`
 - Local path: `data/university-1652`
-- Export tool: `python -m src.tools.prepare_university1652 --split train --limit 200`
+- Export tool: `python -m src.tools.prepare_university1652 --split train --limit 200 --source-dir data/University-1652`
+- Note: the HuggingFace mirror is metadata-only (no image files). You need the official dataset download.
+
+## Retrieval Index (Reference Matching)
+Retrieval uses a CLIP image encoder to build an embedding index of reference images with known GPS.
+At runtime, new images are embedded and nearest neighbors are returned as geo candidates.
+
+Build an index (requires images + GPS metadata or sidecar files):
+```powershell
+python -m src.tools.build_geo_index --images-dir data/university-1652/images/train --metadata data/university-1652/metadata.csv
+```
+
+Or use sidecar files next to images (`.geo.json` / `.geoloc.json`) instead of a metadata CSV/JSON:
+```powershell
+python -m src.tools.build_geo_index --images-dir data/samples/with_sidecars
+```
+
+Configure retrieval in `src/config/defaults.json`:
+- `geolocator.retrieval_index_path`
+- `geolocator.retrieval_model_id` (default `openai/clip-vit-large-patch14`)
+- `geolocator.retrieval_top_k`
+- `geolocator.retrieval_min_score`
+
+### Open Geo Demo (Wikimedia Commons)
+You can bootstrap retrieval with open geotagged images from Wikimedia Commons:
+```powershell
+python -m src.tools.download_open_geo --limit 100 --output data/open_geo
+python -m src.tools.build_geo_index --images-dir data/open_geo/images --metadata data/open_geo/metadata.csv --output data/geo_index/open_geo_clip.npz
+```
 
 ## Object Localization (Detection)
 - Model runtime: Ultralytics YOLO OBB (oriented bounding boxes)

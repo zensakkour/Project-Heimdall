@@ -32,6 +32,8 @@ out/
 /data/samples/*
 /data/models/*
 /data/university-1652/*
+/data/geo_index/*
+/data/open_geo/*
 /yolo11x-obb.pt
 /runs/
 !**/.gitkeep

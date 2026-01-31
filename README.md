@@ -159,7 +159,7 @@ pip install -r requirements.txt
 Download and export a working image subset:
 ```powershell
 python -m src.tools.download_university1652
-python -m src.tools.prepare_university1652 --split train --limit 200
+python -m src.tools.prepare_university1652 --split train --limit 200 --source-dir data/University-1652
 ```
 
 Use in Live (upload from exported folder):
@@ -169,6 +169,34 @@ Use in Non-Live (batch run + dashboard):
 ```powershell
 python -m src.batch_run data/university-1652/images/train --output runs/results.jsonl
 python -m src.tools.generate_ui_data --jsonl runs/results.jsonl
+```
+
+Important:
+- The HuggingFace mirror is metadata-only; it does not contain the image files.
+- You must download the full University-1652 dataset from the official source and set `--source-dir`.
+
+### Retrieval Index (Reference Matching)
+If you want the dataset to improve geo results, build an embedding index and point the config to it:
+```powershell
+python -m src.tools.build_geo_index --images-dir data/university-1652/images/train --metadata data/university-1652/metadata.csv
+```
+
+Then set in `src/config/defaults.json`:
+- `geolocator.retrieval_index_path`
+- `geolocator.retrieval_model_id`
+- `geolocator.retrieval_top_k`
+- `geolocator.retrieval_min_score`
+
+### Open Geo Demo Dataset (No Request Needed)
+Download a small open geotagged set from Wikimedia Commons:
+```powershell
+python -m src.tools.download_open_geo --limit 100 --output data/open_geo
+python -m src.tools.build_geo_index --images-dir data/open_geo/images --metadata data/open_geo/metadata.csv --output data/geo_index/open_geo_clip.npz
+```
+
+Then set in `src/config/defaults.json`:
+```json
+"retrieval_index_path": "data/geo_index/open_geo_clip.npz"
 ```
 
 ### Run the legacy pipeline (single image)

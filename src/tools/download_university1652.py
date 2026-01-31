@@ -5,4 +5,5 @@ snapshot_download(
     repo_type="dataset",
     local_dir="data/university-1652",
 )
-print("downloaded")
+print("downloaded metadata to data/university-1652")
+print("note: the HuggingFace mirror does NOT include image files.")

@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 
 from src.core.detection.factory import create_detector
-from src.core.geo import GeoCLIPProvider, GeoLocator
+from src.core.geo import GeoCLIPProvider, GeoLocator, GeoRetrievalProvider, MultiCandidateProvider
 from src.core.logic.config import FusionConfig, load_config
 from src.core.logic.pipeline import HeimdallPipeline
 from src.core.logic.serialize import assessment_to_dict
@@ -40,7 +40,13 @@ def main() -> int:
             use_sidecar=cfg.geolocator.use_sidecar,
             use_exif=cfg.geolocator.use_exif,
         )
-        candidate_provider = GeoCLIPProvider(
+        retrieval_provider = GeoRetrievalProvider(
+            index_path=cfg.geolocator.retrieval_index_path,
+            model_id=cfg.geolocator.retrieval_model_id or "openai/clip-vit-large-patch14",
+            top_k=cfg.geolocator.retrieval_top_k,
+            min_score=cfg.geolocator.retrieval_min_score,
+        )
+        geoclip_provider = GeoCLIPProvider(
             model_path=cfg.geolocator.model_path,
             model_id=cfg.geolocator.model_id,
             model_cache_dir=cfg.geolocator.model_cache_dir,
@@ -48,6 +54,10 @@ def main() -> int:
             use_sidecar=cfg.geolocator.use_sidecar,
             use_exif=cfg.geolocator.use_exif,
         )
+        if cfg.geolocator.retrieval_index_path:
+            candidate_provider = MultiCandidateProvider([retrieval_provider, geoclip_provider])
+        else:
+            candidate_provider = geoclip_provider
         fusion_cfg = cfg.fusion
     elif args.images:
         candidate_provider = GeoCLIPProvider()
