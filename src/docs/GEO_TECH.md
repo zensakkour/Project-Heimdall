@@ -3,6 +3,11 @@
 ## Overview
 This doc describes the current geolocation and object localization stack, how it is wired, and the exact software/model versions detected in this environment.
 
+## Dataset (Current)
+- University-1652 (HF mirror): `layumi/university-1652`
+- Local path: `data/university-1652`
+- Export tool: `python -m src.tools.prepare_university1652 --split train --limit 200`
+
 ## Object Localization (Detection)
 - Model runtime: Ultralytics YOLO OBB (oriented bounding boxes)
 - Weights (default): `yolo11x-obb.pt`

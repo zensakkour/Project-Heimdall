@@ -13,3 +13,4 @@ geoclip
 huggingface_hub
 safetensors
 torch
+datasets
