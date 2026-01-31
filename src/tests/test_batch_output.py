@@ -7,7 +7,7 @@ import json
 import tempfile
 from pathlib import Path
 
-from batch_run import assessment_to_dict
+from src.batch_run import assessment_to_dict
 from src.core.logic.types import Assessment
 
 
@@ -25,5 +25,6 @@ def test_batch_output_jsonl_roundtrip() -> None:
         parsed = json.loads(data[0])
         assert parsed["image"] == "example.jpg"
         assert parsed["result"]["score"] == 0.0
+
 
 

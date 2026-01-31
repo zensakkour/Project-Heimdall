@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 
 from src.core.detection.factory import create_detector
-from src.core.geo import GeoCLIPProvider, GeoLocator
+from src.core.geo import GeoCLIPProvider, GeoLocator, GeoRetrievalProvider, MultiCandidateProvider
 from src.core.logic.config import (
     DetectorConfig,
     GeoConfig,
@@ -41,7 +41,13 @@ def build_pipeline(
             use_sidecar=geo_cfg.use_sidecar,
             use_exif=geo_cfg.use_exif,
         )
-        candidate_provider = GeoCLIPProvider(
+        retrieval_provider = GeoRetrievalProvider(
+            index_path=geo_cfg.retrieval_index_path,
+            model_id=geo_cfg.retrieval_model_id or "openai/clip-vit-large-patch14",
+            top_k=geo_cfg.retrieval_top_k,
+            min_score=geo_cfg.retrieval_min_score,
+        )
+        geoclip_provider = GeoCLIPProvider(
             model_path=geo_cfg.model_path,
             model_id=geo_cfg.model_id,
             model_cache_dir=geo_cfg.model_cache_dir,
@@ -49,6 +55,10 @@ def build_pipeline(
             use_sidecar=geo_cfg.use_sidecar,
             use_exif=geo_cfg.use_exif,
         )
+        if geo_cfg.retrieval_index_path:
+            candidate_provider = MultiCandidateProvider([retrieval_provider, geoclip_provider])
+        else:
+            candidate_provider = geoclip_provider
     return HeimdallPipeline(
         detector=detector,
         geolocator=geolocator,

@@ -29,6 +29,10 @@ class GeoConfig:
     use_sidecar: bool = True
     use_exif: bool = True
     top_n: int = 5
+    retrieval_index_path: Optional[str] = None
+    retrieval_model_id: Optional[str] = None
+    retrieval_top_k: int = 10
+    retrieval_min_score: float = 0.2
 
 
 @dataclass(frozen=True)
@@ -91,6 +95,10 @@ def load_config(path: str) -> HeimdallConfig:
             use_sidecar=geo.get("use_sidecar", True),
             use_exif=geo.get("use_exif", True),
             top_n=geo.get("top_n", 5),
+            retrieval_index_path=geo.get("retrieval_index_path"),
+            retrieval_model_id=geo.get("retrieval_model_id"),
+            retrieval_top_k=geo.get("retrieval_top_k", 10),
+            retrieval_min_score=geo.get("retrieval_min_score", 0.2),
         ),
         fusion=FusionConfig(
             retrieval_temperature=fusion.get("retrieval_temperature", 0.2),

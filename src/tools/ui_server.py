@@ -17,7 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from PIL import Image
 
 from src.core.detection.factory import create_detector
-from src.core.geo import GeoCLIPProvider, GeoLocator
+from src.core.geo import GeoCLIPProvider, GeoLocator, GeoRetrievalProvider, MultiCandidateProvider
 from src.core.logic.config import HeimdallConfig, load_config
 from src.core.logic.pipeline import HeimdallPipeline
 from src.core.logic.serialize import assessment_to_dict
@@ -43,7 +43,13 @@ def build_pipeline(cfg: Optional[HeimdallConfig]) -> HeimdallPipeline:
         use_sidecar=cfg.geolocator.use_sidecar,
         use_exif=cfg.geolocator.use_exif,
     )
-    candidate_provider = GeoCLIPProvider(
+    retrieval_provider = GeoRetrievalProvider(
+        index_path=cfg.geolocator.retrieval_index_path,
+        model_id=cfg.geolocator.retrieval_model_id or "openai/clip-vit-large-patch14",
+        top_k=cfg.geolocator.retrieval_top_k,
+        min_score=cfg.geolocator.retrieval_min_score,
+    )
+    geoclip_provider = GeoCLIPProvider(
         model_path=cfg.geolocator.model_path,
         model_id=cfg.geolocator.model_id,
         model_cache_dir=cfg.geolocator.model_cache_dir,
@@ -52,6 +58,10 @@ def build_pipeline(cfg: Optional[HeimdallConfig]) -> HeimdallPipeline:
         use_sidecar=cfg.geolocator.use_sidecar,
         use_exif=cfg.geolocator.use_exif,
     )
+    if cfg.geolocator.retrieval_index_path:
+        candidate_provider = MultiCandidateProvider([retrieval_provider, geoclip_provider])
+    else:
+        candidate_provider = geoclip_provider
     return HeimdallPipeline(
         detector=detector,
         geolocator=geolocator,
@@ -63,7 +73,7 @@ def build_pipeline(cfg: Optional[HeimdallConfig]) -> HeimdallPipeline:
 
 
 def _load_config_from_env() -> Optional[HeimdallConfig]:
-    default_path = APP_ROOT / "config" / "defaults.json"
+    default_path = APP_ROOT / "src" / "config" / "defaults.json"
     if default_path.exists():
         return load_config(str(default_path))
     return None

@@ -71,6 +71,7 @@ let liveMap = null;
 let liveLayer = null;
 let trackMap = null;
 let trackLayer = null;
+const MAX_MAP_CANDIDATES = 20;
 
 function ensureLiveMaps() {
   if (!liveMap) {
@@ -110,6 +111,21 @@ function ellipsePolygon(lat, lon, majorM, minorM, orientationDeg) {
   return points;
 }
 
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function weightFrom(item) {
+  const cand = item.candidate || {};
+  return item.posterior_weight ?? cand.retrieval_score ?? 0;
+}
+
+function weightColor(weight) {
+  const w = clamp(weight, 0, 1);
+  const lightness = 38 + w * 30;
+  return `hsl(172, 75%, ${lightness}%)`;
+}
+
 function renderLiveMap(result) {
   ensureLiveMaps();
   liveLayer.clearLayers();
@@ -124,16 +140,21 @@ function renderLiveMap(result) {
     return;
   }
   const bounds = L.latLngBounds([]);
-  candidates.forEach((item) => {
+  const sorted = [...candidates].sort((a, b) => weightFrom(b) - weightFrom(a));
+  const maxWeight = sorted.length ? Math.max(...sorted.map(weightFrom)) : 1;
+  const visible = sorted.slice(0, MAX_MAP_CANDIDATES);
+  visible.forEach((item, idx) => {
     const cand = item.candidate || {};
     if (cand.latitude === undefined || cand.longitude === undefined) return;
-    const weight = item.posterior_weight ?? cand.retrieval_score ?? 0.2;
+    const rawWeight = weightFrom(item);
+    const weight = maxWeight > 0 ? rawWeight / maxWeight : 0;
+    const color = weightColor(weight);
     L.circleMarker([cand.latitude, cand.longitude], {
-      radius: 4 + Math.min(8, weight * 12),
-      color: "rgba(52, 245, 197, 0.9)",
-      fillColor: "rgba(52, 245, 197, 0.6)",
-      fillOpacity: 0.7,
-      weight: 1,
+      radius: idx === 0 ? 9 : 3 + weight * 6,
+      color,
+      fillColor: color,
+      fillOpacity: idx === 0 ? 0.85 : 0.4 + weight * 0.35,
+      weight: idx === 0 ? 2 : 1,
     }).addTo(liveLayer);
     bounds.extend([cand.latitude, cand.longitude]);
   });
@@ -141,9 +162,9 @@ function renderLiveMap(result) {
   const meanLon = fusion.mean_longitude;
   if (meanLat !== undefined && meanLon !== undefined) {
     L.circleMarker([meanLat, meanLon], {
-      radius: 7,
-      color: "#ffd166",
-      fillColor: "#ffd166",
+      radius: 8,
+      color: "rgba(255, 255, 255, 0.9)",
+      fillColor: "rgba(255, 255, 255, 0.9)",
       fillOpacity: 0.9,
       weight: 2,
     }).addTo(liveLayer);
@@ -152,10 +173,11 @@ function renderLiveMap(result) {
   const ellipse = fusion.ellipse || {};
   if (ellipse.major_axis_m && ellipse.minor_axis_m && meanLat !== undefined && meanLon !== undefined) {
     L.polygon(ellipsePolygon(meanLat, meanLon, ellipse.major_axis_m, ellipse.minor_axis_m, ellipse.orientation_deg), {
-      color: "rgba(255, 209, 102, 0.9)",
+      color: "rgba(52, 245, 197, 0.7)",
       weight: 1.4,
-      fillColor: "rgba(255, 209, 102, 0.2)",
-      fillOpacity: 0.2,
+      dashArray: "6 6",
+      fillColor: "rgba(52, 245, 197, 0.08)",
+      fillOpacity: 0.12,
     }).addTo(liveLayer);
   }
   liveMap.fitBounds(bounds.pad(0.3));
