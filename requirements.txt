@@ -9,3 +9,7 @@ uvicorn
 python-multipart
 opencv-python
 ultralytics
+geoclip
+huggingface_hub
+safetensors
+torch

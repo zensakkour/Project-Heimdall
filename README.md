@@ -23,10 +23,10 @@ Build a clean, testable, and reproducible system that:
 - Tools: detector-only benchmark script.
 
 Deliverables:
-- `core/detection/base.py`
-- `core/detection/yolo_obb.py`
-- `schemas/detection.py`
-- `tools/benchmark_detector.py`
+- `src/core/detection/base.py`
+- `src/core/detection/yolo_obb.py`
+- `src/schemas/detection.py`
+- `src/tools/benchmark_detector.py`
 
 ### Module B - Geolocation Candidate Generation
 - Candidate provider interface.
@@ -34,10 +34,10 @@ Deliverables:
 - Always return ranked Top-N candidates (lat/lon, retrieval score, optional match id).
 
 Deliverables:
-- `core/geo/candidate_provider.py`
-- `core/geo/geoclip_provider.py`
-- `schemas/geo_candidate.py`
-- `tools/run_geo_candidates.py`
+- `src/core/geo/candidate_provider.py`
+- `src/core/geo/geoclip_provider.py`
+- `src/schemas/geo_candidate.py`
+- `src/tools/run_geo_candidates.py`
 
 ### Module C - Probabilistic Verification & Fusion
 - Likelihood models for shadow/terrain residuals.
@@ -46,10 +46,10 @@ Deliverables:
 - Compute uncertainty ellipse and radius.
 
 Deliverables:
-- `core/logic/likelihoods.py`
-- `core/logic/fusion.py`
-- `schemas/fusion.py`
-- `tools/calibrate_fusion.py`
+- `src/core/logic/likelihoods.py`
+- `src/core/logic/fusion.py`
+- `src/schemas/fusion.py`
+- `src/tools/calibrate_fusion.py`
 
 ### Module D - Explainability Layer
 - Evidence object per candidate (residuals, likelihoods, weights).
@@ -57,9 +57,9 @@ Deliverables:
 - Include explainability fields in JSON outputs/UI.
 
 Deliverables:
-- `schemas/evidence.py`
+- `src/schemas/evidence.py`
 - Fusion output extends evidence.
-- `tools/generate_ui_data.py`
+- `src/tools/generate_ui_data.py`
 
 ### Module E - Temporal / Multi-View Consistency (Tracking)
 - Track abstraction across frames/posts.
@@ -68,10 +68,10 @@ Deliverables:
 - Optional and configurable.
 
 Deliverables:
-- `core/logic/tracking.py`
-- `core/logic/filtering.py`
-- `schemas/track.py`
-- `tools/run_sequence_eval.py`
+- `src/core/logic/tracking.py`
+- `src/core/logic/filtering.py`
+- `src/schemas/track.py`
+- `src/tools/run_sequence_eval.py`
 
 ### Module F - UI & Reporting
 - Map: candidates, posterior-weighted estimate, uncertainty ellipse.
@@ -81,9 +81,9 @@ Deliverables:
 - Audit export: JSON per image with intermediate signals.
 
 Deliverables:
-- `dashboard/` extensions for table + uncertainty overlays + track timeline
-- `tools/run_tests_report.py`
-- `tools/export_audit.py`
+- `src/dashboard/` extensions for table + uncertainty overlays + track timeline
+- `src/tools/run_tests_report.py`
+- `src/tools/export_audit.py`
 
 ### Module G - Evaluation & Reproducibility
 - One-command evaluation (JSONL + HTML report).
@@ -92,9 +92,9 @@ Deliverables:
 - Persist config snapshot + git commit hash.
 
 Deliverables:
-- `tools/run_all.py`
-- `tools/eval_metrics.py`
-- `docs/REPRODUCIBILITY.md`
+- `src/tools/run_all.py`
+- `src/tools/eval_metrics.py`
+- `src/docs/REPRODUCIBILITY.md`
 
 ---
 
@@ -109,14 +109,16 @@ Deliverables:
 ## Project Structure (Current)
 ```
 Project-Heimdall/
-|-- core/
-|   |-- detection/   (detector interfaces and backends)
-|   |-- geo/         (geo candidate providers)
-|   `-- logic/       (fusion, verification, tracking)
-|-- schemas/         (pydantic schemas)
-|-- tools/           (CLI utilities)
-|-- dashboard/       (lightweight UI)
-|-- docs/            (reproducibility)
+|-- src/
+|   |-- core/
+|   |-- tools/
+|   |-- schemas/
+|   |-- tests/
+|   |-- dashboard/
+|   |-- config/
+|   |-- docs/
+|   |-- scripts/
+|   `-- ingestion/
 `-- data/            (local samples / weights)
 ```
 
@@ -129,6 +131,23 @@ Project-Heimdall/
 - Python 3.10+
 - Git
 
+### How to Launch
+Dashboard-only (static):
+```powershell
+python -m src.tools.generate_ui_data --jsonl runs/results.jsonl
+cd src/dashboard
+python -m http.server 8000
+```
+
+Full UI with analysis uploads (FastAPI):
+```powershell
+python -m uvicorn src.tools.ui_server:app --reload --port 8000
+```
+
+Open:
+- `http://127.0.0.1:8000/` (Dashboard)
+- `http://127.0.0.1:8000/analysis/` (Analysis)
+
 ### Setup
 ```powershell
 python -m venv .venv
@@ -138,12 +157,12 @@ pip install -r requirements.txt
 
 ### Run the legacy pipeline (single image)
 ```powershell
-python cli.py data/samples/real_port_miami.jpg --json
+python -m src.cli data/samples/real_port_miami.jpg --json
 ```
 
 ### Generate geo candidates
 ```powershell
-python tools/run_geo_candidates.py data/samples/real_port_miami.jpg
+python -m src.tools.run_geo_candidates data/samples/real_port_miami.jpg
 ```
 
 ### Geolocation model (GeoCLIP / GeoSpot Base)
@@ -152,26 +171,26 @@ On first run, the model will download if `huggingface_hub` is installed and netw
 
 Manual download:
 ```powershell
-python tools/download_geospot_base.py
+python -m src.tools.download_geospot_base
 ```
 
 ### Run fusion (stub pipeline)
 ```powershell
-python tools/run_all.py data/samples/real_port_miami.jpg
-python tools/eval_metrics.py runs/results.jsonl
+python -m src.tools.run_all data/samples/real_port_miami.jpg
+python -m src.tools.eval_metrics runs/results.jsonl
 ```
 
 ### UI (Local)
 Dashboard-only (static):
 ```powershell
-python tools/generate_ui_data.py --jsonl runs/results.jsonl
-cd dashboard
+python -m src.tools.generate_ui_data --jsonl runs/results.jsonl
+cd src/dashboard
 python -m http.server 8000
 ```
 
 Full UI with analysis uploads (FastAPI):
 ```powershell
-python -m uvicorn tools.ui_server:app --reload --port 8000
+python -m uvicorn src.tools.ui_server:app --reload --port 8000
 ```
 
 Open:
@@ -180,5 +199,8 @@ Open:
 
 ---
 
-## Status
+## Geolocation Tech\nSee `src/docs/GEO_TECH.md` for the current geo + detection stack and versions.\n\n## Status
 Active development aligned to the 2026-01-30 engineering specification. See `PROGRESS.md` for the latest work and next steps.
+
+
+
