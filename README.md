@@ -155,6 +155,22 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
+### Dataset (University-1652)
+Download and export a working image subset:
+```powershell
+python -m src.tools.download_university1652
+python -m src.tools.prepare_university1652 --split train --limit 200
+```
+
+Use in Live (upload from exported folder):
+- `data/university-1652/images/train/`
+
+Use in Non-Live (batch run + dashboard):
+```powershell
+python -m src.batch_run data/university-1652/images/train --output runs/results.jsonl
+python -m src.tools.generate_ui_data --jsonl runs/results.jsonl
+```
+
 ### Run the legacy pipeline (single image)
 ```powershell
 python -m src.cli data/samples/real_port_miami.jpg --json
