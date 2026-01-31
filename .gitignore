@@ -13,8 +13,8 @@ __pycache__/
 # Pytest
 .pytest_cache/
 # UI generated data
-/dashboard/data/*.json
-/dashboard/data/*.jsonl
+/src/dashboard/data/*.json
+/src/dashboard/data/*.jsonl
 # C++ build artifacts
 build/
 out/
@@ -30,6 +30,7 @@ out/
 /data/dota/*
 /data/weights/*
 /data/samples/*
+/data/models/*
 /yolo11x-obb.pt
 /runs/
 !**/.gitkeep

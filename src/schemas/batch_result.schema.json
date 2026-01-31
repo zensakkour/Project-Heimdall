@@ -1,0 +1,140 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "HeimdallBatchResult",
+  "type": "object",
+  "properties": {
+    "image": { "type": "string" },
+    "result": {
+      "type": "object",
+      "properties": {
+        "detections": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": { "type": "string" },
+              "confidence": { "type": "number" },
+              "heading_deg": { "type": ["number", "null"] },
+              "shadow_azimuth_deg": { "type": ["number", "null"] },
+              "shadow_length_ratio": { "type": ["number", "null"] },
+              "obb": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "items": { "type": "number" },
+                  "minItems": 2,
+                  "maxItems": 2
+                },
+                "minItems": 4,
+                "maxItems": 4
+              }
+            },
+            "required": ["label", "confidence", "obb"]
+          }
+        },
+        "geo": {
+          "type": ["object", "null"],
+          "properties": {
+            "latitude": { "type": "number" },
+            "longitude": { "type": "number" },
+            "confidence": { "type": "number" },
+            "landmarks": {
+              "type": ["array", "null"],
+              "items": { "type": "string" }
+            },
+            "uncertainty_m": { "type": ["number", "null"] },
+            "uncertainty_radius_m": { "type": ["number", "null"] },
+            "confidence_tier": {
+              "type": "string",
+              "enum": ["low", "medium", "high"]
+            }
+          }
+        },
+        "verification": {
+          "type": ["object", "null"],
+          "properties": {
+            "shadow_ok": { "type": "boolean" },
+            "topo_ok": { "type": "boolean" },
+            "notes": { "type": ["string", "null"] }
+          }
+        },
+        "score": { "type": "number" },
+        "candidates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "latitude": { "type": "number" },
+              "longitude": { "type": "number" },
+              "retrieval_score": { "type": "number" },
+              "match_id": { "type": ["string", "null"] }
+            },
+            "required": ["latitude", "longitude", "retrieval_score"]
+          }
+        },
+        "fusion": {
+          "type": ["object", "null"],
+          "properties": {
+            "mean_latitude": { "type": "number" },
+            "mean_longitude": { "type": "number" },
+            "covariance_m": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": { "type": "number" },
+                "minItems": 2,
+                "maxItems": 2
+              },
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "ellipse": {
+              "type": "object",
+              "properties": {
+                "major_axis_m": { "type": "number" },
+                "minor_axis_m": { "type": "number" },
+                "orientation_deg": { "type": "number" }
+              },
+              "required": ["major_axis_m", "minor_axis_m", "orientation_deg"]
+            },
+            "uncertainty_radius_m": { "type": "number" },
+            "candidates": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "candidate": {
+                    "type": "object",
+                    "properties": {
+                      "latitude": { "type": "number" },
+                      "longitude": { "type": "number" },
+                      "retrieval_score": { "type": "number" },
+                      "match_id": { "type": ["string", "null"] }
+                    },
+                    "required": ["latitude", "longitude", "retrieval_score"]
+                  },
+                  "posterior_weight": { "type": "number" },
+                  "evidence": {
+                    "type": "object",
+                    "properties": {
+                      "retrieval_score": { "type": "number" },
+                      "shadow_residual_deg": { "type": ["number", "null"] },
+                      "terrain_residual": { "type": ["number", "null"] },
+                      "likelihoods": { "type": "object" },
+                      "posterior_weight": { "type": "number" },
+                      "explanation": { "type": "string" }
+                    },
+                    "required": ["retrieval_score", "likelihoods", "posterior_weight", "explanation"]
+                  }
+                },
+                "required": ["candidate", "posterior_weight", "evidence"]
+              }
+            }
+          }
+        }
+      },
+      "required": ["detections", "geo", "verification", "score"]
+    }
+  },
+  "required": ["image", "result"]
+}

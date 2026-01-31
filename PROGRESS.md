@@ -203,3 +203,9 @@ Do not delete or edit past entries. Append new work at the end.
 - Added geolocator encoder_name support in config and pipeline wiring; improved geo fallback from fusion output.
 - Integrated GeoSpot Base via SigLIP2 image encoder, including required SigLIP2 inputs and CLIP output patching.
 - Tuned geo candidate counts and fusion settings for higher-accuracy defaults.
+
+## 2026-01-31
+- Restructured repo into src/ for code, tools, schemas, tests, dashboard, config, docs, scripts, and ingestion; kept data/ at repo root.
+- Updated imports to use src.* package paths and adjusted default config/dashboard paths accordingly.
+- Updated README and reproducibility docs for new module paths and run commands.
+- Updated .gitignore for new dashboard data paths.
