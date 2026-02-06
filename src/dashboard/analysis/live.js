@@ -42,7 +42,7 @@ if (fileInput && fileName) {
     fileName.textContent = name;
     const hasFile = name !== "No file selected";
     if (filePicker) filePicker.classList.toggle("has-file", hasFile);
-    if (fileButton) fileButton.textContent = hasFile ? name : "Choose file";
+    if (fileButton) fileButton.textContent = "Choose file";
   };
   const scheduleUpdate = () => requestAnimationFrame(update);
   fileInput.addEventListener("change", scheduleUpdate);
@@ -120,80 +120,246 @@ function weightFrom(item) {
 
 function weightColor(weight) {
   const w = clamp(weight, 0, 1);
-  const lightness = 35 + w * 35;
-  return `hsl(172, 75%, ${lightness}%)`;
+  const lightness = 38 + w * 32;
+  return `hsl(171, 74%, ${lightness}%)`;
 }
 
+const emptyFeatureCollection = { type: "FeatureCollection", features: [] };
+const initialCenter = [0, 20];
+const initialZoom = 1.6;
 
-let liveLeaflet = null;
-let liveLayerGroup = null;
-let liveCircle = null;
-let liveMeanMarker = null;
+let liveMap = null;
+let liveMapReady = null;
+let livePopup = null;
 
 function ensureLiveMap() {
-  if (liveLeaflet) return;
+  if (liveMap) return liveMapReady;
   const el = byId("live-map");
-  liveLeaflet = L.map(el, {
-    zoomControl: false,
+  liveMap = new maplibregl.Map({
+    container: el,
+    style: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
+    center: initialCenter,
+    zoom: initialZoom,
     attributionControl: false,
-    worldCopyJump: true,
-  }).setView([20, 0], 2);
+  });
 
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-    maxZoom: 7,
-  }).addTo(liveLeaflet);
+  liveMap.addControl(new maplibregl.NavigationControl({ showCompass: true }), "bottom-right");
+  liveMap.addControl(new maplibregl.ScaleControl({ maxWidth: 90, unit: "metric" }), "bottom-left");
 
-  liveLayerGroup = L.layerGroup().addTo(liveLeaflet);
-  setTimeout(() => liveLeaflet.invalidateSize(), 0);
+  liveMapReady = new Promise((resolve) => {
+    liveMap.on("load", () => {
+      if (liveMap.setProjection) {
+        try {
+          liveMap.setProjection({ type: "globe" });
+        } catch (err) {
+          // Ignore unsupported projection in older maplibre builds.
+        }
+      }
+      if (liveMap.setFog) {
+        liveMap.setFog({
+          color: "rgb(8, 15, 18)",
+          "high-color": "rgb(5, 10, 12)",
+          "space-color": "rgb(3, 6, 8)",
+          "horizon-blend": 0.12,
+          "star-intensity": 0.15,
+        });
+      }
+
+      liveMap.addSource("candidates", {
+        type: "geojson",
+        data: emptyFeatureCollection,
+      });
+      liveMap.addSource("mean", {
+        type: "geojson",
+        data: emptyFeatureCollection,
+      });
+      liveMap.addSource("ring", {
+        type: "geojson",
+        data: emptyFeatureCollection,
+      });
+
+      liveMap.addLayer({
+        id: "ring-layer",
+        type: "line",
+        source: "ring",
+        paint: {
+          "line-color": "rgba(120, 246, 215, 0.6)",
+          "line-width": 1.4,
+          "line-dasharray": [2, 2],
+        },
+      });
+
+      liveMap.addLayer({
+        id: "candidate-layer",
+        type: "circle",
+        source: "candidates",
+        paint: {
+          "circle-color": ["get", "color"],
+          "circle-radius": [
+            "interpolate",
+            ["linear"],
+            ["get", "weightNorm"],
+            0,
+            3,
+            1,
+            10,
+          ],
+          "circle-opacity": [
+            "case",
+            ["==", ["get", "rank"], 1],
+            0.95,
+            0.7,
+          ],
+          "circle-stroke-color": "rgba(196, 255, 236, 0.85)",
+          "circle-stroke-width": [
+            "case",
+            ["==", ["get", "rank"], 1],
+            1.6,
+            0.8,
+          ],
+        },
+      });
+
+      liveMap.addLayer({
+        id: "mean-layer",
+        type: "circle",
+        source: "mean",
+        paint: {
+          "circle-color": "rgba(230, 255, 245, 0.95)",
+          "circle-radius": 6,
+          "circle-stroke-color": "rgba(180, 255, 236, 0.9)",
+          "circle-stroke-width": 1.6,
+        },
+      });
+
+      liveMap.on("mouseenter", "candidate-layer", () => {
+        liveMap.getCanvas().style.cursor = "pointer";
+      });
+      liveMap.on("mouseleave", "candidate-layer", () => {
+        liveMap.getCanvas().style.cursor = "";
+      });
+      liveMap.on("mouseenter", "mean-layer", () => {
+        liveMap.getCanvas().style.cursor = "pointer";
+      });
+      liveMap.on("mouseleave", "mean-layer", () => {
+        liveMap.getCanvas().style.cursor = "";
+      });
+
+      liveMap.on("click", "candidate-layer", (e) => {
+        if (!e.features || !e.features.length) return;
+        const feature = e.features[0];
+        const props = feature.properties || {};
+        const coords = feature.geometry.coordinates;
+        const rank = Number(props.rank || 0);
+        const conf = Number(props.rawWeight || 0);
+        const posterior = props.posterior !== undefined ? Number(props.posterior) : null;
+        const retr = props.retrieval !== undefined ? Number(props.retrieval) : null;
+        const html = [
+          `<strong>Candidate #${rank}</strong>`,
+          `Lat/Lon: ${coords[1].toFixed(5)}, ${coords[0].toFixed(5)}`,
+          `Confidence: ${(conf * 100).toFixed(1)}%`,
+        ];
+        if (posterior !== null && !Number.isNaN(posterior)) {
+          html.push(`Fusion weight: ${(posterior * 100).toFixed(1)}%`);
+        }
+        if (retr !== null && !Number.isNaN(retr)) {
+          html.push(`Retrieval score: ${(retr * 100).toFixed(1)}%`);
+        }
+        if (livePopup) livePopup.remove();
+        livePopup = new maplibregl.Popup({ offset: 12 })
+          .setLngLat(coords)
+          .setHTML(html.join("<br/>"))
+          .addTo(liveMap);
+      });
+
+      liveMap.on("click", "mean-layer", (e) => {
+        if (!e.features || !e.features.length) return;
+        const coords = e.features[0].geometry.coordinates;
+        if (livePopup) livePopup.remove();
+        livePopup = new maplibregl.Popup({ offset: 12 })
+          .setLngLat(coords)
+          .setHTML(`Fused mean<br/>Lat/Lon: ${coords[1].toFixed(5)}, ${coords[0].toFixed(5)}`)
+          .addTo(liveMap);
+      });
+
+      resolve();
+    });
+  });
+
+  return liveMapReady;
+}
+
+function circlePolygon(lat, lon, radiusMeters, points = 64) {
+  const coords = [];
+  const rad = radiusMeters / 6371000;
+  const latRad = (lat * Math.PI) / 180;
+  const lonRad = (lon * Math.PI) / 180;
+  for (let i = 0; i <= points; i += 1) {
+    const bearing = (2 * Math.PI * i) / points;
+    const lat2 = Math.asin(
+      Math.sin(latRad) * Math.cos(rad) +
+        Math.cos(latRad) * Math.sin(rad) * Math.cos(bearing)
+    );
+    const lon2 =
+      lonRad +
+      Math.atan2(
+        Math.sin(bearing) * Math.sin(rad) * Math.cos(latRad),
+        Math.cos(rad) - Math.sin(latRad) * Math.sin(lat2)
+      );
+    coords.push([(lon2 * 180) / Math.PI, (lat2 * 180) / Math.PI]);
+  }
+  return coords;
 }
 
 function renderLiveMap(result) {
   ensureLiveMap();
   if (!result || !result.result) {
-    liveLayerGroup.clearLayers();
-    if (liveCircle) liveLeaflet.removeLayer(liveCircle);
-    if (liveMeanMarker) liveLeaflet.removeLayer(liveMeanMarker);
+    if (liveMap && liveMap.getSource("candidates")) {
+      liveMap.getSource("candidates").setData(emptyFeatureCollection);
+      liveMap.getSource("mean").setData(emptyFeatureCollection);
+      liveMap.getSource("ring").setData(emptyFeatureCollection);
+    }
     return;
   }
+
   const fusion = result.result.fusion;
   const candidates = Array.isArray(fusion?.candidates) ? fusion.candidates : [];
-  liveLayerGroup.clearLayers();
-  if (liveCircle) liveLeaflet.removeLayer(liveCircle);
-  if (liveMeanMarker) liveLeaflet.removeLayer(liveMeanMarker);
-  if (!fusion || candidates.length === 0) return;
+  if (!fusion || candidates.length === 0) {
+    if (liveMap && liveMap.getSource("candidates")) {
+      liveMap.getSource("candidates").setData(emptyFeatureCollection);
+      liveMap.getSource("mean").setData(emptyFeatureCollection);
+      liveMap.getSource("ring").setData(emptyFeatureCollection);
+    }
+    return;
+  }
 
   const sorted = [...candidates].sort((a, b) => weightFrom(b) - weightFrom(a));
   const maxWeight = sorted.length ? Math.max(...sorted.map(weightFrom)) : 1;
   const visible = sorted.slice(0, liveTopLimit);
 
-  visible.forEach((item, idx) => {
-    const cand = item.candidate || {};
-    if (cand.latitude === undefined || cand.longitude === undefined) return;
-    const rawWeight = weightFrom(item);
-    const weight = maxWeight > 0 ? rawWeight / maxWeight : 0;
-    const color = weightColor(weight);
-    const radius = idx === 0 ? 9 : 4 + weight * 7;
-    const marker = L.circleMarker([cand.latitude, cand.longitude], {
-      radius,
-      color,
-      fillColor: color,
-      weight: 2,
-      fillOpacity: idx === 0 ? 0.9 : 0.6,
-    }).addTo(liveLayerGroup);
-    const rank = idx + 1;
-    const conf = rawWeight ?? 0;
-    const retr = item.candidate?.retrieval_score ?? item.retrieval_score ?? null;
-    const posterior = item.posterior_weight ?? null;
-    const lines = [
-      `<strong>Candidate #${rank}</strong>`,
-      `Lat/Lon: ${cand.latitude.toFixed(5)}, ${cand.longitude.toFixed(5)}`,
-      `Confidence: ${(conf * 100).toFixed(1)}%`,
-    ];
-    if (posterior !== null) lines.push(`Fusion weight: ${(posterior * 100).toFixed(1)}%`);
-    if (retr !== null) lines.push(`Retrieval score: ${(retr * 100).toFixed(1)}%`);
-    marker.bindTooltip(lines.join("<br/>"), { direction: "top", opacity: 0.95 });
-    marker.bindPopup(lines.join("<br/>"));
-  });
+  const features = visible
+    .map((item, idx) => {
+      const cand = item.candidate || {};
+      if (cand.latitude === undefined || cand.longitude === undefined) return null;
+      const rawWeight = weightFrom(item);
+      const weightNorm = maxWeight > 0 ? rawWeight / maxWeight : 0;
+      return {
+        type: "Feature",
+        geometry: {
+          type: "Point",
+          coordinates: [cand.longitude, cand.latitude],
+        },
+        properties: {
+          rank: idx + 1,
+          rawWeight,
+          weightNorm,
+          color: weightColor(weightNorm),
+          posterior: item.posterior_weight ?? null,
+          retrieval: item.candidate?.retrieval_score ?? item.retrieval_score ?? null,
+        },
+      };
+    })
+    .filter(Boolean);
 
   const meanLat = fusion.mean_latitude;
   const meanLon = fusion.mean_longitude;
@@ -201,35 +367,52 @@ function renderLiveMap(result) {
     fusion?.uncertainty_radius_m ??
     (fusion?.ellipse?.major_axis_m ? fusion.ellipse.major_axis_m * 0.6 : null);
 
-  if (meanLat !== undefined && meanLon !== undefined) {
-    liveMeanMarker = L.circleMarker([meanLat, meanLon], {
-      radius: 7,
-      color: "#d7f2de",
-      weight: 2,
-      fillOpacity: 0.9,
-    }).addTo(liveLeaflet);
-    liveMeanMarker.bindTooltip(
-      `Fused mean<br/>Lat/Lon: ${meanLat.toFixed(5)}, ${meanLon.toFixed(5)}`,
-      { direction: "top", opacity: 0.95 }
-    );
+  const meanFeature =
+    meanLat !== undefined && meanLon !== undefined
+      ? {
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [meanLon, meanLat] },
+          properties: {},
+        }
+      : null;
 
-    if (ringRadius) {
-      liveCircle = L.circle([meanLat, meanLon], {
-        radius: ringRadius,
-        color: "#7fb88a",
-        weight: 1.5,
-        fillOpacity: 0.05,
-        dashArray: "6 6",
-        interactive: false,
-      }).addTo(liveLeaflet);
-      liveCircle.bindTooltip(
-        `Uncertainty radius: ${ringRadius.toFixed(0)} m`,
-        { direction: "top", opacity: 0.95 }
-      );
+  const ringFeature =
+    meanLat !== undefined && meanLon !== undefined && ringRadius
+      ? {
+          type: "Feature",
+          geometry: {
+            type: "Polygon",
+            coordinates: [circlePolygon(meanLat, meanLon, ringRadius)],
+          },
+          properties: {},
+        }
+      : null;
+
+  ensureLiveMap();
+  liveMapReady.then(() => {
+    liveMap.getSource("candidates").setData({
+      type: "FeatureCollection",
+      features,
+    });
+    liveMap.getSource("mean").setData({
+      type: "FeatureCollection",
+      features: meanFeature ? [meanFeature] : [],
+    });
+    liveMap.getSource("ring").setData({
+      type: "FeatureCollection",
+      features: ringFeature ? [ringFeature] : [],
+    });
+
+    if (meanLat !== undefined && meanLon !== undefined) {
+      liveMap.easeTo({
+        center: [meanLon, meanLat],
+        zoom: 2.6,
+        duration: 700,
+        bearing: 0,
+        pitch: 0,
+      });
     }
-
-    liveLeaflet.setView([meanLat, meanLon], 3, { animate: false });
-  }
+  });
 }
 
 function renderImage(dataUrl, detections) {
@@ -340,8 +523,17 @@ byId("analyze-image").addEventListener("click", async () => {
 const canvas = byId("canvas");
 canvas.addEventListener("wheel", (e) => {
   e.preventDefault();
-  const delta = e.deltaY < 0 ? 1.1 : 0.9;
-  scale = Math.max(0.2, Math.min(6, scale * delta));
+  const rect = canvas.getBoundingClientRect();
+  const mouseX = e.clientX - rect.left;
+  const mouseY = e.clientY - rect.top;
+  const zoomFactor = e.deltaY < 0 ? 1.12 : 0.88;
+  const newScale = Math.max(0.2, Math.min(6, scale * zoomFactor));
+  const scaleDelta = newScale / scale;
+
+  // Zoom towards cursor by adjusting offsets in screen space.
+  offsetX = mouseX - (mouseX - offsetX) * scaleDelta;
+  offsetY = mouseY - (mouseY - offsetY) * scaleDelta;
+  scale = newScale;
   drawScene(null);
 });
 
@@ -387,17 +579,25 @@ byId("zoom-reset").addEventListener("click", () => {
 
 byId("map-zoom-in").addEventListener("click", () => {
   ensureLiveMap();
-  liveLeaflet.zoomIn();
+  if (liveMap) liveMap.zoomIn();
 });
 
 byId("map-zoom-out").addEventListener("click", () => {
   ensureLiveMap();
-  liveLeaflet.zoomOut();
+  if (liveMap) liveMap.zoomOut();
 });
 
 byId("map-zoom-reset").addEventListener("click", () => {
   ensureLiveMap();
-  liveLeaflet.setView([20, 0], 2, { animate: false });
+  if (liveMap) {
+    liveMap.easeTo({
+      center: initialCenter,
+      zoom: initialZoom,
+      bearing: 0,
+      pitch: 0,
+      duration: 500,
+    });
+  }
 });
 
 const topSelect = byId("live-topn");
@@ -418,4 +618,12 @@ if (topSelect) {
     if (lastResult) renderLiveMap(lastResult);
   });
 }
+
+// Initialize the globe immediately so it is visible before analysis runs.
+window.addEventListener("load", () => {
+  ensureLiveMap();
+  if (liveMap) {
+    setTimeout(() => liveMap.resize(), 0);
+  }
+});
 

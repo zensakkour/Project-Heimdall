@@ -12,7 +12,7 @@ from typing import Optional
 
 import cv2
 from fastapi import FastAPI, File, Form, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
 
@@ -85,8 +85,8 @@ def index() -> FileResponse:
 
 
 @app.get("/analysis")
-def analysis_index() -> FileResponse:
-    return FileResponse(LIVE_DIR / "index.html")
+def analysis_index() -> RedirectResponse:
+    return RedirectResponse(url="/analysis/")
 
 
 @app.post("/analyze/image")
