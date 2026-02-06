@@ -14,6 +14,9 @@
 .file-input {
   flex: 1;
   min-width: 320px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .file-label {
@@ -22,19 +25,20 @@
   letter-spacing: 0.08em;
   color: #b7c9bd;
   margin-bottom: 6px;
+  text-align: center;
 }
 
 .file-picker {
   display: flex;
   align-items: center;
   gap: 12px;
-  border: 1px solid rgba(127, 184, 138, 0.22);
-  background: rgba(6, 8, 7, 0.9);
+  background: transparent;
   border-radius: 0;
   padding: 8px 12px;
   height: 56px;
   width: 100%;
   justify-content: flex-start;
+  justify-content: center;
 }
 
 .file-picker input[type="file"] {
@@ -48,8 +52,9 @@
   height: 36px;
   padding: 0 14px;
   border-radius: 0;
-  background: rgba(10, 14, 12, 0.9);
-  border: 1px solid rgba(127, 184, 138, 0.35);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid rgba(120, 246, 215, 0.35);
   font-size: 14px;
   color: #d7f2de;
   white-space: nowrap;
@@ -64,15 +69,14 @@
   text-overflow: ellipsis;
   min-width: 0;
   flex: 1;
+  text-align: center;
 }
 
 #analyze-image {
   height: 56px;
-  border: 1px solid rgba(127, 184, 138, 0.6);
-  box-shadow: 0 0 14px rgba(127, 184, 138, 0.25);
   border-radius: 0;
   width: 100%;
-  background: linear-gradient(180deg, rgba(16, 24, 18, 0.98), rgba(8, 12, 9, 0.98));
+  background: rgba(8, 12, 12, 0.4);
   color: #dff5e4;
 }
 
@@ -84,6 +88,7 @@
   gap: 16px;
   margin-bottom: 12px;
   flex-wrap: wrap;
+  border: none;
 }
 
 .section-title {
@@ -114,15 +119,15 @@
 }
 
 .legend-dot.candidate {
-  background: rgba(127, 184, 138, 0.7);
+  background: rgba(120, 246, 215, 0.75);
 }
 
 .legend-dot.mean {
-  background: #d7f2de;
+  background: #e6fff5;
 }
 
 .legend-dot.ring {
-  border: 2px dashed rgba(127, 184, 138, 0.6);
+  border: none;
   background: transparent;
   width: 12px;
   height: 12px;
@@ -144,7 +149,6 @@
   flex: 1;
   height: 6px;
   background: #050606;
-  border: 1px solid rgba(127, 184, 138, 0.18);
   border-radius: 4px;
   overflow: hidden;
 }
@@ -182,7 +186,6 @@
   background: #070909;
   border-radius: 999px;
   overflow: hidden;
-  border: 1px solid rgba(127, 184, 138, 0.2);
 }
 
 .confidence-fill {
@@ -220,35 +223,53 @@
 
 .globe-canvas {
   width: 100%;
-  height: 420px;
+  height: 50vh;
   border-radius: 12px;
-  border: 1px solid rgba(127, 184, 138, 0.2);
-  background: radial-gradient(circle at 35% 30%, rgba(70, 100, 86, 0.35), rgba(5, 7, 7, 0.95));
+  background: radial-gradient(circle at 40% 35%, rgba(42, 78, 78, 0.55), rgba(3, 6, 7, 0.95));
   display: block;
+  overflow: hidden;
+  position: relative;
 }
 
-.leaflet-container {
-  background: #050607;
-  border-radius: 12px;
+.maplibregl-map {
   font-family: "Space Grotesk", system-ui, sans-serif;
 }
 
-.leaflet-tooltip,
-.leaflet-popup-content-wrapper,
-.leaflet-popup-tip {
-  background: rgba(6, 9, 8, 0.95);
+#live-map::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 80px rgba(0, 0, 0, 0.7);
+}
+
+.maplibregl-popup-content {
+  background: rgba(6, 10, 11, 0.95);
   color: #d7f2de;
-  border: 1px solid rgba(127, 184, 138, 0.4);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
-}
-
-.leaflet-popup-tip {
-  border: 1px solid rgba(127, 184, 138, 0.4);
-}
-
-.leaflet-tooltip {
-  padding: 6px 8px;
+  border: none;
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.6);
+  padding: 10px 12px;
+  border-radius: 8px;
   font-size: 12px;
+}
+
+.maplibregl-popup-tip {
+  border-top-color: transparent;
+}
+
+.maplibregl-ctrl-group,
+.maplibregl-ctrl-scale {
+  background: rgba(6, 10, 11, 0.92);
+  border: none;
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.45);
+}
+
+.maplibregl-ctrl-group button {
+  filter: brightness(1.1);
+}
+
+.maplibregl-ctrl-scale {
+  color: #bfe9dd;
 }
 
 .globe-canvas.small {
@@ -269,10 +290,10 @@
 }
 
 .preview {
-  background: #060808;
-  border-radius: 12px;
+  background: transparent;
+  border-radius: 0;
   padding: 10px;
-  border: 1px solid rgba(127, 184, 138, 0.18);
+  border: none;
 }
 
 #canvas {
@@ -294,14 +315,13 @@
 .image-toolbar button {
   background: rgba(8, 11, 10, 0.9);
   color: var(--accent-2);
-  border: 1px solid rgba(127, 184, 138, 0.3);
 }
 
 .panel {
-  background: var(--panel);
-  border-radius: 12px;
+  background: transparent;
+  border-radius: 0;
   padding: 12px;
-  border: 1px solid rgba(127, 184, 138, 0.14);
+  border: none;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -325,9 +345,9 @@
 
 .list-item {
   padding: 8px;
-  border-radius: 12px;
-  border: 1px solid rgba(127, 184, 138, 0.12);
-  background: rgba(9, 12, 12, 0.92);
+  border-radius: 0;
+  border: none;
+  background: transparent;
   cursor: pointer;
   display: flex;
   justify-content: space-between;
@@ -340,16 +360,15 @@
 }
 
 .list-item.active {
-  border-color: rgba(127, 184, 138, 0.6);
-  background: rgba(12, 16, 15, 0.95);
-  box-shadow: 0 0 16px rgba(127, 184, 138, 0.25);
+  background: rgba(12, 16, 15, 0.2);
+  box-shadow: none;
 }
 
 .details {
-  background: #050607;
-  border-radius: 12px;
+  background: transparent;
+  border-radius: 0;
   padding: 8px;
-  border: 1px solid rgba(127, 184, 138, 0.12);
+  border: none;
   color: var(--text);
   font-size: 12px;
   min-height: 140px;
@@ -370,9 +389,9 @@
 }
 
 .metric-card {
-  background: rgba(8, 11, 11, 0.95);
-  border: 1px solid rgba(127, 184, 138, 0.12);
-  border-radius: 12px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
   padding: 8px;
   font-size: 12px;
   color: var(--muted);
@@ -400,7 +419,7 @@
 .class-table th,
 .class-table td {
   padding: 6px 8px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: none;
 }
 
 .frames {
@@ -411,10 +430,10 @@
 }
 
 .frame-card {
-  background: rgba(9, 12, 12, 0.95);
-  border-radius: 12px;
+  background: transparent;
+  border-radius: 0;
   padding: 8px;
-  border: 1px solid rgba(127, 184, 138, 0.12);
+  border: none;
 }
 
 .frame-card img {
@@ -436,7 +455,7 @@
     grid-template-columns: 1fr;
   }
   .globe-canvas {
-    height: 320px;
+    height: 50vh;
   }
 }
 
@@ -478,9 +497,9 @@
   gap: 16px;
   margin-bottom: 16px;
   padding: 16px 20px;
-  border: 1px solid rgba(127, 184, 138, 0.2);
-  background: linear-gradient(160deg, rgba(8, 11, 11, 0.98), rgba(5, 7, 7, 0.98));
-  box-shadow: var(--shadow);
+  border: none;
+  background: transparent;
+  box-shadow: none;
   justify-content: center;
   text-align: center;
 }
@@ -510,5 +529,4 @@
 .map-toolbar button {
   background: rgba(8, 11, 10, 0.9);
   color: var(--accent-2);
-  border: 1px solid rgba(127, 184, 138, 0.3);
 }
