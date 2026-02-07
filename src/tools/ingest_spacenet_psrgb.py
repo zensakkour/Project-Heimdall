@@ -44,6 +44,7 @@ def chip_tiff(
 ) -> int:
     count = 0
     with rasterio.open(tif_path) as ds:
+        band_count = ds.count
         width = ds.width
         height = ds.height
         for top in range(0, height - chip_size + 1, stride):
@@ -51,7 +52,13 @@ def chip_tiff(
                 if max_chips and count >= max_chips:
                     return count
                 window = Window(left, top, chip_size, chip_size)
-                data = ds.read(indexes=[1, 2, 3], window=window)
+                if band_count >= 3:
+                    data = ds.read(indexes=[1, 2, 3], window=window)
+                elif band_count == 1:
+                    gray = ds.read(indexes=1, window=window)
+                    data = np.stack([gray, gray, gray], axis=0)
+                else:
+                    continue
                 if data.size == 0:
                     continue
                 data = np.transpose(data, (1, 2, 0))

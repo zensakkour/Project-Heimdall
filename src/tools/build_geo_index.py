@@ -56,12 +56,29 @@ def _load_sidecar(image_path: Path) -> Optional[Dict[str, float]]:
     return {"latitude": float(lat), "longitude": float(lon)}
 
 
+def _resolve_image_path(root_dir: Path, images_dir: Path, rel_path: str) -> Optional[Path]:
+    rel_path = rel_path.replace("\\", "/")
+    candidate = root_dir / rel_path
+    if candidate.exists():
+        return candidate
+    candidate = images_dir / rel_path
+    if candidate.exists():
+        return candidate
+    if rel_path.startswith("chips/"):
+        trimmed = rel_path.split("chips/", 1)[1]
+        candidate = images_dir / trimmed
+        if candidate.exists():
+            return candidate
+    return None
+
+
 def build_index(
     images: List[Path],
     meta: List[Dict[str, str]],
     output: Path,
     model_id: str,
     root_dir: Path,
+    images_dir: Path,
 ) -> int:
     device = "cuda" if __import__("torch").cuda.is_available() else "cpu"
     embedder = ClipEmbedder(model_id, device)
@@ -78,7 +95,10 @@ def build_index(
             continue
         image_path = Path(rel_path)
         if not image_path.is_absolute():
-            image_path = root_dir / image_path
+            resolved = _resolve_image_path(root_dir, images_dir, rel_path)
+            if resolved is None:
+                continue
+            image_path = resolved
         if not image_path.exists():
             continue
         lat = item.get("latitude") or item.get("lat")
@@ -181,7 +201,7 @@ def main() -> int:
     output = Path(args.output)
     if args.metadata:
         meta = _load_metadata(Path(args.metadata))
-        count = build_index(images, meta, output, args.model_id, image_dir.parent)
+        count = build_index(images, meta, output, args.model_id, image_dir.parent, image_dir)
     else:
         count = build_index_from_sidecars(images, output, args.model_id)
     if count == 0:

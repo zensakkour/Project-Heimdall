@@ -12,7 +12,7 @@
     />
     <link rel="stylesheet" href="../theme.css?v=4" />
     <link rel="stylesheet" href="../styles.css?v=4" />
-    <link rel="stylesheet" href="live.css?v=11" />
+    <link rel="stylesheet" href="live.css?v=19" />
   </head>
   <body>
     <div class="layout">
@@ -25,6 +25,11 @@
           <p class="muted">Operational intelligence - The Watcher of the Gods</p>
         </div>
       </header>
+      <nav class="mode-tabs" aria-label="View mode">
+        <button class="mode-tab" data-tab="analysis" aria-pressed="true">Analysis</button>
+        <button class="mode-tab" data-tab="scoring" aria-pressed="false">Scoring</button>
+      </nav>
+      <div id="tab-analysis">
       <section class="card">
         <div class="section-head">
           <div class="section-title">
@@ -34,13 +39,13 @@
             </div>
           </div>
           <div class="actions">
-            <div class="profile-tabs" role="tablist" aria-label="Geo profile">
-              <button class="profile-tab" data-profile="paris" aria-pressed="false">
-                Paris Focus
-              </button>
-              <button class="profile-tab" data-profile="legacy" aria-pressed="false">
-                Legacy Open Geo
-              </button>
+            <div class="profile-select muted">
+              Active strategy:
+              <select id="profile-select">
+                <option value="paris">Paris (SpaceNet)</option>
+                <option value="paris_test">Paris Test (SpaceNet)</option>
+                <option value="legacy">Open Geo (Wikimedia)</option>
+              </select>
             </div>
             <span id="last-updated" class="muted"></span>
           </div>
@@ -122,9 +127,59 @@
         </div>
       </section>
 
+      </div>
+      <div id="tab-scoring" class="tab-hidden">
+        <section class="card">
+          <h2>Geo Scoring</h2>
+          <p class="muted">
+            Evaluate geo accuracy on a metadata CSV (lat/lon per image). Uses the active profile model.
+          </p>
+          <div class="score-strategy muted">
+            Active strategy:
+            <select id="geo-eval-strategy">
+              <option value="paris">Paris (SpaceNet)</option>
+              <option value="paris_test">Paris Test (SpaceNet)</option>
+              <option value="legacy">Open Geo (Wikimedia)</option>
+            </select>
+          </div>
+          <div class="score-form">
+            <label>
+              Images directory
+              <div class="input-row">
+                <input id="geo-eval-images" value="data/spacenet_paris/chips" />
+                <button type="button" id="geo-eval-browse-images">Browse</button>
+              </div>
+            </label>
+            <label>
+              Metadata CSV
+              <div class="input-row">
+                <input id="geo-eval-metadata" value="data/spacenet_paris/metadata.csv" />
+                <button type="button" id="geo-eval-browse-metadata">Browse</button>
+              </div>
+            </label>
+            <label>
+              Limit (0 = all)
+              <input id="geo-eval-limit" type="number" min="0" value="200" />
+            </label>
+            <label class="score-toggle">
+              Retrieval-only
+              <input id="geo-eval-retrieval-only" type="checkbox" checked />
+            </label>
+            <button id="geo-eval-run">Run Geo Eval</button>
+          </div>
+          <div class="progress score-progress" id="geo-eval-progress">
+            <div class="progress-track">
+              <div id="geo-eval-progress-bar" class="progress-bar"></div>
+            </div>
+            <span id="geo-eval-progress-text" class="muted">0%</span>
+          </div>
+          <div id="geo-eval-status" class="muted">Idle</div>
+          <pre id="geo-eval-output" class="details">No results yet.</pre>
+        </section>
+      </div>
     </div>
 
     <script src="https://unpkg.com/maplibre-gl@5.0.0/dist/maplibre-gl.js" crossorigin=""></script>
-    <script src="live.js?v=12"></script>
+    <script src="live.js?v=21"></script>
   </body>
 </html>
