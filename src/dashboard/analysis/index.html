@@ -10,19 +10,19 @@
       href="https://unpkg.com/maplibre-gl@5.0.0/dist/maplibre-gl.css"
       crossorigin=""
     />
-    <link rel="stylesheet" href="../theme.css" />
-    <link rel="stylesheet" href="../styles.css" />
-    <link rel="stylesheet" href="live.css?v=7" />
+    <link rel="stylesheet" href="../theme.css?v=4" />
+    <link rel="stylesheet" href="../styles.css?v=4" />
+    <link rel="stylesheet" href="live.css?v=11" />
   </head>
   <body>
     <div class="layout">
       <header class="page-header">
         <div class="page-header-brand">
           <div class="brand-mark" aria-hidden="true">
-            <img class="brand-logo" src="../assets/logo.svg" alt="Heimdall logo" />
+            <img class="brand-logo" src="../assets/logo.svg?v=3" alt="Heimdall logo" />
           </div>
           <h1>Project Heimdall</h1>
-          <p class="muted">Operational intelligence interface</p>
+          <p class="muted">Operational intelligence - The Watcher of the Gods</p>
         </div>
       </header>
       <section class="card">
@@ -34,6 +34,14 @@
             </div>
           </div>
           <div class="actions">
+            <div class="profile-tabs" role="tablist" aria-label="Geo profile">
+              <button class="profile-tab" data-profile="paris" aria-pressed="false">
+                Paris Focus
+              </button>
+              <button class="profile-tab" data-profile="legacy" aria-pressed="false">
+                Legacy Open Geo
+              </button>
+            </div>
             <span id="last-updated" class="muted"></span>
           </div>
         </div>
@@ -60,7 +68,7 @@
           <span id="progress-text" class="muted">Analyzing...</span>
         </div>
         <div class="geo-grid">
-          <div>
+          <div class="geo-map">
             <div class="panel-head">
               <h3 class="panel-title">Fusion Map</h3>
               <label class="legend-control muted">
@@ -90,6 +98,10 @@
               <span class="muted">Scroll to zoom, drag to pan</span>
             </div>
           </div>
+          <aside class="geo-sidebar">
+            <h3 class="panel-title">Geo Ranking</h3>
+            <div id="geo-ranking" class="geo-ranking muted"></div>
+          </aside>
         </div>
         <div class="result-grid">
           <div class="preview">
@@ -113,6 +125,6 @@
     </div>
 
     <script src="https://unpkg.com/maplibre-gl@5.0.0/dist/maplibre-gl.js" crossorigin=""></script>
-    <script src="live.js?v=8"></script>
+    <script src="live.js?v=12"></script>
   </body>
 </html>

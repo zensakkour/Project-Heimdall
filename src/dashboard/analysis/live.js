@@ -14,6 +14,30 @@ function byId(id) {
   return document.getElementById(id);
 }
 
+const profileButtons = Array.from(document.querySelectorAll(".profile-tab"));
+const profileStorageKey = "heimdallProfile";
+let activeProfile = "paris";
+
+function setActiveProfile(profile) {
+  if (!profile) return;
+  activeProfile = profile;
+  localStorage.setItem(profileStorageKey, profile);
+  profileButtons.forEach((btn) => {
+    const isActive = btn.dataset.profile === profile;
+    btn.setAttribute("aria-pressed", isActive ? "true" : "false");
+  });
+}
+
+if (profileButtons.length) {
+  const storedProfile = localStorage.getItem(profileStorageKey);
+  const available = profileButtons.map((btn) => btn.dataset.profile);
+  const initialProfile = available.includes(storedProfile) ? storedProfile : available[0];
+  setActiveProfile(initialProfile);
+  profileButtons.forEach((btn) => {
+    btn.addEventListener("click", () => setActiveProfile(btn.dataset.profile));
+  });
+}
+
 function setLoading(active, text) {
   const progress = byId("progress");
   const progressText = byId("progress-text");
@@ -131,6 +155,9 @@ const initialZoom = 1.6;
 let liveMap = null;
 let liveMapReady = null;
 let livePopup = null;
+let liveCandidatePoints = [];
+let selectedRank = null;
+let hoverPopup = null;
 
 function ensureLiveMap() {
   if (liveMap) return liveMapReady;
@@ -237,6 +264,10 @@ function ensureLiveMap() {
       });
       liveMap.on("mouseleave", "candidate-layer", () => {
         liveMap.getCanvas().style.cursor = "";
+        if (hoverPopup) {
+          hoverPopup.remove();
+          hoverPopup = null;
+        }
       });
       liveMap.on("mouseenter", "mean-layer", () => {
         liveMap.getCanvas().style.cursor = "pointer";
@@ -251,6 +282,7 @@ function ensureLiveMap() {
         const props = feature.properties || {};
         const coords = feature.geometry.coordinates;
         const rank = Number(props.rank || 0);
+        if (rank) setSelectedRank(rank);
         const conf = Number(props.rawWeight || 0);
         const posterior = props.posterior !== undefined ? Number(props.posterior) : null;
         const retr = props.retrieval !== undefined ? Number(props.retrieval) : null;
@@ -319,6 +351,8 @@ function renderLiveMap(result) {
       liveMap.getSource("mean").setData(emptyFeatureCollection);
       liveMap.getSource("ring").setData(emptyFeatureCollection);
     }
+    selectedRank = null;
+    renderGeoRanking([]);
     return;
   }
 
@@ -330,6 +364,8 @@ function renderLiveMap(result) {
       liveMap.getSource("mean").setData(emptyFeatureCollection);
       liveMap.getSource("ring").setData(emptyFeatureCollection);
     }
+    selectedRank = null;
+    renderGeoRanking([]);
     return;
   }
 
@@ -360,6 +396,21 @@ function renderLiveMap(result) {
       };
     })
     .filter(Boolean);
+
+  liveCandidatePoints = visible
+    .map((item, idx) => {
+      const cand = item.candidate || {};
+      if (cand.latitude === undefined || cand.longitude === undefined) return null;
+      return {
+        rank: idx + 1,
+        latitude: cand.latitude,
+        longitude: cand.longitude,
+        weight: weightFrom(item),
+      };
+    })
+    .filter(Boolean);
+
+  renderGeoRanking(liveCandidatePoints);
 
   const meanLat = fusion.mean_latitude;
   const meanLon = fusion.mean_longitude;
@@ -412,6 +463,8 @@ function renderLiveMap(result) {
         pitch: 0,
       });
     }
+
+    applyCandidateHighlight();
   });
 }
 
@@ -507,7 +560,8 @@ byId("analyze-image").addEventListener("click", async () => {
 
   try {
     setLoading(true, "Analyzing image...");
-    const result = await postForm("/analyze/image", form);
+    const profileQuery = activeProfile ? `?profile=${encodeURIComponent(activeProfile)}` : "";
+    const result = await postForm(`/analyze/image${profileQuery}`, form);
     lastResult = result;
     renderSummary(result);
     renderImage(result.image_data, result.result.detections);
@@ -619,11 +673,104 @@ if (topSelect) {
   });
 }
 
+function renderGeoRanking(items) {
+  const container = byId("geo-ranking");
+  if (!container) return;
+  container.innerHTML = "";
+  const header = document.createElement("div");
+  header.className = "geo-rank-item geo-rank-header";
+  header.innerHTML = `
+    <span class="rank-badge">Rank</span>
+    <span>Coordinates</span>
+    <span class="rank-conf">Confidence</span>
+  `;
+  container.appendChild(header);
+  if (!items || items.length === 0) {
+    return;
+  }
+  container.classList.remove("muted");
+  items.forEach((item) => {
+    const row = document.createElement("div");
+    row.className = "geo-rank-item";
+    row.dataset.rank = String(item.rank);
+    row.innerHTML = `
+      <span class="rank-badge">#${item.rank}</span>
+      <span>${item.latitude.toFixed(4)}, ${item.longitude.toFixed(4)}</span>
+      <span class="rank-conf">${(item.weight * 100).toFixed(1)}%</span>
+    `;
+    row.addEventListener("click", () => {
+      setSelectedRank(item.rank);
+      ensureLiveMap();
+      if (liveMap) {
+        liveMap.easeTo({
+          center: [item.longitude, item.latitude],
+          zoom: 3.2,
+          duration: 650,
+        });
+      }
+    });
+    container.appendChild(row);
+  });
+}
+
+function applyCandidateHighlight() {
+  if (!liveMap) return;
+  const highlight = selectedRank ?? -1;
+  liveMap.setPaintProperty("candidate-layer", "circle-color", [
+    "case",
+    ["==", ["get", "rank"], highlight],
+    "rgba(255, 90, 90, 0.95)",
+    ["get", "color"],
+  ]);
+  liveMap.setPaintProperty("candidate-layer", "circle-stroke-color", [
+    "case",
+    ["==", ["get", "rank"], highlight],
+    "rgba(255, 140, 140, 1)",
+    "rgba(196, 255, 236, 0.85)",
+  ]);
+  liveMap.setPaintProperty("candidate-layer", "circle-stroke-width", [
+    "case",
+    ["==", ["get", "rank"], highlight],
+    2.4,
+    ["case", ["==", ["get", "rank"], 1], 1.6, 0.8],
+  ]);
+}
+
+function setSelectedRank(rank) {
+  selectedRank = rank;
+  document.querySelectorAll(".geo-rank-item").forEach((el) => {
+    el.classList.toggle("active", Number(el.dataset.rank) === rank);
+  });
+  applyCandidateHighlight();
+}
+
 // Initialize the globe immediately so it is visible before analysis runs.
 window.addEventListener("load", () => {
   ensureLiveMap();
   if (liveMap) {
     setTimeout(() => liveMap.resize(), 0);
   }
+  renderGeoRanking([]);
 });
 
+      liveMap.on("mousemove", "candidate-layer", (e) => {
+        if (!e.features || !e.features.length) return;
+        const feature = e.features[0];
+        const props = feature.properties || {};
+        const coords = feature.geometry.coordinates;
+        const rank = Number(props.rank || 0);
+        const conf = Number(props.rawWeight || 0);
+        if (hoverPopup) hoverPopup.remove();
+        hoverPopup = new maplibregl.Popup({
+          offset: 10,
+          closeButton: false,
+          closeOnClick: false,
+        })
+          .setLngLat(coords)
+          .setHTML(
+            `#${rank} · ${(conf * 100).toFixed(1)}%<br/>${coords[1].toFixed(
+              5
+            )}, ${coords[0].toFixed(5)}`
+          )
+          .addTo(liveMap);
+      });

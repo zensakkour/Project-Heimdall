@@ -72,8 +72,23 @@ def build_pipeline(cfg: Optional[HeimdallConfig]) -> HeimdallPipeline:
     )
 
 
-def _load_config_from_env() -> Optional[HeimdallConfig]:
-    default_path = APP_ROOT / "src" / "config" / "defaults.json"
+def _load_config_from_env(profile: Optional[str] = None) -> Optional[HeimdallConfig]:
+    config_dir = APP_ROOT / "src" / "config"
+    default_path = config_dir / "defaults.json"
+    if profile:
+        key = profile.strip().lower()
+        profile_map = {
+            "paris": "paris.json",
+            "paris-focused": "paris.json",
+            "legacy": "open_geo.json",
+            "open_geo": "open_geo.json",
+            "open-geo": "open_geo.json",
+        }
+        config_name = profile_map.get(key)
+        if config_name:
+            config_path = config_dir / config_name
+            if config_path.exists():
+                return load_config(str(config_path))
     if default_path.exists():
         return load_config(str(default_path))
     return None
@@ -94,8 +109,9 @@ async def analyze_image(
     image: UploadFile = File(...),
     det_json: Optional[UploadFile] = File(None),
     geo_json: Optional[UploadFile] = File(None),
+    profile: Optional[str] = None,
 ) -> JSONResponse:
-    cfg = _load_config_from_env()
+    cfg = _load_config_from_env(profile)
     pipeline = build_pipeline(cfg)
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -130,8 +146,9 @@ async def analyze_video(
     video: UploadFile = File(...),
     interval_s: float = Form(2.0),
     max_frames: int = Form(12),
+    profile: Optional[str] = None,
 ) -> JSONResponse:
-    cfg = _load_config_from_env()
+    cfg = _load_config_from_env(profile)
     pipeline = build_pipeline(cfg)
 
     with tempfile.TemporaryDirectory() as tmp:
