@@ -208,6 +208,28 @@ python -m src.tools.download_dota_v1 --output data/dota
 python -m src.tools.prepare_dota_v1 --zip data/dota --out data/dota_v1 --yaml data/dota_v1/dota.yaml
 ```
 
+### Scoring (Geo Accuracy)
+The Scoring tab evaluates geo accuracy against a metadata CSV with `path, latitude, longitude`.
+
+#### Download Paris test sets
+```powershell
+python -m awscli s3 cp --no-sign-request s3://spacenet-dataset/spacenet/SN3_roads/tarballs/SN3_roads_test_public_AOI_3_Paris.tar.gz data/spacenet_paris_test/
+python -m awscli s3 cp --no-sign-request s3://spacenet-dataset/spacenet/SN2_buildings/tarballs/AOI_3_Paris_Test_public.tar.gz data/spacenet_paris_test/
+```
+
+#### Extract + chip into JPGs + metadata
+```powershell
+tar -xf data/spacenet_paris_test/SN3_roads_test_public_AOI_3_Paris.tar.gz -C data/spacenet_paris_test/
+tar -xf data/spacenet_paris_test/AOI_3_Paris_Test_public.tar.gz -C data/spacenet_paris_test/
+python -m src.tools.ingest_spacenet_psrgb --input-dir data/spacenet_paris_test/ --output-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --chip-size 512 --stride 512 --max-chips-per-tiff 80
+```
+
+#### Run scoring (UI)
+Open `http://127.0.0.1:8000/analysis/`, switch to **Scoring** tab, and set:
+- Images directory: `data/spacenet_paris_test/chips`
+- Metadata CSV: `data/spacenet_paris_test/metadata.csv`
+- Limit: `0` for full run (or smaller for quick tests)
+
 ### Geo Profiles (UI Tabs)
 The analysis UI lets you switch between geo indices:
 - Paris Focus: `src/config/paris.json` (SpaceNet Paris index)

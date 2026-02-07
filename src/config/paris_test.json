@@ -17,7 +17,7 @@
     "model_id": "sdan/geospot-base",
     "model_cache_dir": "data/models/geospot-base",
     "encoder_name": null,
-    "retrieval_index_path": "data/geo_index/spacenet_paris_clip.npz",
+    "retrieval_index_path": "data/geo_index/spacenet_paris_test_clip.npz",
     "retrieval_model_id": "openai/clip-vit-large-patch14",
     "retrieval_top_k": 25,
     "retrieval_min_score": 0.1
