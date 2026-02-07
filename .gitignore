@@ -28,12 +28,16 @@ out/
 *.exe
 # Data and weights
 /data/dota/*
+/data/dota_v1/*
 /data/weights/*
 /data/samples/*
 /data/models/*
 /data/university-1652/*
 /data/geo_index/*
 /data/open_geo/*
+/data/spacenet_paris/*
+/data/test_paris/*
+/data/**
 /yolo11x-obb.pt
 /runs/
 !**/.gitkeep
