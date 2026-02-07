@@ -12,7 +12,9 @@ ultralytics
 geoclip
 huggingface_hub
 safetensors
-torch
+# Install torch/torchvision/torchaudio separately to match your GPU/CUDA.
+# See README for the CUDA-aware install step.
 datasets
 numpy
 transformers
+rasterio
