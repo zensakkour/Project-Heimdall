@@ -140,6 +140,7 @@ class GeoCLIPProvider:
         top_n: int = 5,
         use_sidecar: bool = True,
         use_exif: bool = True,
+        score_scale: float = 1.0,
     ) -> None:
         self.model_path = model_path
         self.model_id = model_id
@@ -148,6 +149,7 @@ class GeoCLIPProvider:
         self.top_n = top_n
         self.use_sidecar = use_sidecar
         self.use_exif = use_exif
+        self.score_scale = max(0.0, float(score_scale))
         self._model = None
         self._model_failed = False
         self.last_error: Optional[str] = None
@@ -176,11 +178,12 @@ class GeoCLIPProvider:
             try:
                 top_gps, top_probs = model.predict(image_path, top_k=self.top_n)
                 for (lat, lon), prob in zip(top_gps, top_probs):
+                    score = float(prob) * self.score_scale
                     results.append(
                         GeoCandidate(
                             latitude=float(lat),
                             longitude=float(lon),
-                            retrieval_score=float(prob),
+                            retrieval_score=score,
                             match_id="geoclip",
                         )
                     )

@@ -13,6 +13,7 @@
     "use_sidecar": true,
     "use_exif": true,
     "top_n": 20,
+    "geospot_score_scale": 0.35,
     "model_id": "sdan/geospot-base",
     "model_cache_dir": "data/models/geospot-base",
     "encoder_name": null,
