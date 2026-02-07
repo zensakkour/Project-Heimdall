@@ -173,6 +173,46 @@ RTX 50xx (`sm_120`) requires CUDA 12.8+ builds, and PyTorch maintainers recommen
 
 Official installer selector: citeturn0search0
 
+### Local Data (Not Pushed To Git)
+Large datasets are intentionally **not** stored in git. You must download them locally.
+
+#### SpaceNet Paris (Aerial Geo Retrieval)
+Prereqs:
+- `awscli` (already in `requirements.txt`)
+- `rasterio` (already in `requirements.txt`)
+
+Download tiles (example: AOI_3_Paris PS-RGB):
+```powershell
+python -m awscli s3 cp --no-sign-request s3://spacenet-dataset/AOIs/AOI_3_Paris/PS-RGB/ data/spacenet_paris/PS-RGB/ --recursive
+```
+
+Chip GeoTIFFs into JPGs + metadata:
+```powershell
+python -m src.tools.ingest_spacenet_psrgb --input-dir data/spacenet_paris/PS-RGB --output-dir data/spacenet_paris/chips --metadata data/spacenet_paris/metadata.csv --chip-size 512 --stride 512 --max-chips-per-tiff 80
+```
+
+Build the geo retrieval index:
+```powershell
+python -m src.tools.build_geo_index --images-dir data/spacenet_paris/chips --metadata data/spacenet_paris/metadata.csv --output data/geo_index/spacenet_paris_clip.npz
+```
+
+#### Open Geo Demo (Small)
+```powershell
+python -m src.tools.download_open_geo --limit 100 --output data/open_geo
+python -m src.tools.build_geo_index --images-dir data/open_geo/images --metadata data/open_geo/metadata.csv --output data/geo_index/open_geo_clip.npz
+```
+
+#### DOTA v1.0 (Object Detection)
+```powershell
+python -m src.tools.download_dota_v1 --output data/dota
+python -m src.tools.prepare_dota_v1 --zip data/dota --out data/dota_v1 --yaml data/dota_v1/dota.yaml
+```
+
+### Geo Profiles (UI Tabs)
+The analysis UI lets you switch between geo indices:
+- Paris Focus: `src/config/paris.json` (SpaceNet Paris index)
+- Legacy Open Geo: `src/config/open_geo.json` (Wikimedia demo index)
+
 ### Dataset (University-1652)
 Download and export a working image subset:
 ```powershell
