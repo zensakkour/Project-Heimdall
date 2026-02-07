@@ -4,31 +4,44 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Heimdall Analysis</title>
+    <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" />
     <link
       rel="stylesheet"
-      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      href="https://unpkg.com/maplibre-gl@5.0.0/dist/maplibre-gl.css"
       crossorigin=""
     />
-    <link rel="stylesheet" href="../theme.css" />
-    <link rel="stylesheet" href="../styles.css" />
-    <link rel="stylesheet" href="live.css?v=7" />
+    <link rel="stylesheet" href="../theme.css?v=4" />
+    <link rel="stylesheet" href="../styles.css?v=4" />
+    <link rel="stylesheet" href="live.css?v=11" />
   </head>
   <body>
     <div class="layout">
+      <header class="page-header">
+        <div class="page-header-brand">
+          <div class="brand-mark" aria-hidden="true">
+            <img class="brand-logo" src="../assets/logo.svg?v=3" alt="Heimdall logo" />
+          </div>
+          <h1>Project Heimdall</h1>
+          <p class="muted">Operational intelligence - The Watcher of the Gods</p>
+        </div>
+      </header>
       <section class="card">
         <div class="section-head">
           <div class="section-title">
-            <div class="brand-mark" aria-hidden="true">
-              <img class="brand-logo" src="../assets/logo.svg" alt="Heimdall logo" />
-            </div>
             <div>
               <h2>Inputs</h2>
               <p class="muted">Upload an image for analysis.</p>
             </div>
           </div>
           <div class="actions">
-            <button id="refresh">Refresh</button>
+            <div class="profile-tabs" role="tablist" aria-label="Geo profile">
+              <button class="profile-tab" data-profile="paris" aria-pressed="false">
+                Paris Focus
+              </button>
+              <button class="profile-tab" data-profile="legacy" aria-pressed="false">
+                Legacy Open Geo
+              </button>
+            </div>
             <span id="last-updated" class="muted"></span>
           </div>
         </div>
@@ -55,7 +68,7 @@
           <span id="progress-text" class="muted">Analyzing...</span>
         </div>
         <div class="geo-grid">
-          <div>
+          <div class="geo-map">
             <div class="panel-head">
               <h3 class="panel-title">Fusion Map</h3>
               <label class="legend-control muted">
@@ -78,17 +91,27 @@
               <span class="legend-sep"></span>
               <span id="live-topn-label">Showing top 20 candidates on map</span>
             </div>
+            <div class="map-toolbar">
+              <button id="map-zoom-in">Zoom In</button>
+              <button id="map-zoom-out">Zoom Out</button>
+              <button id="map-zoom-reset">Reset</button>
+              <span class="muted">Scroll to zoom, drag to pan</span>
+            </div>
           </div>
-        </div>
-        <div class="toolbar">
-          <button id="zoom-in">Zoom In</button>
-          <button id="zoom-out">Zoom Out</button>
-          <button id="zoom-reset">Reset</button>
-          <span class="muted">Scroll to zoom, drag to pan</span>
+          <aside class="geo-sidebar">
+            <h3 class="panel-title">Geo Ranking</h3>
+            <div id="geo-ranking" class="geo-ranking muted"></div>
+          </aside>
         </div>
         <div class="result-grid">
           <div class="preview">
             <canvas id="canvas" width="960" height="640"></canvas>
+            <div class="image-toolbar">
+              <button id="zoom-in">Zoom In</button>
+              <button id="zoom-out">Zoom Out</button>
+              <button id="zoom-reset">Reset</button>
+              <span class="muted">Scroll to zoom, drag to pan</span>
+            </div>
           </div>
           <div class="panel">
             <h3>Detections</h3>
@@ -101,11 +124,7 @@
 
     </div>
 
-    <script
-      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-      crossorigin=""
-    ></script>
-    <script src="live.js?v=8"></script>
+    <script src="https://unpkg.com/maplibre-gl@5.0.0/dist/maplibre-gl.js" crossorigin=""></script>
+    <script src="live.js?v=12"></script>
   </body>
 </html>

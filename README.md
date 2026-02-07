@@ -163,6 +163,16 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
+### CUDA / GPU (PyTorch)
+If you want GPU acceleration (recommended for RTX 50xx), install PyTorch separately using the official selector:
+1. Open the PyTorch “Start Locally” page.
+2. Choose **Preview (Nightly)** and **CUDA 12.8** for Windows.
+3. Run the exact command it generates in your activated `.venv`.
+
+RTX 50xx (`sm_120`) requires CUDA 12.8+ builds, and PyTorch maintainers recommend using nightly builds with CUDA 12.8 until the stable matrix fully aligns. citeturn0search2turn0search5
+
+Official installer selector: citeturn0search0
+
 ### Dataset (University-1652)
 Download and export a working image subset:
 ```powershell
@@ -253,6 +263,3 @@ Open:
 
 ## Geolocation Tech\nSee `src/docs/GEO_TECH.md` for the current geo + detection stack and versions.\n\n## Status
 Active development aligned to the 2026-01-30 engineering specification. See `PROGRESS.md` for the latest work and next steps.
-
-
-
