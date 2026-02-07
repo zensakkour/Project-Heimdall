@@ -14,14 +14,47 @@ function byId(id) {
   return document.getElementById(id);
 }
 
+const modeButtons = Array.from(document.querySelectorAll(".mode-tab"));
+function setActiveTab(tab) {
+  modeButtons.forEach((btn) => {
+    const active = btn.dataset.tab === tab;
+    btn.setAttribute("aria-pressed", active ? "true" : "false");
+  });
+  const analysis = byId("tab-analysis");
+  const scoring = byId("tab-scoring");
+  if (analysis) analysis.classList.toggle("tab-hidden", tab !== "analysis");
+  if (scoring) scoring.classList.toggle("tab-hidden", tab !== "scoring");
+}
+if (modeButtons.length) {
+  modeButtons.forEach((btn) => {
+    btn.addEventListener("click", () => setActiveTab(btn.dataset.tab));
+  });
+}
+
 const profileButtons = Array.from(document.querySelectorAll(".profile-tab"));
+const profileSelect = byId("profile-select");
 const profileStorageKey = "heimdallProfile";
 let activeProfile = "paris";
+const profileNames = {
+  paris: "Paris (SpaceNet)",
+  paris_test: "Paris Test (SpaceNet)",
+  "paris-test": "Paris Test (SpaceNet)",
+  legacy: "Open Geo (Wikimedia)",
+  open_geo: "Open Geo (Wikimedia)",
+  "open-geo": "Open Geo (Wikimedia)",
+};
+const strategySelect = byId("geo-eval-strategy");
 
 function setActiveProfile(profile) {
   if (!profile) return;
   activeProfile = profile;
   localStorage.setItem(profileStorageKey, profile);
+  if (profileSelect) {
+    profileSelect.value = profile;
+  }
+  if (strategySelect) {
+    strategySelect.value = profile;
+  }
   profileButtons.forEach((btn) => {
     const isActive = btn.dataset.profile === profile;
     btn.setAttribute("aria-pressed", isActive ? "true" : "false");
@@ -35,6 +68,20 @@ if (profileButtons.length) {
   setActiveProfile(initialProfile);
   profileButtons.forEach((btn) => {
     btn.addEventListener("click", () => setActiveProfile(btn.dataset.profile));
+  });
+}
+
+if (profileSelect) {
+  const storedProfile = localStorage.getItem(profileStorageKey);
+  const initialProfile = storedProfile || profileSelect.value || "paris";
+  setActiveProfile(initialProfile);
+  profileSelect.addEventListener("change", () => setActiveProfile(profileSelect.value));
+}
+
+if (strategySelect) {
+  strategySelect.value = activeProfile;
+  strategySelect.addEventListener("change", () => {
+    setActiveProfile(strategySelect.value);
   });
 }
 
@@ -751,7 +798,104 @@ window.addEventListener("load", () => {
     setTimeout(() => liveMap.resize(), 0);
   }
   renderGeoRanking([]);
+  setActiveTab("analysis");
+  const retrievalToggle = byId("geo-eval-retrieval-only");
+  if (retrievalToggle) {
+    const stored = localStorage.getItem("heimdallRetrievalOnly");
+    if (stored === "0") {
+      retrievalToggle.checked = false;
+    } else {
+      retrievalToggle.checked = true;
+    }
+    retrievalToggle.addEventListener("change", () => {
+      localStorage.setItem(
+        "heimdallRetrievalOnly",
+        retrievalToggle.checked ? "1" : "0"
+      );
+    });
+  }
 });
+
+async function startGeoEval() {
+  const imagesDir = byId("geo-eval-images")?.value?.trim() || "";
+  const metadata = byId("geo-eval-metadata")?.value?.trim() || "";
+  const limit = Number(byId("geo-eval-limit")?.value || "0");
+  const retrievalToggle = byId("geo-eval-retrieval-only");
+  const retrievalOnly = retrievalToggle ? Boolean(retrievalToggle.checked) : true;
+  const selectedProfile = strategySelect?.value || activeProfile || "";
+  const status = byId("geo-eval-status");
+  const output = byId("geo-eval-output");
+  if (!imagesDir || !metadata) {
+    if (status) status.textContent = "Missing images dir or metadata path.";
+    return;
+  }
+  const params = new URLSearchParams({
+    images_dir: imagesDir,
+    metadata,
+    limit: String(Number.isFinite(limit) ? limit : 0),
+    profile: selectedProfile,
+    retrieval_only: retrievalOnly ? "1" : "0",
+  });
+  if (status) status.textContent = "Starting...";
+  if (output) output.textContent = "Running...";
+  await fetch(`/eval/geo/start?${params.toString()}`, { method: "POST" });
+  pollGeoEval();
+}
+
+async function pollGeoEval() {
+  const status = byId("geo-eval-status");
+  const output = byId("geo-eval-output");
+  const bar = byId("geo-eval-progress-bar");
+  const text = byId("geo-eval-progress-text");
+  const wrap = byId("geo-eval-progress");
+  const res = await fetch("/eval/geo/status");
+  if (!res.ok) return;
+  const data = await res.json();
+  if (status) status.textContent = data.status || "idle";
+  if (wrap) wrap.classList.toggle("active", data.status === "running");
+  if (data.progress && bar && text) {
+    const total = Number(data.progress.total || 0);
+    const done = Number(data.progress.processed || 0);
+    const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
+    bar.style.width = `${pct}%`;
+    text.textContent = `${pct}%`;
+  }
+  if (data.last_result && output) {
+    output.textContent = data.last_result;
+  }
+  if (data.status === "running") {
+    setTimeout(pollGeoEval, 1200);
+  }
+}
+
+const geoEvalBtn = byId("geo-eval-run");
+if (geoEvalBtn) {
+  geoEvalBtn.addEventListener("click", startGeoEval);
+}
+
+async function pickPath(endpoint, targetId) {
+  const input = byId(targetId);
+  if (!input) return;
+  try {
+    const res = await fetch(endpoint, { method: "POST" });
+    const data = await res.json();
+    if (data.path) {
+      input.value = data.path;
+    }
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+const browseImages = byId("geo-eval-browse-images");
+if (browseImages) {
+  browseImages.addEventListener("click", () => pickPath("/fs/pick_dir", "geo-eval-images"));
+}
+
+const browseMetadata = byId("geo-eval-browse-metadata");
+if (browseMetadata) {
+  browseMetadata.addEventListener("click", () => pickPath("/fs/pick_file", "geo-eval-metadata"));
+}
 
       liveMap.on("mousemove", "candidate-layer", (e) => {
         if (!e.features || !e.features.length) return;

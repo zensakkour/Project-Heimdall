@@ -4,6 +4,7 @@ FastAPI server for live analysis UI.
 from __future__ import annotations
 
 import base64
+import json
 import io
 import tempfile
 from datetime import datetime
@@ -32,6 +33,7 @@ DASHBOARD_DIR = APP_ROOT / "src" / "dashboard"
 app = FastAPI()
 
 _EVAL_STATE = {"status": "idle", "last_result": None}
+_GEO_EVAL_STATE = {"status": "idle", "last_result": None, "progress": None, "progress_path": None}
 
 
 def build_pipeline(cfg: Optional[HeimdallConfig]) -> HeimdallPipeline:
@@ -57,6 +59,7 @@ def build_pipeline(cfg: Optional[HeimdallConfig]) -> HeimdallPipeline:
         top_n=cfg.geolocator.top_n,
         use_sidecar=cfg.geolocator.use_sidecar,
         use_exif=cfg.geolocator.use_exif,
+        score_scale=cfg.geolocator.geospot_score_scale,
     )
     if cfg.geolocator.retrieval_index_path:
         candidate_provider = MultiCandidateProvider([retrieval_provider, geoclip_provider])
@@ -80,6 +83,8 @@ def _load_config_from_env(profile: Optional[str] = None) -> Optional[HeimdallCon
         profile_map = {
             "paris": "paris.json",
             "paris-focused": "paris.json",
+            "paris-test": "paris_test.json",
+            "paris_test": "paris_test.json",
             "legacy": "open_geo.json",
             "open_geo": "open_geo.json",
             "open-geo": "open_geo.json",
@@ -92,6 +97,28 @@ def _load_config_from_env(profile: Optional[str] = None) -> Optional[HeimdallCon
     if default_path.exists():
         return load_config(str(default_path))
     return None
+
+
+def _config_path_for_profile(profile: Optional[str]) -> Path:
+    config_dir = APP_ROOT / "src" / "config"
+    default_path = config_dir / "defaults.json"
+    if profile:
+        key = profile.strip().lower()
+        profile_map = {
+            "paris": "paris.json",
+            "paris-focused": "paris.json",
+            "paris-test": "paris_test.json",
+            "paris_test": "paris_test.json",
+            "legacy": "open_geo.json",
+            "open_geo": "open_geo.json",
+            "open-geo": "open_geo.json",
+        }
+        config_name = profile_map.get(key)
+        if config_name:
+            config_path = config_dir / config_name
+            if config_path.exists():
+                return config_path
+    return default_path
 
 
 @app.get("/")
@@ -232,6 +259,105 @@ def start_eval() -> JSONResponse:
 @app.get("/eval/dota/status")
 def eval_status() -> JSONResponse:
     return JSONResponse(_EVAL_STATE)
+
+
+@app.post("/eval/geo/start")
+def start_geo_eval(
+    images_dir: str,
+    metadata: str,
+    limit: int = 0,
+    profile: Optional[str] = None,
+    retrieval_only: Optional[str] = None,
+) -> JSONResponse:
+    if _GEO_EVAL_STATE["status"] == "running":
+        return JSONResponse({"status": "running"})
+
+    def _run() -> None:
+        _GEO_EVAL_STATE["status"] = "running"
+        try:
+            output_path = Path("src/dashboard/data/geo_eval.json")
+            progress_path = Path("src/dashboard/data/geo_eval.progress.json")
+            _GEO_EVAL_STATE["progress_path"] = str(progress_path)
+            from src.tools.run_geo_eval import main as run_geo_eval
+
+            args = [
+                "--images-dir",
+                images_dir,
+                "--metadata",
+                metadata,
+                "--output",
+                str(output_path),
+                "--progress",
+                str(progress_path),
+            ]
+            if limit and limit > 0:
+                args.extend(["--limit", str(limit)])
+            args.extend(["--config", str(_config_path_for_profile(profile))])
+            retrieval_flag = "1"
+            if retrieval_only is not None and str(retrieval_only).lower() in {"0", "false", "no"}:
+                retrieval_flag = "0"
+            if retrieval_flag == "1":
+                args.append("--retrieval-only")
+            run_geo_eval(args)
+            if output_path.exists():
+                _GEO_EVAL_STATE["last_result"] = output_path.read_text(encoding="utf-8")
+            _GEO_EVAL_STATE["status"] = "done"
+        except Exception as exc:
+            _GEO_EVAL_STATE["status"] = "error"
+            _GEO_EVAL_STATE["last_result"] = str(exc)
+
+    import threading
+
+    threading.Thread(target=_run, daemon=True).start()
+    return JSONResponse({"status": "running"})
+
+
+@app.get("/eval/geo/status")
+def geo_eval_status() -> JSONResponse:
+    progress_path = _GEO_EVAL_STATE.get("progress_path")
+    if progress_path:
+        path = Path(progress_path)
+        if path.exists():
+            try:
+                _GEO_EVAL_STATE["progress"] = json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+    return JSONResponse(_GEO_EVAL_STATE)
+
+
+@app.post("/fs/pick_dir")
+def pick_dir() -> JSONResponse:
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+        path = filedialog.askdirectory()
+        root.destroy()
+        return JSONResponse({"path": path})
+    except Exception as exc:
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+@app.post("/fs/pick_file")
+def pick_file() -> JSONResponse:
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+        path = filedialog.askopenfilename(
+            title="Select metadata CSV",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+        )
+        root.destroy()
+        return JSONResponse({"path": path})
+    except Exception as exc:
+        return JSONResponse({"error": str(exc)}, status_code=500)
 
 
 # Static mounts come last so API routes are not shadowed.
