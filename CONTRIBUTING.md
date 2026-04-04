@@ -23,7 +23,7 @@ Examples:
 1. Branch off `master`.
 2. Commit small, focused changes.
 3. Open a pull request using the PR template.
-4. Ensure CI passes before merge.
+4. Run local tests before merge (`python -m pytest -q`).
 5. Merge back quickly and delete the branch.
 
 ## Commit Messages
