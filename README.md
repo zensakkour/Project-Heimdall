@@ -2,7 +2,6 @@
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](#requirements)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-0A0A0A)](#requirements)
-[![CI](https://github.com/zensakkour/Project-Heimdall/actions/workflows/ci.yml/badge.svg)](https://github.com/zensakkour/Project-Heimdall/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 Geospatial perception and analysis platform that combines object detection, geo-candidate retrieval, probabilistic fusion, and operator-facing explainability.
@@ -192,8 +191,6 @@ Pass a config where supported with `--config <path>`.
 - Progress tracking: [PROGRESS.md](PROGRESS.md)
 - Issue templates: [`.github/ISSUE_TEMPLATE`](.github/ISSUE_TEMPLATE)
 - PR template: [`.github/pull_request_template.md`](.github/pull_request_template.md)
-- CI workflow: [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
-- Code scanning: [`.github/workflows/codeql.yml`](.github/workflows/codeql.yml)
 - Dependency updates: [`.github/dependabot.yml`](.github/dependabot.yml)
 
 ## License
