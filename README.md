@@ -16,15 +16,30 @@ Project Heimdall processes image or video inputs and produces:
 - Fused geolocation estimate with uncertainty metrics
 - Operator-friendly analysis views in a local dashboard
 
+## Project Scope
+
+This repository implements the perception, geolocation, fusion, explainability,
+and evaluation layers of Project Heimdall.
+
+Current scope includes:
+
+- Detection and oriented bounding-box localization
+- Multi-provider geolocation candidate generation
+- Probabilistic fusion and uncertainty estimation
+- Explainable structured outputs for analysis and audits
+- Local dashboard and API workflows for evaluation
+
+Current non-goals include:
+
+- Production deployment and operational decision automation
+- Scraping pipelines and broad ingestion connectors
+- Text/LLM reasoning as a dependency in core inference
+
 ## Screenshots
 
 ### Analysis UI (Desktop)
 
 ![Heimdall analysis desktop](docs/images/analysis-desktop.png)
-
-### Analysis UI (Mobile)
-
-![Heimdall analysis mobile](docs/images/analysis-mobile.png)
 
 ## Architecture Overview
 
@@ -36,6 +51,16 @@ The platform is organized as a modular pipeline:
 4. Scoring and serialization: emits structured outputs for CLI, batch runs, and UI.
 5. Dashboard/API layer: serves analysis and evaluation workflows.
 
+## Core Modules
+
+- `src/core/detection`: detector interface and implementations (`ultralytics_obb`,
+  sidecar/classic adapters, detector factory)
+- `src/core/geo`: geolocation providers (`GeoSpot/GeoCLIP` style + retrieval index)
+- `src/core/logic`: fusion, likelihoods, scoring, verification, serialization, pipeline
+- `src/schemas`: structured payload contracts for detections, candidates, and fusion
+- `src/tools`: data prep, indexing, calibration, evaluation, and reporting utilities
+- `src/dashboard`: analysis UI, map visualization, and scoring flows
+
 ## Technology Stack
 
 - Language: Python 3.10+
@@ -45,6 +70,19 @@ The platform is organized as a modular pipeline:
 - Data tooling: NumPy, Rasterio, AWS CLI integrations
 - Validation/testing: JSON Schema, pytest
 - Frontend: Vanilla HTML/CSS/JS + MapLibre GL
+
+## Technology and Models (Detailed)
+
+- Detection runtime: Ultralytics OBB pipeline with default weights `yolo11x-obb.pt`.
+- Detection config: `src/config/defaults.json` (`detector.*`).
+- Geolocation runtime: `sdan/geospot-base` for geo candidate inference.
+- Retrieval model support: CLIP-based retrieval index with default model
+  `openai/clip-vit-large-patch14`.
+- Geo and fusion config: `src/config/defaults.json` (`geolocator.*`, `fusion.*`).
+- Fusion behavior: log-space posterior fusion over ranked geo candidates.
+- Uncertainty outputs: radius and ellipse exposed in pipeline outputs/UI.
+- API server: `src/tools/ui_server.py` (FastAPI).
+- Analysis frontend: `src/dashboard/analysis/`.
 
 ## Repository Structure
 
@@ -139,10 +177,9 @@ Pass a config where supported with `--config <path>`.
 ## Data and Model Notes
 
 - Large datasets and model artifacts are intentionally not stored in Git.
-- Typical local paths include:
-  - `data/geo_index/*.npz`
-  - `data/models/*`
-  - `data/dota_v1/*`
+- Typical local path: `data/geo_index/*.npz`
+- Typical local path: `data/models/*`
+- Typical local path: `data/dota_v1/*`
 - See [Geo Tech Notes](src/docs/GEO_TECH.md) for deeper implementation and dataset details.
 
 ## Engineering and Contribution
