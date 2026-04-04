@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security Vulnerability
+    url: https://github.com/zensakkour/Project-Heimdall/security/advisories/new
+    about: Please report security issues privately.
+  - name: Support and Troubleshooting
+    url: https://github.com/zensakkour/Project-Heimdall/blob/master/SUPPORT.md
+    about: Read support guidance before opening issues.
