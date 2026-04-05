@@ -165,6 +165,13 @@ def _build_demo_assessment(width: int, height: int, reason: Optional[str]) -> As
         covariance_m=((260.0, 0.0), (0.0, 180.0)),
         ellipse=UncertaintyEllipse(major_axis_m=520.0, minor_axis_m=300.0, orientation_deg=19.0),
         uncertainty_radius_m=420.0,
+        normalized_entropy=0.76,
+        effective_candidate_count=2.2,
+        top1_posterior=0.56,
+        top2_margin=0.28,
+        confidence_tier="medium",
+        ambiguous=False,
+        credible_set_size=2,
     )
     return Assessment(
         detections=detections,

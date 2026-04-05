@@ -107,6 +107,7 @@
               "enum": ["low", "medium", "high"]
             },
             "ambiguous": { "type": "boolean" },
+            "credible_set_size": { "type": "integer", "minimum": 0 },
             "candidates": {
               "type": "array",
               "items": {

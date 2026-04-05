@@ -22,6 +22,9 @@ def create_detector(cfg: Optional[DetectorConfig]) -> Optional[Detector]:
             min_confidence=cfg.min_confidence,
             iou=cfg.nms_iou,
             max_detections=cfg.max_detections,
+            min_area_px=cfg.min_area_px,
+            class_agnostic_nms=cfg.class_agnostic_nms,
+            use_tta=cfg.use_tta,
             imgsz=cfg.imgsz,
         )
     if cfg.use_sidecar:
@@ -29,6 +32,8 @@ def create_detector(cfg: Optional[DetectorConfig]) -> Optional[Detector]:
             min_confidence=cfg.min_confidence,
             nms_iou=cfg.nms_iou,
             max_detections=cfg.max_detections,
+            min_area_px=cfg.min_area_px,
+            class_agnostic_nms=cfg.class_agnostic_nms,
             use_classic=cfg.use_classic,
         )
     if cfg.use_classic:

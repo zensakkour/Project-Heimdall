@@ -237,3 +237,5 @@ Do not delete or edit past entries. Append new work at the end.
 - Updated README and GEO_TECH documentation with a current technology status snapshot and new fusion/config knobs.
 - Added source-aware fusion priors (source_prior_retrieval, source_prior_geoclip, source_prior_exif) and confidence diagnostics in fusion outputs.
 - Extended fusion serialization/schema with ambiguity and posterior concentration metrics.
+- Added configurable detection quality controls (min area filter, class-aware/agnostic NMS, optional TTA) and applied them in Ultralytics + sidecar pipelines.
+- Added robust fusion credible-set statistics and exposed credible_set_size in serialized outputs/schema.

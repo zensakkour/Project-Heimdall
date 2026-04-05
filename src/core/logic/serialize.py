@@ -87,6 +87,7 @@ def _fusion_to_dict(fusion: "FusionResult") -> dict[str, Any]:
         "top2_margin": fusion.top2_margin,
         "confidence_tier": fusion.confidence_tier,
         "ambiguous": fusion.ambiguous,
+        "credible_set_size": fusion.credible_set_size,
         "candidates": [
             {
                 "candidate": _candidate_to_dict(item.candidate),

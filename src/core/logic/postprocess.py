@@ -14,12 +14,14 @@ def filter_detections(
     min_confidence: float,
     nms_iou: float,
     max_detections: int,
+    min_area_px: float = 16.0,
+    class_agnostic_nms: bool = False,
 ) -> List[Detection]:
     normalized: List[Detection] = []
     for det in detections:
         if det.confidence < min_confidence:
             continue
-        obb = _normalize_obb(det.obb)
+        obb = _normalize_obb(det.obb, min_area_px=min_area_px)
         if obb is None:
             continue
         heading = det.heading_deg if det.heading_deg is not None else _heading_from_obb(obb)
@@ -34,23 +36,27 @@ def filter_detections(
             )
         )
     kept = normalized
-    kept = _nms_aabb(kept, nms_iou)
+    kept = _nms_aabb(kept, nms_iou, class_agnostic=class_agnostic_nms)
     if max_detections > 0:
         kept = kept[:max_detections]
     return kept
 
 
-def _valid_obb(obb: Tuple[Tuple[float, float], Tuple[float, float], Tuple[float, float], Tuple[float, float]]) -> bool:
+def _valid_obb(
+    obb: Tuple[Tuple[float, float], Tuple[float, float], Tuple[float, float], Tuple[float, float]],
+    min_area_px: float,
+) -> bool:
     if len(obb) != 4:
         return False
     area = _polygon_area(obb)
-    return area > 1e-3
+    return area >= max(1e-3, float(min_area_px))
 
 
 def _normalize_obb(
-    obb: Tuple[Tuple[float, float], Tuple[float, float], Tuple[float, float], Tuple[float, float]]
+    obb: Tuple[Tuple[float, float], Tuple[float, float], Tuple[float, float], Tuple[float, float]],
+    min_area_px: float,
 ) -> Tuple[Tuple[float, float], Tuple[float, float], Tuple[float, float], Tuple[float, float]] | None:
-    if not _valid_obb(obb):
+    if not _valid_obb(obb, min_area_px=min_area_px):
         return None
     cx = sum(p[0] for p in obb) / 4.0
     cy = sum(p[1] for p in obb) / 4.0
@@ -108,7 +114,7 @@ def _iou(a: Tuple[float, float, float, float], b: Tuple[float, float, float, flo
     return inter_area / union
 
 
-def _nms_aabb(detections: List[Detection], iou_threshold: float) -> List[Detection]:
+def _nms_aabb(detections: List[Detection], iou_threshold: float, class_agnostic: bool = False) -> List[Detection]:
     if not detections or iou_threshold <= 0.0:
         return list(detections)
     sorted_dets = sorted(detections, key=lambda d: d.confidence, reverse=True)
@@ -119,6 +125,9 @@ def _nms_aabb(detections: List[Detection], iou_threshold: float) -> List[Detecti
         current_aabb = _aabb_from_obb(current.obb)
         remaining: List[Detection] = []
         for det in sorted_dets:
+            if not class_agnostic and det.label != current.label:
+                remaining.append(det)
+                continue
             if _iou(current_aabb, _aabb_from_obb(det.obb)) <= iou_threshold:
                 remaining.append(det)
         sorted_dets = remaining
