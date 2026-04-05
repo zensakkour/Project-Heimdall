@@ -36,8 +36,13 @@ def fuse_candidates(
     capture_time = extract_capture_time(image_path)
     observed_shadow = _mean_shadow_azimuth(detections)
     retrieval_scores = _normalized_retrieval_scores(candidates, cfg.retrieval_score_norm)
+    spatial_likes = _spatial_consensus_likelihoods(
+        candidates,
+        retrieval_scores,
+        sigma_km=cfg.spatial_sigma_km,
+    )
 
-    for cand, norm_score in zip(candidates, retrieval_scores):
+    for idx, (cand, norm_score) in enumerate(zip(candidates, retrieval_scores)):
         retrieval_like = _to_unit_interval(norm_score)
         retrieval_logp = _temperature_scaled_logprob(retrieval_like, cfg.retrieval_temperature)
         shadow_residual = None
@@ -55,6 +60,10 @@ def fuse_candidates(
 
         logp = retrieval_logp
         likelihoods = {"retrieval": retrieval_like}
+        if cfg.use_spatial_consensus:
+            spatial_like = spatial_likes[idx]
+            logp += max(0.0, cfg.spatial_consensus_weight) * math.log(max(spatial_like, 1e-12))
+            likelihoods["spatial"] = spatial_like
         if shadow_like is not None:
             logp += math.log(max(shadow_like, 1e-12))
             likelihoods["shadow"] = shadow_like
@@ -217,6 +226,50 @@ def _to_unit_interval(value: float) -> float:
     return 1.0 / (1.0 + math.exp(-value))
 
 
+def _haversine_km(a: GeoCandidate, b: GeoCandidate) -> float:
+    radius_km = 6371.0
+    lat1 = math.radians(a.latitude)
+    lat2 = math.radians(b.latitude)
+    dlat = lat2 - lat1
+    dlon = math.radians(b.longitude - a.longitude)
+    term = math.sin(dlat / 2.0) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2.0) ** 2
+    arc = 2.0 * math.atan2(math.sqrt(term), math.sqrt(max(1.0 - term, 0.0)))
+    return radius_km * arc
+
+
+def _spatial_consensus_likelihoods(
+    candidates: Sequence[GeoCandidate],
+    retrieval_scores: Sequence[float],
+    sigma_km: float,
+) -> List[float]:
+    if not candidates:
+        return []
+    if len(candidates) == 1:
+        return [1.0]
+
+    sigma = max(0.1, float(sigma_km))
+    priors = [max(1e-3, _to_unit_interval(score)) for score in retrieval_scores]
+    total = sum(priors)
+    if total <= 0.0:
+        priors = [1.0 / len(candidates) for _ in candidates]
+    else:
+        priors = [p / total for p in priors]
+
+    raw = []
+    for cand_i in candidates:
+        density = 0.0
+        for cand_j, prior_j in zip(candidates, priors):
+            dist = _haversine_km(cand_i, cand_j)
+            kernel = math.exp(-0.5 * (dist / sigma) ** 2)
+            density += prior_j * kernel
+        raw.append(density)
+
+    peak = max(raw) if raw else 0.0
+    if peak <= 0.0:
+        return [1.0 for _ in candidates]
+    return [max(1e-3, min(1.0, value / peak)) for value in raw]
+
+
 def _expected_shadow_azimuth(captured, latitude: float, longitude: float) -> float:
     azimuth, _ = sun_position(captured, latitude, longitude)
     return (azimuth + 180.0) % 360.0
@@ -329,5 +382,4 @@ def _explain_candidate(
         parts.append(f"terrain_residual={terrain_residual:.1f}")
     parts.append(f"likelihoods={','.join(f'{k}:{v:.3g}' for k, v in likelihoods.items())}")
     return "; ".join(parts)
-
 
