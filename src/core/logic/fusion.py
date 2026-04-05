@@ -60,6 +60,9 @@ def fuse_candidates(
 
         logp = retrieval_logp
         likelihoods = {"retrieval": retrieval_like}
+        source_prior = _source_prior_for_candidate(cand, cfg)
+        logp += math.log(max(source_prior, 1e-12))
+        likelihoods["source_prior"] = source_prior
         if cfg.use_spatial_consensus:
             spatial_like = spatial_likes[idx]
             logp += max(0.0, cfg.spatial_consensus_weight) * math.log(max(spatial_like, 1e-12))
@@ -84,6 +87,7 @@ def fuse_candidates(
         )
 
     weights = _softmax(log_weights)
+    norm_entropy, eff_count, top1, top2_margin, conf_tier, ambiguous = _fusion_confidence_metrics(weights)
 
     fused: List[FusionCandidate] = []
     for cand, weight, evidence in zip(candidates, weights, evidences):
@@ -117,6 +121,12 @@ def fuse_candidates(
         covariance_m=cov,
         ellipse=ellipse,
         uncertainty_radius_m=uncertainty_radius,
+        normalized_entropy=norm_entropy,
+        effective_candidate_count=eff_count,
+        top1_posterior=top1,
+        top2_margin=top2_margin,
+        confidence_tier=conf_tier,
+        ambiguous=ambiguous,
     )
 
 
@@ -156,9 +166,18 @@ def _candidate_source(cand: GeoCandidate) -> str:
     match_id = cand.match_id or ""
     if match_id.startswith("exif:"):
         return "exif"
-    if match_id == "geoclip":
+    if match_id == "geoclip" or match_id.startswith("geoclip:"):
         return "geoclip"
     return "retrieval"
+
+
+def _source_prior_for_candidate(cand: GeoCandidate, cfg: FusionConfig) -> float:
+    src = _candidate_source(cand)
+    if src == "exif":
+        return max(1e-3, float(cfg.source_prior_exif))
+    if src == "geoclip":
+        return max(1e-3, float(cfg.source_prior_geoclip))
+    return max(1e-3, float(cfg.source_prior_retrieval))
 
 
 def _zscore_sigmoid(values: List[float]) -> List[float]:
@@ -268,6 +287,38 @@ def _spatial_consensus_likelihoods(
     if peak <= 0.0:
         return [1.0 for _ in candidates]
     return [max(1e-3, min(1.0, value / peak)) for value in raw]
+
+
+def _fusion_confidence_metrics(weights: Sequence[float]) -> Tuple[float, float, float, float, str, bool]:
+    if not weights:
+        return 1.0, 0.0, 0.0, 0.0, "low", True
+    n = len(weights)
+    safe = [max(0.0, float(w)) for w in weights]
+    total = sum(safe)
+    if total <= 0.0:
+        safe = [1.0 / n for _ in range(n)]
+    else:
+        safe = [w / total for w in safe]
+
+    entropy = -sum(w * math.log(max(w, 1e-12)) for w in safe)
+    max_entropy = math.log(max(n, 2))
+    norm_entropy = max(0.0, min(1.0, entropy / max_entropy))
+    eff_count = 1.0 / max(sum(w * w for w in safe), 1e-12)
+
+    ranked = sorted(safe, reverse=True)
+    top1 = ranked[0]
+    top2 = ranked[1] if len(ranked) > 1 else 0.0
+    margin = top1 - top2
+
+    if top1 >= 0.70 and margin >= 0.20 and norm_entropy <= 0.55:
+        tier = "high"
+    elif top1 >= 0.45 and margin >= 0.08 and norm_entropy <= 0.80:
+        tier = "medium"
+    else:
+        tier = "low"
+
+    ambiguous = tier == "low" or eff_count >= max(3.0, 0.65 * n)
+    return norm_entropy, eff_count, top1, margin, tier, ambiguous
 
 
 def _expected_shadow_azimuth(captured, latitude: float, longitude: float) -> float:
@@ -382,4 +433,3 @@ def _explain_candidate(
         parts.append(f"terrain_residual={terrain_residual:.1f}")
     parts.append(f"likelihoods={','.join(f'{k}:{v:.3g}' for k, v in likelihoods.items())}")
     return "; ".join(parts)
-

@@ -322,6 +322,7 @@ Useful geo quality knobs in `geolocator`:
 
 Useful fusion knobs:
 - `fusion.retrieval_score_norm`: `none`, `zscore_sigmoid`, `minmax`, `rank_exp`.
+- `fusion.source_prior_retrieval`, `fusion.source_prior_geoclip`, `fusion.source_prior_exif`: source-level priors applied before posterior normalization.
 - `fusion.use_spatial_consensus`: enables neighborhood agreement likelihood in fusion.
 - `fusion.spatial_sigma_km`: spatial kernel scale in kilometers.
 - `fusion.spatial_consensus_weight`: strength of spatial consensus in posterior weighting.

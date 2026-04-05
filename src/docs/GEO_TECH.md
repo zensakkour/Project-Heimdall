@@ -14,9 +14,11 @@ This is the current technical state of the geo stack in the development branch:
   - Capped merged candidate list before fusion
 - Fusion is robust and configurable:
   - Retrieval score normalization modes (`none`, `zscore_sigmoid`, `minmax`, `rank_exp`)
+  - Source priors (`source_prior_retrieval`, `source_prior_geoclip`, `source_prior_exif`)
   - Spatial consensus likelihood (`use_spatial_consensus`, `spatial_sigma_km`, `spatial_consensus_weight`)
   - Dateline-safe longitude averaging and covariance
   - Posterior uncertainty radius + ellipse
+  - Confidence diagnostics (`normalized_entropy`, `effective_candidate_count`, `top1_posterior`, `top2_margin`, `confidence_tier`, `ambiguous`)
 - Evaluation tooling is operational:
   - Geo regression gate baseline checks
   - Fusion sweep/tuning script

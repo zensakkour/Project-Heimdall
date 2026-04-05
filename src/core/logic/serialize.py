@@ -81,6 +81,12 @@ def _fusion_to_dict(fusion: "FusionResult") -> dict[str, Any]:
             "orientation_deg": fusion.ellipse.orientation_deg,
         },
         "uncertainty_radius_m": fusion.uncertainty_radius_m,
+        "normalized_entropy": fusion.normalized_entropy,
+        "effective_candidate_count": fusion.effective_candidate_count,
+        "top1_posterior": fusion.top1_posterior,
+        "top2_margin": fusion.top2_margin,
+        "confidence_tier": fusion.confidence_tier,
+        "ambiguous": fusion.ambiguous,
         "candidates": [
             {
                 "candidate": _candidate_to_dict(item.candidate),

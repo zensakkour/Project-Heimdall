@@ -149,3 +149,64 @@ def test_spatial_consensus_zero_weight_behaves_like_disabled() -> None:
     assert [item.candidate.match_id for item in disabled.candidates] == [
         item.candidate.match_id for item in zero_weight.candidates
     ]
+
+
+def test_source_priors_can_shift_ranking() -> None:
+    candidates = [
+        GeoCandidate(latitude=35.0, longitude=10.0, retrieval_score=0.70, match_id="retrieval:tile-1"),
+        GeoCandidate(latitude=35.01, longitude=10.01, retrieval_score=0.69, match_id="geoclip"),
+    ]
+    neutral_cfg = FusionConfig(
+        retrieval_temperature=0.2,
+        retrieval_score_norm="none",
+        source_prior_retrieval=1.0,
+        source_prior_geoclip=1.0,
+        source_prior_exif=1.0,
+        use_spatial_consensus=False,
+        use_shadow=False,
+        use_terrain=False,
+        top_k=2,
+    )
+    geoclip_boost_cfg = FusionConfig(
+        retrieval_temperature=0.2,
+        retrieval_score_norm="none",
+        source_prior_retrieval=0.6,
+        source_prior_geoclip=1.8,
+        source_prior_exif=1.0,
+        use_spatial_consensus=False,
+        use_shadow=False,
+        use_terrain=False,
+        top_k=2,
+    )
+
+    neutral = fuse_candidates("missing.jpg", candidates, detections=[], config=neutral_cfg)
+    boosted = fuse_candidates("missing.jpg", candidates, detections=[], config=geoclip_boost_cfg)
+
+    assert neutral is not None
+    assert boosted is not None
+    assert neutral.candidates[0].candidate.match_id == "retrieval:tile-1"
+    assert boosted.candidates[0].candidate.match_id == "geoclip"
+
+
+def test_fusion_outputs_confidence_diagnostics() -> None:
+    candidates = [
+        GeoCandidate(latitude=0.0, longitude=0.0, retrieval_score=0.95, match_id="a"),
+        GeoCandidate(latitude=0.1, longitude=0.1, retrieval_score=0.20, match_id="b"),
+        GeoCandidate(latitude=0.2, longitude=0.2, retrieval_score=0.10, match_id="c"),
+    ]
+    cfg = FusionConfig(
+        retrieval_temperature=0.2,
+        retrieval_score_norm="none",
+        use_spatial_consensus=False,
+        use_shadow=False,
+        use_terrain=False,
+        top_k=3,
+    )
+    result = fuse_candidates("missing.jpg", candidates, detections=[], config=cfg)
+    assert result is not None
+    assert 0.0 <= result.normalized_entropy <= 1.0
+    assert result.effective_candidate_count >= 1.0
+    assert 0.0 <= result.top1_posterior <= 1.0
+    assert 0.0 <= result.top2_margin <= 1.0
+    assert result.confidence_tier in {"low", "medium", "high"}
+    assert isinstance(result.ambiguous, bool)

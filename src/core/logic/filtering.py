@@ -16,8 +16,11 @@ def update_posterior(prior: FusionResult, current: FusionResult) -> FusionResult
     if not top:
         return current
 
-    mean_lat = sum(item.candidate.latitude * item.posterior_weight for item in top)
-    mean_lon = sum(item.candidate.longitude * item.posterior_weight for item in top)
+    total_weight = sum(max(0.0, item.posterior_weight) for item in top)
+    if total_weight <= 0.0:
+        total_weight = 1.0
+    mean_lat = sum(item.candidate.latitude * item.posterior_weight for item in top) / total_weight
+    mean_lon = sum(item.candidate.longitude * item.posterior_weight for item in top) / total_weight
 
     return FusionResult(
         candidates=top,
@@ -30,6 +33,12 @@ def update_posterior(prior: FusionResult, current: FusionResult) -> FusionResult
             orientation_deg=current.ellipse.orientation_deg,
         ),
         uncertainty_radius_m=current.uncertainty_radius_m,
+        normalized_entropy=current.normalized_entropy,
+        effective_candidate_count=current.effective_candidate_count,
+        top1_posterior=current.top1_posterior,
+        top2_margin=current.top2_margin,
+        confidence_tier=current.confidence_tier,
+        ambiguous=current.ambiguous,
     )
 
 
