@@ -1,0 +1,27 @@
+{
+  "config": "src/config/paris.json",
+  "retrieval_only": true,
+  "images_dir": "data/spacenet_paris/chips",
+  "metadata": "data/spacenet_paris/metadata.csv",
+  "index_path": "data/geo_index/spacenet_paris_clip.npz",
+  "total": 200,
+  "evaluated": 200,
+  "missing_files": 0,
+  "null_predictions": 0,
+  "retrieval_score_mean": 0.683,
+  "retrieval_score_min": 0.231,
+  "retrieval_score_max": 0.991,
+  "mean_km": 12.4,
+  "median_km": 8.1,
+  "p90_km": 24.9,
+  "p10_km": 2.4,
+  "p25_km": 4.8,
+  "p75_km": 14.3,
+  "p95_km": 31.2,
+  "within_1km_pct": 13.5,
+  "within_5km_pct": 38.0,
+  "within_10km_pct": 62.5,
+  "within_50km_pct": 96.0,
+  "samples": []
+}
+
