@@ -332,6 +332,7 @@ Useful fusion knobs:
 - `fusion.spatial_sigma_km`: spatial kernel scale in kilometers.
 - `fusion.spatial_consensus_weight`: strength of spatial consensus in posterior weighting.
 - `fusion.credible_mass`, `fusion.min_credible_candidates`: robust posterior subset used for fused mean/covariance.
+- `fusion.use_top_cluster_for_stats`, `fusion.credible_cluster_radius_km`, `fusion.min_credible_cluster_weight`: constrain fused stats to the dominant spatial mode when hypotheses are ambiguous.
 
 ## Data and Model Notes
 
