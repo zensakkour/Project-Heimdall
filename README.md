@@ -252,8 +252,8 @@ Safe demo behavior:
 Update workflow:
 
 1. Run geo eval and save latest report to `docs/eval/geo_eval_current.json`.
-2. Run the regression gate command above.
-3. If metric changes are intentional, update `docs/eval/geo_eval_baseline.json` in a dedicated PR with rationale.
+1. Run the regression gate command above.
+1. If metric changes are intentional, update `docs/eval/geo_eval_baseline.json` in a dedicated PR with rationale.
 
 ### Run test suite
 
