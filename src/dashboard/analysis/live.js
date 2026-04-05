@@ -1,3 +1,34 @@
+function parseServerError(text) {
+  if (!text) return "";
+  const trimmed = String(text).trim();
+  if (!trimmed) return "";
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (typeof parsed === "string") return parsed;
+    if (parsed && typeof parsed === "object") {
+      if (typeof parsed.detail === "string") return parsed.detail;
+      if (Array.isArray(parsed.detail)) {
+        const msgs = parsed.detail
+          .map((item) => (item && item.msg ? item.msg : ""))
+          .filter(Boolean);
+        if (msgs.length) return msgs.join("; ");
+      }
+      if (typeof parsed.error === "string") return parsed.error;
+      if (typeof parsed.message === "string") return parsed.message;
+    }
+  } catch {
+    // Keep fallback raw text.
+  }
+  return trimmed.replace(/\s+/g, " ");
+}
+
+function normalizeError(err) {
+  if (!err) return "Unexpected error.";
+  if (typeof err === "string") return parseServerError(err) || "Unexpected error.";
+  if (err instanceof Error) return parseServerError(err.message) || "Unexpected error.";
+  return parseServerError(String(err)) || "Unexpected error.";
+}
+
 async function postForm(url, formData) {
   const res = await fetch(url, {
     method: "POST",
@@ -5,13 +36,22 @@ async function postForm(url, formData) {
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(text || `HTTP ${res.status}`);
+    const message = parseServerError(text) || `Request failed (HTTP ${res.status}).`;
+    throw new Error(message);
   }
   return res.json();
 }
 
 function byId(id) {
   return document.getElementById(id);
+}
+
+function setSummaryState(state, message) {
+  const summary = byId("summary");
+  if (!summary) return;
+  summary.classList.remove("state-idle", "state-loading", "state-success", "state-error");
+  summary.classList.add(`state-${state}`);
+  summary.textContent = message;
 }
 
 const modeButtons = Array.from(document.querySelectorAll(".mode-tab"));
@@ -86,6 +126,9 @@ function setLoading(active, text) {
     if (text && progressText) progressText.textContent = text;
   }
   if (analyzeImage) analyzeImage.disabled = active;
+  if (active) {
+    setSummaryState("loading", text || "Analyzing image...");
+  }
 }
 
 const fileInput = byId("image-file");
@@ -117,7 +160,6 @@ if (fileInput && fileName) {
 }
 
 function renderSummary(result) {
-  const summary = byId("summary");
   const geo = result.result.geo;
   const fusion = result.result.fusion;
   const geoDebug = result.geo_debug;
@@ -154,9 +196,13 @@ function renderSummary(result) {
   const debugText = geoDebug
     ? ` | Geo candidates: ${geoDebug.candidate_count ?? 0}${geoDebug.error ? ` (${geoDebug.error})` : ""}`
     : "";
-  summary.textContent = `Score: ${result.result.score.toFixed(3)} | Geo tier: ${
+  const modeText = result.safe_demo ? " | Mode: safe demo" : "";
+  setSummaryState(
+    "success",
+    `Score: ${result.result.score.toFixed(3)} | Geo tier: ${
     geo?.confidence_tier || tierFromFusion() || tierFromCandidates() || "-"
-  }${geoConfText} | Detections: ${result.result.detections.length}${fusionText}${debugText}`;
+  }${geoConfText} | Detections: ${result.result.detections.length}${fusionText}${debugText}${modeText}`
+  );
 }
 
 let currentImage = null;
@@ -563,6 +609,7 @@ function renderList(detections, imageDataUrl) {
   const details = byId("details");
   list.innerHTML = "";
   if (!detections || detections.length === 0) {
+    list.innerHTML = `<div class="list-empty muted">No detections found for this image.</div>`;
     details.textContent = "No detections available.";
     return;
   }
@@ -592,7 +639,10 @@ function renderList(detections, imageDataUrl) {
 
 byId("analyze-image").addEventListener("click", async () => {
   const imageFile = byId("image-file").files[0];
-  if (!imageFile) return;
+  if (!imageFile) {
+    setSummaryState("error", "Choose an image file before running analysis.");
+    return;
+  }
   const form = new FormData();
   form.append("image", imageFile);
 
@@ -606,7 +656,7 @@ byId("analyze-image").addEventListener("click", async () => {
     renderList(result.result.detections, result.image_data);
     renderLiveMap(result);
   } catch (err) {
-    byId("summary").textContent = `Error: ${err.message || err}`;
+    setSummaryState("error", `Analysis failed: ${normalizeError(err)}`);
   } finally {
     setLoading(false);
   }
@@ -724,6 +774,11 @@ function renderGeoRanking(items) {
   `;
   container.appendChild(header);
   if (!items || items.length === 0) {
+    container.classList.add("muted");
+    const empty = document.createElement("div");
+    empty.className = "geo-empty";
+    empty.textContent = "No geo ranking yet. Run analysis to populate candidates.";
+    container.appendChild(empty);
     return;
   }
   container.classList.remove("muted");
@@ -788,6 +843,7 @@ window.addEventListener("load", () => {
   if (liveMap) {
     setTimeout(() => liveMap.resize(), 0);
   }
+  setSummaryState("idle", "Upload an image and click Analyze Image to start.");
   renderGeoRanking([]);
   setActiveTab("analysis");
   const retrievalToggle = byId("geo-eval-retrieval-only");
@@ -887,4 +943,3 @@ const browseMetadata = byId("geo-eval-browse-metadata");
 if (browseMetadata) {
   browseMetadata.addEventListener("click", () => pickPath("/fs/pick_file", "geo-eval-metadata"));
 }
-
