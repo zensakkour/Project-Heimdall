@@ -14,6 +14,7 @@ class DetectorConfig:
     weights_path: Optional[str] = None
     min_confidence: float = 0.25
     nms_iou: float = 0.5
+    nms_mode: str = "obb"
     max_detections: int = 100
     min_area_px: float = 16.0
     class_agnostic_nms: bool = False
@@ -58,6 +59,9 @@ class FusionConfig:
     use_spatial_consensus: bool = True
     spatial_sigma_km: float = 2.0
     spatial_consensus_weight: float = 1.0
+    use_cross_source_agreement: bool = True
+    cross_source_sigma_km: float = 15.0
+    cross_source_weight: float = 1.0
     shadow_sigma_deg: float = 20.0
     terrain_sigma: float = 100.0
     use_shadow: bool = True
@@ -100,6 +104,7 @@ def load_config(path: str) -> HeimdallConfig:
             weights_path=det.get("weights_path"),
             min_confidence=det.get("min_confidence", 0.25),
             nms_iou=det.get("nms_iou", 0.5),
+            nms_mode=det.get("nms_mode", "obb"),
             max_detections=det.get("max_detections", 100),
             min_area_px=det.get("min_area_px", 16.0),
             class_agnostic_nms=det.get("class_agnostic_nms", False),
@@ -133,6 +138,9 @@ def load_config(path: str) -> HeimdallConfig:
             use_spatial_consensus=fusion.get("use_spatial_consensus", True),
             spatial_sigma_km=fusion.get("spatial_sigma_km", 2.0),
             spatial_consensus_weight=fusion.get("spatial_consensus_weight", 1.0),
+            use_cross_source_agreement=fusion.get("use_cross_source_agreement", True),
+            cross_source_sigma_km=fusion.get("cross_source_sigma_km", 15.0),
+            cross_source_weight=fusion.get("cross_source_weight", 1.0),
             shadow_sigma_deg=fusion.get("shadow_sigma_deg", 20.0),
             terrain_sigma=fusion.get("terrain_sigma", 100.0),
             use_shadow=fusion.get("use_shadow", True),

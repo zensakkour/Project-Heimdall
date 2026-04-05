@@ -41,6 +41,11 @@ def fuse_candidates(
         retrieval_scores,
         sigma_km=cfg.spatial_sigma_km,
     )
+    cross_source_likes = _cross_source_agreement_likelihoods(
+        candidates,
+        retrieval_scores,
+        sigma_km=cfg.cross_source_sigma_km,
+    )
 
     for idx, (cand, norm_score) in enumerate(zip(candidates, retrieval_scores)):
         retrieval_like = _to_unit_interval(norm_score)
@@ -67,6 +72,10 @@ def fuse_candidates(
             spatial_like = spatial_likes[idx]
             logp += max(0.0, cfg.spatial_consensus_weight) * math.log(max(spatial_like, 1e-12))
             likelihoods["spatial"] = spatial_like
+        if cfg.use_cross_source_agreement:
+            cross_like = cross_source_likes[idx]
+            logp += max(0.0, cfg.cross_source_weight) * math.log(max(cross_like, 1e-12))
+            likelihoods["cross_source"] = cross_like
         if shadow_like is not None:
             logp += math.log(max(shadow_like, 1e-12))
             likelihoods["shadow"] = shadow_like
@@ -284,6 +293,51 @@ def _spatial_consensus_likelihoods(
             kernel = math.exp(-0.5 * (dist / sigma) ** 2)
             density += prior_j * kernel
         raw.append(density)
+
+    peak = max(raw) if raw else 0.0
+    if peak <= 0.0:
+        return [1.0 for _ in candidates]
+    return [max(1e-3, min(1.0, value / peak)) for value in raw]
+
+
+def _cross_source_agreement_likelihoods(
+    candidates: Sequence[GeoCandidate],
+    retrieval_scores: Sequence[float],
+    sigma_km: float,
+) -> List[float]:
+    if not candidates:
+        return []
+    if len(candidates) == 1:
+        return [1.0]
+
+    sources = [_candidate_source(cand) for cand in candidates]
+    if len(set(sources)) < 2:
+        return [1.0 for _ in candidates]
+
+    sigma = max(0.1, float(sigma_km))
+    priors = [max(1e-3, _to_unit_interval(score)) for score in retrieval_scores]
+    total = sum(priors)
+    if total <= 0.0:
+        priors = [1.0 / len(candidates) for _ in candidates]
+    else:
+        priors = [p / total for p in priors]
+
+    raw: List[float] = []
+    for idx_i, cand_i in enumerate(candidates):
+        src_i = sources[idx_i]
+        weighted_sum = 0.0
+        other_prior = 0.0
+        for idx_j, (cand_j, prior_j) in enumerate(zip(candidates, priors)):
+            if idx_i == idx_j or sources[idx_j] == src_i:
+                continue
+            other_prior += prior_j
+            dist = _haversine_km(cand_i, cand_j)
+            weighted_sum += prior_j * math.exp(-0.5 * (dist / sigma) ** 2)
+
+        if other_prior <= 0.0:
+            raw.append(1.0)
+            continue
+        raw.append(weighted_sum / other_prior)
 
     peak = max(raw) if raw else 0.0
     if peak <= 0.0:

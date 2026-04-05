@@ -19,6 +19,7 @@ class YoloObbDetector:
         weights_path: str,
         min_confidence: float = 0.25,
         nms_iou: float = 0.5,
+        nms_mode: str = "obb",
         max_detections: int = 100,
         min_area_px: float = 16.0,
         class_agnostic_nms: bool = False,
@@ -26,6 +27,7 @@ class YoloObbDetector:
         self.weights_path = weights_path
         self.min_confidence = min_confidence
         self.nms_iou = nms_iou
+        self.nms_mode = nms_mode
         self.max_detections = max_detections
         self.min_area_px = min_area_px
         self.class_agnostic_nms = class_agnostic_nms
@@ -38,6 +40,7 @@ class YoloObbDetector:
             detections,
             min_confidence=self.min_confidence,
             nms_iou=self.nms_iou,
+            nms_mode=self.nms_mode,
             max_detections=self.max_detections,
             min_area_px=self.min_area_px,
             class_agnostic_nms=self.class_agnostic_nms,
