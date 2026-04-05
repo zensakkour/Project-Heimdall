@@ -15,6 +15,9 @@ class DetectorConfig:
     min_confidence: float = 0.25
     nms_iou: float = 0.5
     max_detections: int = 100
+    min_area_px: float = 16.0
+    class_agnostic_nms: bool = False
+    use_tta: bool = False
     use_sidecar: bool = True
     use_classic: bool = False
     imgsz: int = 1280
@@ -59,6 +62,8 @@ class FusionConfig:
     terrain_sigma: float = 100.0
     use_shadow: bool = True
     use_terrain: bool = False
+    credible_mass: float = 0.9
+    min_credible_candidates: int = 2
     top_k: int = 5
 
 
@@ -93,6 +98,9 @@ def load_config(path: str) -> HeimdallConfig:
             min_confidence=det.get("min_confidence", 0.25),
             nms_iou=det.get("nms_iou", 0.5),
             max_detections=det.get("max_detections", 100),
+            min_area_px=det.get("min_area_px", 16.0),
+            class_agnostic_nms=det.get("class_agnostic_nms", False),
+            use_tta=det.get("use_tta", False),
             use_sidecar=det.get("use_sidecar", True),
             use_classic=det.get("use_classic", False),
             imgsz=det.get("imgsz", 1280),
@@ -126,6 +134,8 @@ def load_config(path: str) -> HeimdallConfig:
             terrain_sigma=fusion.get("terrain_sigma", 100.0),
             use_shadow=fusion.get("use_shadow", True),
             use_terrain=fusion.get("use_terrain", False),
+            credible_mass=fusion.get("credible_mass", 0.9),
+            min_credible_candidates=fusion.get("min_credible_candidates", 2),
             top_k=fusion.get("top_k", 5),
         ),
         score=ScoreConfig(

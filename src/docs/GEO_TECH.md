@@ -12,6 +12,10 @@ This is the current technical state of the geo stack in the development branch:
   - Invalid coordinate/score filtering
   - Near-duplicate clustering/merging across providers
   - Capped merged candidate list before fusion
+- Detection quality controls are configurable:
+  - Minimum OBB area filter (`detector.min_area_px`)
+  - Class-aware vs class-agnostic NMS (`detector.class_agnostic_nms`)
+  - Optional test-time augmentation (`detector.use_tta`)
 - Fusion is robust and configurable:
   - Retrieval score normalization modes (`none`, `zscore_sigmoid`, `minmax`, `rank_exp`)
   - Source priors (`source_prior_retrieval`, `source_prior_geoclip`, `source_prior_exif`)
@@ -19,6 +23,7 @@ This is the current technical state of the geo stack in the development branch:
   - Dateline-safe longitude averaging and covariance
   - Posterior uncertainty radius + ellipse
   - Confidence diagnostics (`normalized_entropy`, `effective_candidate_count`, `top1_posterior`, `top2_margin`, `confidence_tier`, `ambiguous`)
+  - Credible-set fusion stats (`credible_mass`, `min_credible_candidates`)
 - Evaluation tooling is operational:
   - Geo regression gate baseline checks
   - Fusion sweep/tuning script

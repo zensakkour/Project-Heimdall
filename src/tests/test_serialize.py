@@ -50,6 +50,7 @@ def test_fusion_diagnostics_serialization() -> None:
         top2_margin=0.8,
         confidence_tier="high",
         ambiguous=False,
+        credible_set_size=1,
     )
     assessment = Assessment(detections=[], geo=None, verification=None, score=0.1, fusion=fusion)
     payload = assessment_to_dict(assessment)
@@ -57,5 +58,6 @@ def test_fusion_diagnostics_serialization() -> None:
     assert payload["fusion"]["confidence_tier"] == "high"
     assert payload["fusion"]["ambiguous"] is False
     assert payload["fusion"]["top1_posterior"] == 0.9
+    assert payload["fusion"]["credible_set_size"] == 1
 
 

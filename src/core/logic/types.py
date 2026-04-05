@@ -75,6 +75,7 @@ class FusionResult:
     top2_margin: float = 0.0
     confidence_tier: str = "low"
     ambiguous: bool = True
+    credible_set_size: int = 0
 
 
 @dataclass(frozen=True)

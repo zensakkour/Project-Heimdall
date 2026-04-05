@@ -110,7 +110,12 @@ def fuse_candidates(
     limit = cfg.top_k if cfg.top_k > 0 else len(fused)
     fused = fused[:limit]
 
-    mean_lat, mean_lon, cov = _weighted_mean_cov(fused)
+    stats_candidates = _credible_set_for_stats(
+        fused,
+        credible_mass=cfg.credible_mass,
+        min_candidates=cfg.min_credible_candidates,
+    )
+    mean_lat, mean_lon, cov = _weighted_mean_cov(stats_candidates)
     ellipse = _covariance_to_ellipse(cov)
     uncertainty_radius = max(ellipse.major_axis_m, ellipse.minor_axis_m)
 
@@ -127,6 +132,7 @@ def fuse_candidates(
         top2_margin=top2_margin,
         confidence_tier=conf_tier,
         ambiguous=ambiguous,
+        credible_set_size=len(stats_candidates),
     )
 
 
@@ -319,6 +325,27 @@ def _fusion_confidence_metrics(weights: Sequence[float]) -> Tuple[float, float, 
 
     ambiguous = tier == "low" or eff_count >= max(3.0, 0.65 * n)
     return norm_entropy, eff_count, top1, margin, tier, ambiguous
+
+
+def _credible_set_for_stats(
+    fused: Sequence[FusionCandidate],
+    credible_mass: float,
+    min_candidates: int,
+) -> List[FusionCandidate]:
+    if not fused:
+        return []
+    target = max(0.50, min(0.999, float(credible_mass)))
+    required = max(1, int(min_candidates))
+    selected: List[FusionCandidate] = []
+    cumulative = 0.0
+    for item in fused:
+        selected.append(item)
+        cumulative += max(0.0, item.posterior_weight)
+        if cumulative >= target and len(selected) >= required:
+            break
+    while len(selected) < min(required, len(fused)):
+        selected.append(fused[len(selected)])
+    return selected
 
 
 def _expected_shadow_azimuth(captured, latitude: float, longitude: float) -> float:

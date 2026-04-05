@@ -19,11 +19,15 @@ class SidecarDetector:
         min_confidence: float = 0.25,
         nms_iou: float = 0.5,
         max_detections: int = 100,
+        min_area_px: float = 16.0,
+        class_agnostic_nms: bool = False,
         use_classic: bool = False,
     ) -> None:
         self.min_confidence = min_confidence
         self.nms_iou = nms_iou
         self.max_detections = max_detections
+        self.min_area_px = min_area_px
+        self.class_agnostic_nms = class_agnostic_nms
         self.use_classic = use_classic
         self.classic = ClassicDetector() if use_classic else None
 
@@ -36,6 +40,8 @@ class SidecarDetector:
             min_confidence=self.min_confidence,
             nms_iou=self.nms_iou,
             max_detections=self.max_detections,
+            min_area_px=self.min_area_px,
+            class_agnostic_nms=self.class_agnostic_nms,
         )
 
 

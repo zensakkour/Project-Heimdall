@@ -27,6 +27,11 @@ def test_load_config_spatial_consensus_defaults() -> None:
         assert cfg.fusion.source_prior_retrieval == 1.0
         assert cfg.fusion.source_prior_geoclip == 1.0
         assert cfg.fusion.source_prior_exif == 1.0
+        assert cfg.fusion.credible_mass == 0.9
+        assert cfg.fusion.min_credible_candidates == 2
+        assert cfg.detector.min_area_px == 16.0
+        assert cfg.detector.class_agnostic_nms is False
+        assert cfg.detector.use_tta is False
 
 
 def test_load_config_spatial_consensus_overrides() -> None:
@@ -41,6 +46,13 @@ def test_load_config_spatial_consensus_overrides() -> None:
                     "source_prior_retrieval": 0.95,
                     "source_prior_geoclip": 1.1,
                     "source_prior_exif": 0.8,
+                    "credible_mass": 0.8,
+                    "min_credible_candidates": 3,
+                },
+                "detector": {
+                    "min_area_px": 20.0,
+                    "class_agnostic_nms": True,
+                    "use_tta": True,
                 }
             },
         )
@@ -52,3 +64,8 @@ def test_load_config_spatial_consensus_overrides() -> None:
         assert cfg.fusion.source_prior_retrieval == 0.95
         assert cfg.fusion.source_prior_geoclip == 1.1
         assert cfg.fusion.source_prior_exif == 0.8
+        assert cfg.fusion.credible_mass == 0.8
+        assert cfg.fusion.min_credible_candidates == 3
+        assert cfg.detector.min_area_px == 20.0
+        assert cfg.detector.class_agnostic_nms is True
+        assert cfg.detector.use_tta is True

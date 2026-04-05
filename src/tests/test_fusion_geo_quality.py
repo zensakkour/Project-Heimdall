@@ -210,3 +210,40 @@ def test_fusion_outputs_confidence_diagnostics() -> None:
     assert 0.0 <= result.top2_margin <= 1.0
     assert result.confidence_tier in {"low", "medium", "high"}
     assert isinstance(result.ambiguous, bool)
+
+
+def test_credible_set_stats_reduce_far_tail_bias() -> None:
+    candidates = [
+        GeoCandidate(latitude=48.8566, longitude=2.3522, retrieval_score=0.95, match_id="core_a"),
+        GeoCandidate(latitude=48.8570, longitude=2.3530, retrieval_score=0.85, match_id="core_b"),
+        GeoCandidate(latitude=35.6764, longitude=139.6500, retrieval_score=0.30, match_id="tail"),
+    ]
+    full_cfg = FusionConfig(
+        retrieval_temperature=0.4,
+        retrieval_score_norm="none",
+        use_spatial_consensus=False,
+        credible_mass=0.999,
+        min_credible_candidates=3,
+        use_shadow=False,
+        use_terrain=False,
+        top_k=3,
+    )
+    credible_cfg = FusionConfig(
+        retrieval_temperature=0.4,
+        retrieval_score_norm="none",
+        use_spatial_consensus=False,
+        credible_mass=0.75,
+        min_credible_candidates=2,
+        use_shadow=False,
+        use_terrain=False,
+        top_k=3,
+    )
+
+    full = fuse_candidates("missing.jpg", candidates, detections=[], config=full_cfg)
+    credible = fuse_candidates("missing.jpg", candidates, detections=[], config=credible_cfg)
+    assert full is not None
+    assert credible is not None
+
+    assert credible.credible_set_size <= full.credible_set_size
+    # Credible-set statistics should stay closer to the dominant Paris cluster.
+    assert abs(credible.mean_latitude - 48.8568) < abs(full.mean_latitude - 48.8568)
