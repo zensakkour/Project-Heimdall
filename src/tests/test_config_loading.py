@@ -24,6 +24,9 @@ def test_load_config_spatial_consensus_defaults() -> None:
         assert cfg.fusion.use_spatial_consensus is True
         assert cfg.fusion.spatial_sigma_km == 2.0
         assert cfg.fusion.spatial_consensus_weight == 1.0
+        assert cfg.fusion.use_cross_source_agreement is True
+        assert cfg.fusion.cross_source_sigma_km == 15.0
+        assert cfg.fusion.cross_source_weight == 1.0
         assert cfg.fusion.source_prior_retrieval == 1.0
         assert cfg.fusion.source_prior_geoclip == 1.0
         assert cfg.fusion.source_prior_exif == 1.0
@@ -35,6 +38,7 @@ def test_load_config_spatial_consensus_defaults() -> None:
         assert cfg.detector.min_area_px == 16.0
         assert cfg.detector.class_agnostic_nms is False
         assert cfg.detector.use_tta is False
+        assert cfg.detector.nms_mode == "obb"
 
 
 def test_load_config_spatial_consensus_overrides() -> None:
@@ -46,6 +50,9 @@ def test_load_config_spatial_consensus_overrides() -> None:
                     "use_spatial_consensus": False,
                     "spatial_sigma_km": 12.5,
                     "spatial_consensus_weight": 2.5,
+                    "use_cross_source_agreement": False,
+                    "cross_source_sigma_km": 33.0,
+                    "cross_source_weight": 3.0,
                     "source_prior_retrieval": 0.95,
                     "source_prior_geoclip": 1.1,
                     "source_prior_exif": 0.8,
@@ -59,6 +66,7 @@ def test_load_config_spatial_consensus_overrides() -> None:
                     "min_area_px": 20.0,
                     "class_agnostic_nms": True,
                     "use_tta": True,
+                    "nms_mode": "aabb",
                 }
             },
         )
@@ -67,6 +75,9 @@ def test_load_config_spatial_consensus_overrides() -> None:
         assert cfg.fusion.use_spatial_consensus is False
         assert cfg.fusion.spatial_sigma_km == 12.5
         assert cfg.fusion.spatial_consensus_weight == 2.5
+        assert cfg.fusion.use_cross_source_agreement is False
+        assert cfg.fusion.cross_source_sigma_km == 33.0
+        assert cfg.fusion.cross_source_weight == 3.0
         assert cfg.fusion.source_prior_retrieval == 0.95
         assert cfg.fusion.source_prior_geoclip == 1.1
         assert cfg.fusion.source_prior_exif == 0.8
@@ -78,3 +89,4 @@ def test_load_config_spatial_consensus_overrides() -> None:
         assert cfg.detector.min_area_px == 20.0
         assert cfg.detector.class_agnostic_nms is True
         assert cfg.detector.use_tta is True
+        assert cfg.detector.nms_mode == "aabb"

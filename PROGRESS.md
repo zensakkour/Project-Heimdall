@@ -241,3 +241,5 @@ Do not delete or edit past entries. Append new work at the end.
 - Added robust fusion credible-set statistics and exposed credible_set_size in serialized outputs/schema.
 - Added top-cluster robust fusion stats mode to avoid multimodal midpoint bias in ambiguous geolocation outputs.
 - Replaced deprecated datetime.utcnow() usage in UI server health/analysis payload timestamps.
+- Added true OBB-IoU NMS option (detector.nms_mode=obb) and wired it across detector adapters for better rotated-box suppression behavior.
+- Added cross-source agreement fusion likelihood to reward hypotheses corroborated across retrieval/GeoCLIP/EXIF sources and reduce source-isolated outlier dominance.
