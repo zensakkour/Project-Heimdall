@@ -4,7 +4,7 @@ This repo uses **trunk-based development** with `master` as the trunk.
 
 ## Ground Rules
 
-- Be respectful and professional in all interactions (see []()).
+- Be respectful and professional in all interactions.
 - Keep changes focused and small whenever possible.
 - Do not commit secrets, API keys, or private datasets.
 
@@ -53,7 +53,7 @@ Rebase or merge is fine. Keep history clean and avoid long-lived branches.
 ## Issues
 
 - Use the built-in issue forms under `.github/ISSUE_TEMPLATE`.
-- For vulnerabilities, do not open a public issue. Follow []().
+- For vulnerabilities, use a private channel with maintainers when available.
 
 ## Branch Helper Script (Windows)
 Use the helper to create a dated branch name:
