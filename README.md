@@ -320,12 +320,18 @@ Useful geo quality knobs in `geolocator`:
 - `candidate_dedupe_radius_m`: merges near-duplicate candidates from multiple providers.
 - `candidate_max_results`: caps merged candidate count before fusion.
 
+Useful detection quality knobs in `detector`:
+- `min_area_px`: filters tiny unstable detections.
+- `class_agnostic_nms`: when `false`, NMS keeps overlapping boxes from different classes.
+- `use_tta`: enables test-time augmentation in Ultralytics inference.
+
 Useful fusion knobs:
 - `fusion.retrieval_score_norm`: `none`, `zscore_sigmoid`, `minmax`, `rank_exp`.
 - `fusion.source_prior_retrieval`, `fusion.source_prior_geoclip`, `fusion.source_prior_exif`: source-level priors applied before posterior normalization.
 - `fusion.use_spatial_consensus`: enables neighborhood agreement likelihood in fusion.
 - `fusion.spatial_sigma_km`: spatial kernel scale in kilometers.
 - `fusion.spatial_consensus_weight`: strength of spatial consensus in posterior weighting.
+- `fusion.credible_mass`, `fusion.min_credible_candidates`: robust posterior subset used for fused mean/covariance.
 
 ## Data and Model Notes
 

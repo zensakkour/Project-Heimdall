@@ -39,6 +39,7 @@ def update_posterior(prior: FusionResult, current: FusionResult) -> FusionResult
         top2_margin=current.top2_margin,
         confidence_tier=current.confidence_tier,
         ambiguous=current.ambiguous,
+        credible_set_size=current.credible_set_size,
     )
 
 

@@ -4,6 +4,9 @@
     "min_confidence": 0.25,
     "nms_iou": 0.5,
     "max_detections": 100,
+    "min_area_px": 16.0,
+    "class_agnostic_nms": false,
+    "use_tta": false,
     "use_sidecar": true,
     "use_classic": false,
     "imgsz": 1280
@@ -47,6 +50,8 @@
     "terrain_sigma": 100.0,
     "use_shadow": true,
     "use_terrain": false,
+    "credible_mass": 0.9,
+    "min_credible_candidates": 2,
     "top_k": 15
   }
 }
