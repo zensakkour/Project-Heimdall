@@ -55,7 +55,11 @@ def main() -> int:
             use_exif=cfg.geolocator.use_exif,
         )
         if cfg.geolocator.retrieval_index_path:
-            candidate_provider = MultiCandidateProvider([retrieval_provider, geoclip_provider])
+            candidate_provider = MultiCandidateProvider(
+                [retrieval_provider, geoclip_provider],
+                dedupe_radius_m=cfg.geolocator.candidate_dedupe_radius_m,
+                max_candidates=cfg.geolocator.candidate_max_results,
+            )
         else:
             candidate_provider = geoclip_provider
         fusion_cfg = cfg.fusion
