@@ -1,11 +1,11 @@
 .layout-shell {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 32px;
 }
 
 .page-header {
-  padding: 26px 30px;
+  padding: 32px 36px;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: linear-gradient(180deg, rgba(7, 11, 11, 0.9) 0%, rgba(4, 7, 7, 0.98) 100%);
@@ -28,15 +28,15 @@
 .section-card {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 24px;
 }
 
 .section-head {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
-  gap: 24px;
-  padding-bottom: 2px;
+  gap: 30px;
+  padding-bottom: 6px;
 }
 
 .section-title {
@@ -73,7 +73,7 @@
 .inputs {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 18px;
 }
 
 .inputs-row {
@@ -99,10 +99,10 @@
 .file-picker {
   display: flex;
   align-items: center;
-  gap: 14px;
-  min-height: 56px;
+  gap: 16px;
+  min-height: 60px;
   width: 100%;
-  padding: 8px 10px;
+  padding: 10px 12px;
   border-radius: 12px;
   border: 1px solid rgba(127, 184, 138, 0.2);
   background: rgba(5, 8, 8, 0.88);
@@ -138,8 +138,8 @@
 }
 
 #analyze-image {
-  height: 56px;
-  min-width: 220px;
+  height: 60px;
+  min-width: 236px;
 }
 
 .summary {
@@ -164,7 +164,7 @@
 
 .progress-track {
   flex: 1;
-  height: 8px;
+  height: 10px;
   background: #040606;
   border-radius: 999px;
   border: 1px solid rgba(127, 184, 138, 0.16);
@@ -180,8 +180,8 @@
 
 .geo-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 20px;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 24px;
 }
 
 .geo-map,
@@ -189,15 +189,15 @@
 .preview,
 .panel {
   border: 1px solid rgba(127, 184, 138, 0.15);
-  border-radius: 14px;
+  border-radius: 16px;
   background: rgba(4, 6, 6, 0.78);
-  padding: 16px;
+  padding: 20px;
 }
 
 .geo-sidebar {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 14px;
 }
 
 .panel-title {
@@ -208,8 +208,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
+  gap: 14px;
+  margin-bottom: 14px;
 }
 
 .legend-control {
@@ -228,7 +228,7 @@
 
 .globe-canvas {
   width: 100%;
-  height: 500px;
+  height: 540px;
   border-radius: 12px;
   border: 1px solid rgba(127, 184, 138, 0.2);
   background: radial-gradient(circle at 40% 35%, rgba(42, 78, 78, 0.55), rgba(3, 6, 7, 0.96));
@@ -249,7 +249,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-top: 12px;
+  margin-top: 14px;
   font-size: 12px;
 }
 
@@ -286,8 +286,8 @@
 .image-toolbar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 12px;
+  gap: 10px;
+  margin-top: 14px;
 }
 
 .map-toolbar button,
@@ -310,7 +310,7 @@
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
+  padding: 12px 14px;
   border-bottom: 1px solid rgba(120, 246, 215, 0.1);
   cursor: pointer;
 }
@@ -351,19 +351,19 @@
 
 .result-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(340px, 0.9fr);
-  gap: 20px;
+  grid-template-columns: minmax(0, 1.4fr) minmax(360px, 0.86fr);
+  gap: 24px;
 }
 
 .preview {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 #canvas {
   width: 100%;
-  min-height: 520px;
+  min-height: 560px;
   border-radius: 12px;
   border: 1px solid rgba(127, 184, 138, 0.2);
   background: #000;
@@ -373,7 +373,7 @@
 .panel {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
 .panel h3 {
@@ -384,7 +384,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 330px;
+  max-height: 360px;
   overflow: auto;
 }
 
@@ -433,12 +433,12 @@
 }
 
 .details {
-  min-height: 220px;
+  min-height: 260px;
   margin: 0;
   border-radius: 12px;
   border: 1px solid rgba(127, 184, 138, 0.14);
   background: rgba(3, 5, 5, 0.86);
-  padding: 12px 14px;
+  padding: 14px 16px;
   color: var(--text);
   font-size: 12px;
   line-height: 1.45;
@@ -456,8 +456,8 @@
 
 .score-form {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 220px 180px 180px;
-  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 230px 190px 190px;
+  gap: 16px;
   align-items: end;
 }
 
