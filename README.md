@@ -38,9 +38,10 @@ Current non-goals include:
 
 ### Analysis App Video (Desktop)
 
-<video src="docs/images/analysis-demo.webm" controls muted playsinline width="100%"></video>
+[![Watch demo video](docs/images/analysis-desktop.png)](docs/images/analysis-demo.webm)
 
-Fallback link: [Watch/download demo video](docs/images/analysis-demo.webm)
+GitHub does not render embedded `<video>` tags in README reliably, so use the preview image above to open the video.
+Direct link: [Watch/download demo video](docs/images/analysis-demo.webm)
 
 ### Analysis App Screenshot (Desktop)
 
