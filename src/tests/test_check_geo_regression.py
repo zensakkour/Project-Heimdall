@@ -36,3 +36,9 @@ def test_compare_reports_detects_regression() -> None:
     assert any("mean_km" in item for item in regressions)
     assert any("within_1km_pct" in item for item in regressions)
 
+
+def test_compare_reports_allows_missing_optional_calibration_metrics() -> None:
+    baseline = _baseline()
+    candidate = dict(baseline)
+    regressions = compare_reports(baseline, candidate)
+    assert regressions == []

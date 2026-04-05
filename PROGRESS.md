@@ -243,3 +243,131 @@ Do not delete or edit past entries. Append new work at the end.
 - Replaced deprecated datetime.utcnow() usage in UI server health/analysis payload timestamps.
 - Added true OBB-IoU NMS option (detector.nms_mode=obb) and wired it across detector adapters for better rotated-box suppression behavior.
 - Added cross-source agreement fusion likelihood to reward hypotheses corroborated across retrieval/GeoCLIP/EXIF sources and reduce source-isolated outlier dominance.
+- Added retrieval diversity controls in `GeoRetrievalProvider` (`retrieval_diversity_radius_km`, `retrieval_diversity_lambda`, `retrieval_diversity_min_keep`) and wired them through CLI/UI/batch/eval pipelines.
+- Added fusion plausibility reranking (`use_plausibility_rerank`, `plausibility_radius_km`, `plausibility_weight`) plus calibrated confidence tiering (`confidence_calibration_logit_scale`, `confidence_calibration_logit_bias`, threshold knobs).
+- Extended fusion serialization/schema with `calibrated_top1_posterior` and added regression coverage for plausibility and calibration behavior.
+- Added hard-negative benchmark tooling (`geo_hard_negative_report`) with top-1 distance buckets, top-5@25km, per-group summaries, and hardest-sample export.
+- Added auto-fit tooling for source priors (`fit_fusion_priors`) and confidence calibration (`fit_confidence_calibration`) from eval outputs.
+- Expanded tuning/metrics tooling: `tune_geo_fusion` now sweeps diversity/plausibility axes and `eval_metrics` now outputs top-1 km aggregates + hard-negative bucket diagnostics.
+- Added uncertainty-aware confidence tier caps so high/medium confidence can be downgraded when fused uncertainty radius is too large.
+- Added `geo_impact_report` tool to generate JSON + Markdown delta reports between baseline and candidate geo metrics for clear change impact documentation.
+- Added cross-source support-aware confidence tier caps (`confidence_high_min_cross_source_support`, `confidence_medium_min_cross_source_support`) to prevent source-isolated top-1 hypotheses from receiving overconfident tiers.
+- Extended fusion outputs/schema with `top1_cross_source_support` for explainability and confidence auditability.
+- Expanded `eval_metrics` with confidence reliability reporting (`avg_top1_cross_source_support`, `high_confidence_coverage_pct`, `high_confidence_top1`, `medium_or_higher_coverage_pct`, `medium_or_higher_top1`) and wired those into impact-report comparisons.
+- Added retrieval-locality reranking (`retrieval_locality_radius_km`, `retrieval_locality_weight`) to down-rank geographically isolated high-score retrieval candidates before fusion.
+- Added `merge_geo_indices` utility to combine multiple retrieval `.npz` indices with exact and optional spatial+embedding deduplication for larger coverage datasets.
+- Fixed retrieval index loading compatibility for legacy object-array `ids/paths`, restoring retrieval candidate generation on older `.npz` indices.
+- Added `tune_retrieval_geo` utility for fast precision sweeps over retrieval top-k/min-score/diversity/locality parameters using cached raw candidates.
+- Improved robust fusion statistics for ambiguous multimodal outputs: top-cluster selection now chooses the strongest local posterior cluster by mass instead of hard-anchoring on top-1.
+- Upgraded temporal tracking association to use geodesic distance and uncertainty-aware adaptive gating, improving stability across global/dateline cases.
+- Added regression coverage for both upgrades:
+  - `test_top_cluster_stats_choose_densest_cluster_not_top1_anchor`
+  - new `test_tracking.py` suite (base-gate behavior, uncertainty gate expansion, dateline association).
+- Ran full test suite after changes: `78 passed, 3 warnings`.
+- Replaced temporal filtering stub (`update_posterior`) with proximity-weighted Bayesian-style reweighting against prior candidates, plus posterior diagnostics recomputation.
+- Added adaptive temporal uncertainty shrinkage when consecutive frames agree and robust weighted covariance/longitude handling in filtering.
+- Wired sequence evaluation (`run_sequence_eval`) to apply temporal posterior updates across frames instead of storing only raw per-frame fusion outputs.
+- Added `test_filtering.py` suite for temporal consistency reweighting, uncertainty reduction on agreement, and empty-candidate passthrough behavior.
+- Re-ran full suite after temporal filtering changes: `81 passed, 3 warnings`.
+- Added retrieval query TTA for geo matching: configurable multi-rotation query embeddings (`retrieval_query_tta_degrees`) with score aggregation mode (`retrieval_query_tta_reduce`: `mean`/`max`).
+- Wired retrieval TTA knobs through all runtime paths (CLI, batch, run_all, run_geo_eval, UI server, and tune_retrieval_geo).
+- Updated config profiles (`defaults`, `open_geo`, `paris`, `paris_test`) to enable rotation-ensemble retrieval by default (`[0,90,180,270]`, reduce=`max`).
+- Added retrieval TTA regression tests (`test_retrieval_tta.py`) and extended config loading tests for new geolocator fields.
+- Hardened retrieval score stability by clamping similarity scores to `[-1, 1]` before ranking/thresholding.
+- Ran quick retrieval-only A/B eval on SpaceNet Paris subset (`limit=120`) for TTA-off vs TTA-on configs; metrics were equivalent on this sample (likely index/eval leakage dominated), and outputs are saved under `runs/geo_eval_paris_no_tta_120.json` and `runs/geo_eval_paris_tta_120.json`.
+- Added retrieval fallback recall control `retrieval_min_keep_topk` to keep a minimum number of top-k candidates even when `retrieval_min_score` filters everything, reducing null-geo failure modes.
+- Extended retrieval TTA aggregation to support `rrf` (reciprocal-rank fusion) in addition to `mean`/`max`, with config parsing support.
+- Wired `retrieval_min_keep_topk` through CLI/batch/UI/eval/tuning paths and added it to config profiles.
+- Expanded test coverage for these upgrades:
+  - `test_retrieval_provider_min_keep.py` for strict-threshold fallback behavior
+  - `test_retrieval_tta.py` for `rrf` aggregation ranking behavior
+  - `test_tune_retrieval_geo.py` for min-keep postprocess behavior
+  - `test_config_loading.py` for `retrieval_min_keep_topk` and `retrieval_query_tta_reduce=rrf`.
+- Stress-validated fallback recall behavior on a strict-threshold retrieval-only run (`retrieval_min_score=1.1`, `limit=40`, Paris chips):
+  - `retrieval_min_keep_topk=0`: `evaluated=0`, `null_predictions=40`
+  - `retrieval_min_keep_topk=2`: `evaluated=40`, `null_predictions=0`
+  - reports: `runs/geo_eval_paris_strict_keep0_40.json` and `runs/geo_eval_paris_strict_keep2_40.json`.
+- Re-ran full suite after this sprint: `88 passed, 3 warnings`.
+- Added weighted multi-index retrieval support in `GeoRetrievalProvider` (`retrieval_index_paths`, `retrieval_index_weights`, `retrieval_per_index_top_k`) so multiple datasets can be queried in one pass with source balancing.
+- Fixed retrieval query-TTA mode handling so `retrieval_query_tta_reduce=rrf` is honored by runtime provider initialization.
+- Wired new multi-index knobs across CLI, batch runner, run_all, geo_eval, UI server, and retrieval tuning/report outputs.
+- Expanded open-data bootstrap: `download_open_geo` now supports Wikimedia geosearch API collection across global anchor cities (`--mode api`) plus curated fallback mode.
+- Added dependency-resilience hardening:
+  - lazy import of heavy `pandas` dependency in `run_geo_eval` and `tune_retrieval_geo`
+  - pure-Python fallback path for `ClassicDetector` when `cv2` is unavailable.
+- Added dataset-aware fusion priors for multi-index retrieval:
+  - new config knob `fusion.source_prior_retrieval_by_source` to tune priors per retrieval source key
+  - supports both `retrieval:<source>` and `<source>` keys for match IDs shaped like `retrieval:<source>:<item>`.
+- Fusion source parsing is backward-compatible with legacy retrieval IDs (`retrieval:<item>`), preserving previous single-source-family cross-source behavior.
+- Upgraded `fit_fusion_priors` to emit retrieval source-specific priors from eval outputs:
+  - source reliability now tracks `retrieval_by_source` buckets for source-aware IDs (`retrieval:<source>:<item>`)
+  - new CLI control `--per-source-min-count` to avoid overfitting sparse sources
+  - output now includes `recommended_retrieval_source_priors` and, when available, `config_patch.fusion.source_prior_retrieval_by_source`.
+- Added direct config patch workflow for prior fitting:
+  - `fit_fusion_priors` now supports `--apply-config --config <path>` and writes global + per-source retrieval priors directly into the target fusion config.
+  - Added regression test coverage for config patch behavior in `test_fit_fusion_priors.py`.
+- Added per-index score normalization for retrieval fusion across heterogeneous indices:
+  - new geolocator knob `retrieval_index_score_norm` with modes `auto`, `none`, `minmax`, `zscore_sigmoid`, `rank_exp`
+  - `auto` defaults to source-wise `zscore_sigmoid` when multiple retrieval indices are active and keeps `none` for single-index setups
+  - wired through CLI/batch/UI/eval/tuning and emitted in geo eval/tuning reports.
+- Added regression coverage for normalization behavior:
+  - `test_index_score_norm_zscore_sigmoid_rebalances_heterogeneous_indices`
+  - `test_index_score_norm_auto_uses_multi_index_normalization`
+  - config loader coverage for `retrieval_index_score_norm` (default, override, invalid fallback).
+- Added direct config patch workflow for confidence calibration:
+  - `fit_confidence_calibration` now supports `--apply-config --config <path>` to write learned calibration scale/bias and tier thresholds into fusion config.
+  - calibration patch generation now enforces monotonic tier thresholds (`confidence_medium_threshold <= confidence_high_threshold`) for noisy/small datasets.
+  - Added regression tests for calibration patch writing and threshold monotonicity in `test_fit_confidence_calibration.py`.
+- Added source-balanced retrieval selection for multi-index setups:
+  - new geolocator knob `retrieval_source_balance_beta` to reduce top-k domination by a single retrieval index source.
+  - balance is applied after locality reranking and before geographic diversity selection.
+  - integrated across CLI/batch/UI/eval/tuning, with report visibility in `run_geo_eval` and `tune_retrieval_geo`.
+- Added normalization + source-balance regression coverage in `test_retrieval_provider_multi_index.py`.
+- Extended retrieval tuning search space to include `retrieval_source_balance_beta` sweeps and apply the best discovered value back into config.
+- Added end-to-end geo auto-tuning orchestrator `auto_tune_geo_stack`:
+  - runs retrieval tuning + optional result generation + fusion prior fitting + confidence calibration patching in one command
+  - writes a structured run summary (`auto_tune_summary.json`) with per-step status.
+- Added regression coverage for orchestration and new tuning behavior:
+  - `test_auto_tune_geo_stack.py`
+  - updated `test_tune_retrieval_geo.py` for source-balance postprocessing behavior.
+- Added source-balanced multi-provider candidate merge:
+  - new `geolocator.candidate_source_balance_beta` to reduce retrieval-only dominance after provider merge and preserve cross-provider hypotheses before fusion.
+  - wired through CLI/batch/run_all/geo_eval/UI and surfaced in eval/tuning report metadata.
+  - added regression coverage in `test_multi_provider.py` for balanced vs unbalanced merged top-k behavior.
+- Added/updated regression coverage:
+  - `test_retrieval_provider_multi_index.py`
+  - `test_download_open_geo.py`
+  - updated `test_retrieval_provider_min_keep.py`, `test_retrieval_tta.py`, `test_config_loading.py`, `test_run_geo_eval_retrieval_provider.py`.
+- Added/updated fusion-prior tests:
+  - `test_retrieval_source_priors_can_shift_multi_index_ranking`
+  - config parsing assertions for `source_prior_retrieval_by_source`.
+  - retrieval fitter tests for per-source reliability and source-prior recommendation behavior.
+- Validation:
+  - focused suite: `18 passed`
+  - non-UI suite (`src/tests/test_*.py` excluding `ui_server` tests): `105 passed`
+  - full `pytest -q` in this environment still blocked by missing optional dependency `fastapi` for UI server tests.
+- Added adaptive fusion outlier guard:
+  - new fusion knobs `use_adaptive_outlier_guard`, `outlier_guard_strength`, `outlier_guard_min_scale_km`, `outlier_guard_mad_scale`
+  - applies robust medoid/MAD-based spatial suppression to reduce isolated candidate dominance before final posterior ranking
+  - added fusion regression coverage for guard on/off and zero-strength behavior.
+- Hardened `auto_tune_geo_stack` reliability:
+  - auto-saves original config and restores it on any failed tuning/calibration step
+  - now writes both machine-readable (`auto_tune_summary.json`) and human-readable (`auto_tune_summary.md`) run summaries
+  - added regression coverage for config rollback behavior in `test_auto_tune_geo_stack.py`.
+- Added reality-check benchmark artifacts and documented leakage gap between leaky and realistic geo eval setups:
+  - `runs/bench_current_leaky_180.json` (median near-zero due to eval/index leakage)
+  - `runs/bench_realistic_single_180.json` (realistic baseline, significantly higher error)
+  - `runs/bench_candidate_multi_180.json` (multi-index baseline comparison).
+- Added backbone benchmark tool `src/tools/benchmark_geo_backbones.py` to rebuild/evaluate retrieval indices per model and rank models by geo error metrics.
+- Added retrieval embedder fallback path to support non-CLIP vision backbones (e.g., SigLIP) and validated with regression tests.
+- Implemented true multi-backbone retrieval ensemble support:
+  - per-index model routing via new config knob `geolocator.retrieval_index_model_ids`
+  - retrieval index metadata now stores `model_id` in built `.npz` indices
+  - runtime now computes query embeddings per unique model and applies them to matching indices.
+- Wired `retrieval_index_model_ids` through config loading, runtime/eval tooling, and docs.
+- Added regression coverage for:
+  - per-index model-id loading from index files
+  - multi-index retrieval with different embedding dimensions/backbones in one request path.
+- Validation in this environment:
+  - focused retrieval/config/eval suites passed (`19 passed`)
+  - full model/UI execution remains environment-limited when optional deps like `torch` or `fastapi` are unavailable.

@@ -25,6 +25,9 @@ LOWER_IS_BETTER = {
     "median_km": {"relative": 0.10, "absolute": 0.5},
     "p90_km": {"relative": 0.12, "absolute": 2.0},
     "p95_km": {"relative": 0.12, "absolute": 3.0},
+    "ece": {"relative": 0.20, "absolute": 0.02},
+    "brier": {"relative": 0.20, "absolute": 0.02},
+    "nll": {"relative": 0.20, "absolute": 0.02},
 }
 
 
@@ -63,6 +66,8 @@ def compare_reports(baseline: dict, candidate: dict) -> list[str]:
     for metric, tol in LOWER_IS_BETTER.items():
         b = baseline.get(metric)
         c = candidate.get(metric)
+        if b is None and c is None:
+            continue
         if b is None or c is None:
             regressions.append(f"{metric}: missing in baseline or candidate")
             continue
@@ -110,4 +115,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

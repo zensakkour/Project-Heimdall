@@ -47,6 +47,8 @@ def test_fusion_diagnostics_serialization() -> None:
         normalized_entropy=0.1,
         effective_candidate_count=1.2,
         top1_posterior=0.9,
+        calibrated_top1_posterior=0.82,
+        top1_cross_source_support=0.65,
         top2_margin=0.8,
         confidence_tier="high",
         ambiguous=False,
@@ -58,6 +60,6 @@ def test_fusion_diagnostics_serialization() -> None:
     assert payload["fusion"]["confidence_tier"] == "high"
     assert payload["fusion"]["ambiguous"] is False
     assert payload["fusion"]["top1_posterior"] == 0.9
+    assert payload["fusion"]["calibrated_top1_posterior"] == 0.82
+    assert payload["fusion"]["top1_cross_source_support"] == 0.65
     assert payload["fusion"]["credible_set_size"] == 1
-
-

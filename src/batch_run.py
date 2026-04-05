@@ -16,6 +16,7 @@ from src.core.logic.config import (
     FusionConfig,
     ScoreConfig,
     VerificationConfig,
+    has_retrieval_index,
     load_config,
 )
 from src.core.logic.pipeline import HeimdallPipeline
@@ -43,9 +44,23 @@ def build_pipeline(
         )
         retrieval_provider = GeoRetrievalProvider(
             index_path=geo_cfg.retrieval_index_path,
+            index_paths=geo_cfg.retrieval_index_paths,
+            index_weights=geo_cfg.retrieval_index_weights,
+            index_model_ids=geo_cfg.retrieval_index_model_ids,
             model_id=geo_cfg.retrieval_model_id or "openai/clip-vit-large-patch14",
             top_k=geo_cfg.retrieval_top_k,
+            per_index_top_k=geo_cfg.retrieval_per_index_top_k,
+            index_score_norm=geo_cfg.retrieval_index_score_norm,
+            source_balance_beta=geo_cfg.retrieval_source_balance_beta,
             min_score=geo_cfg.retrieval_min_score,
+            min_keep_topk=geo_cfg.retrieval_min_keep_topk,
+            diversity_radius_km=geo_cfg.retrieval_diversity_radius_km,
+            diversity_lambda=geo_cfg.retrieval_diversity_lambda,
+            diversity_min_keep=geo_cfg.retrieval_diversity_min_keep,
+            locality_radius_km=geo_cfg.retrieval_locality_radius_km,
+            locality_weight=geo_cfg.retrieval_locality_weight,
+            query_tta_degrees=geo_cfg.retrieval_query_tta_degrees,
+            query_tta_reduce=geo_cfg.retrieval_query_tta_reduce,
         )
         geoclip_provider = GeoCLIPProvider(
             model_path=geo_cfg.model_path,
@@ -55,10 +70,11 @@ def build_pipeline(
             use_sidecar=geo_cfg.use_sidecar,
             use_exif=geo_cfg.use_exif,
         )
-        if geo_cfg.retrieval_index_path:
+        if has_retrieval_index(geo_cfg):
             candidate_provider = MultiCandidateProvider(
                 [retrieval_provider, geoclip_provider],
                 dedupe_radius_m=geo_cfg.candidate_dedupe_radius_m,
+                source_balance_beta=geo_cfg.candidate_source_balance_beta,
                 max_candidates=geo_cfg.candidate_max_results,
             )
         else:
@@ -125,5 +141,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
-

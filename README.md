@@ -106,6 +106,7 @@ The platform is organized as a modular pipeline:
 - Geolocation runtime: `sdan/geospot-base` for geo candidate inference.
 - Retrieval model support: CLIP-based retrieval index with default model
   `openai/clip-vit-large-patch14`.
+  - Multi-backbone retrieval is supported via per-index model routing (`retrieval_index_model_ids`).
 - Geo and fusion config: `src/config/defaults.json` (`geolocator.*`, `fusion.*`).
 - Fusion behavior: log-space posterior fusion over ranked geo candidates.
 - Uncertainty outputs: radius and ellipse exposed in pipeline outputs/UI.
@@ -119,10 +120,23 @@ Current implementation status:
 - Geo candidate stack:
   - Multi-provider candidate generation (retrieval index + GeoSpot/GeoCLIP + EXIF/sidecar fallbacks).
   - Candidate validation, near-duplicate merge, and bounded candidate output before fusion.
+  - Retrieval candidate diversity control (`retrieval_diversity_radius_km`, `retrieval_diversity_lambda`, `retrieval_diversity_min_keep`).
+  - Retrieval minimum-candidate keep policy (`retrieval_min_keep_topk`) to avoid null geo outputs in low-similarity scenes.
+  - Retrieval locality reranking (`retrieval_locality_radius_km`, `retrieval_locality_weight`) to suppress geographically isolated false matches.
+  - Retrieval query TTA with rotation ensembling (`retrieval_query_tta_degrees`, `retrieval_query_tta_reduce`) for aerial orientation robustness.
+  - Multi-index retrieval support with per-index weighting (`retrieval_index_paths`, `retrieval_index_weights`, `retrieval_per_index_top_k`) for scalable dataset expansion.
+  - Per-index retrieval model routing (`retrieval_index_model_ids`) so one run can mix indices built by different embedding backbones.
+  - Per-index score normalization for multi-index retrieval (`retrieval_index_score_norm`) to reduce cross-dataset score-scale bias.
+  - Source-balanced retrieval selection (`retrieval_source_balance_beta`) to prevent single-index domination in multi-source top-k.
+  - Source-balanced multi-provider candidate merge (`candidate_source_balance_beta`) to preserve cross-provider hypotheses before fusion.
 - Fusion and uncertainty:
   - Log-space probabilistic fusion with configurable retrieval normalization (`none`, `zscore_sigmoid`, `minmax`, `rank_exp`).
   - Spatial-consensus likelihood to down-rank isolated outliers and favor geographically consistent hypotheses.
   - Cross-source agreement likelihood to reward hypotheses supported across retrieval/GeoCLIP/EXIF sources.
+  - Optional plausibility reranking to favor coherent candidate clusters after posterior inference.
+  - Adaptive outlier guard likelihood to downweight geographically isolated hypotheses with robust MAD-scale support (`use_adaptive_outlier_guard` + knobs).
+  - Confidence calibration knobs (logit scale/bias + tier thresholds) for stricter confidence-tier gating.
+  - Cross-source support-aware tier caps to prevent high confidence when the top hypothesis is source-isolated.
   - Dateline-safe longitude fusion and uncertainty ellipse/radius outputs.
   - Optional shadow/terrain likelihood terms.
 - Runtime resiliency:
@@ -130,13 +144,18 @@ Current implementation status:
   - Safe-demo analysis fallback when heavy model dependencies are unavailable.
 - Evaluation and tuning:
   - Geo regression gate tooling (`check_geo_regression`) with baseline/current reports in `docs/eval/`.
-  - Fusion tuning script (`tune_geo_fusion`) supporting retrieval and consensus-weight sweeps.
-  - Calibration/error metrics (`ece`, `brier`, `nll`) in `eval_metrics`.
+  - Fusion tuning script (`tune_geo_fusion`) supporting retrieval, diversity, consensus, cross-source, and plausibility sweeps.
+  - Hard-negative benchmark report generator (`geo_hard_negative_report`) with distance buckets and per-group summaries.
+  - Auto-fit utilities for source priors (`fit_fusion_priors`) and confidence calibration (`fit_confidence_calibration`).
+  - Transaction-safe auto-tuning orchestration with rollback-on-failure and markdown/json run summaries (`auto_tune_geo_stack`).
+  - Calibration/error metrics (`ece`, `brier`, `nll`) plus top-1/top-5 hard-negative diagnostics in `eval_metrics`.
+  - Confidence reliability diagnostics in eval reports (`avg_top1_cross_source_support`, `high_confidence_top1`, `medium_or_higher_top1`).
 
 Current technical focus:
 
 - Expanding retrieval coverage quality (more diverse geo references and hard negatives).
-- Continuing fusion calibration against tracked geo benchmarks.
+- Calibrating confidence and source priors from benchmark outputs instead of static defaults.
+- Iterating on benchmark-driven plausibility reranking.
 
 ## Repository Structure
 
@@ -280,6 +299,70 @@ Update workflow:
 1. Run the regression gate command above.
 1. If metric changes are intentional, update `docs/eval/geo_eval_baseline.json` in a dedicated PR with rationale.
 
+### Hard-negative benchmark report
+
+```powershell
+.\.venv\Scripts\python -m src.tools.geo_hard_negative_report --results runs/results.jsonl --ground-truth data/spacenet_paris/metadata.csv --output runs/hard_negative_report.json
+```
+
+### Merge multiple geo retrieval indices (scale data coverage)
+
+```powershell
+.\.venv\Scripts\python -m src.tools.merge_geo_indices --inputs data/geo_index/open_geo_clip.npz data/geo_index/spacenet_paris_clip.npz --output data/geo_index/merged_clip.npz --dedupe-radius-m 75
+```
+
+### Fit fusion source priors from eval outputs
+
+```powershell
+.\.venv\Scripts\python -m src.tools.fit_fusion_priors --results runs/results.jsonl --ground-truth data/spacenet_paris/metadata.csv --per-source-min-count 5 --output runs/fusion_priors.json
+```
+
+Apply learned priors directly to config:
+```powershell
+.\.venv\Scripts\python -m src.tools.fit_fusion_priors --results runs/results.jsonl --ground-truth data/spacenet_paris/metadata.csv --per-source-min-count 5 --apply-config --config src/config/defaults.json --output runs/fusion_priors.json
+```
+
+### Fit confidence calibration from eval outputs
+
+```powershell
+.\.venv\Scripts\python -m src.tools.fit_confidence_calibration --results runs/results.jsonl --ground-truth data/spacenet_paris/metadata.csv --output runs/confidence_calibration.json
+```
+
+Apply learned calibration directly to config:
+```powershell
+.\.venv\Scripts\python -m src.tools.fit_confidence_calibration --results runs/results.jsonl --ground-truth data/spacenet_paris/metadata.csv --apply-config --config src/config/defaults.json --output runs/confidence_calibration.json
+```
+
+### Tune retrieval precision (fast sweep on cached raw candidates)
+
+```powershell
+.\.venv\Scripts\python -m src.tools.tune_retrieval_geo --config src/config/paris_test.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 300 --output runs/tune_retrieval_geo.json --apply-best-config
+```
+
+### Auto-tune full geo stack (retrieval + priors + calibration)
+
+```powershell
+.\.venv\Scripts\python -m src.tools.auto_tune_geo_stack --config src/config/defaults.json --images-dir data/spacenet_paris/chips --metadata data/spacenet_paris/metadata.csv --results runs/results.jsonl --output-dir runs/auto_tune_geo
+```
+
+Outputs include:
+- `runs/auto_tune_geo/auto_tune_summary.json`
+- `runs/auto_tune_geo/auto_tune_summary.md`
+
+If any tuning/calibration step fails, the command now restores the original config automatically.
+
+### Benchmark retrieval backbones (model selection by measured geo error)
+
+```powershell
+.\.venv\Scripts\python -m src.tools.benchmark_geo_backbones --train-images-dir data/spacenet_paris/chips --train-metadata data/spacenet_paris/metadata.csv --eval-images-dir data/spacenet_paris_test/chips --eval-metadata data/spacenet_paris_test/metadata.csv --model-ids "openai/clip-vit-large-patch14,google/siglip-base-patch16-224" --train-limit 600 --eval-limit 200 --output runs/backbone_bench/backbone_benchmark.json
+```
+
+### Generate impact report (baseline vs candidate)
+
+```powershell
+.\.venv\Scripts\python -m src.tools.geo_impact_report --baseline docs/eval/geo_eval_baseline.json --candidate docs/eval/geo_eval_current.json --output-json runs/geo_impact.json --output-md runs/geo_impact.md
+```
+
 ### Run test suite
 
 ```powershell
@@ -319,7 +402,22 @@ Pass a config where supported with `--config <path>`.
 
 Useful geo quality knobs in `geolocator`:
 - `candidate_dedupe_radius_m`: merges near-duplicate candidates from multiple providers.
+- `candidate_source_balance_beta`: source-balancing strength for merged candidates from retrieval/GeoCLIP/EXIF (`0` disables balancing).
 - `candidate_max_results`: caps merged candidate count before fusion.
+- `retrieval_diversity_radius_km`: geographic distance scale for retrieval diversification.
+- `retrieval_diversity_lambda`: relevance-vs-diversity tradeoff (`1.0` = no diversification).
+- `retrieval_diversity_min_keep`: number of top raw retrievals always preserved before diversification.
+- `retrieval_min_keep_topk`: minimum candidates to keep from top-k even if `retrieval_min_score` is too strict.
+- `retrieval_locality_radius_km`: distance scale for locality support reranking.
+- `retrieval_locality_weight`: strength of locality reranking (higher penalizes isolated candidates more).
+- `retrieval_query_tta_degrees`: query-time rotation ensemble angles in degrees.
+- `retrieval_query_tta_reduce`: how augmented similarity scores are merged (`mean`, `max`, or `rrf`).
+- `retrieval_index_paths`: optional list of extra retrieval indices to query alongside `retrieval_index_path`.
+- `retrieval_index_weights`: optional per-index score multipliers (same order as `retrieval_index_paths`).
+- `retrieval_index_model_ids`: optional per-index embedding model IDs (same order as `retrieval_index_path` + `retrieval_index_paths`) to mix different backbones in one retrieval pass.
+- `retrieval_per_index_top_k`: optional per-index cap before global merge/rerank (`0` uses `retrieval_top_k`).
+- `retrieval_index_score_norm`: per-index score normalization mode (`auto`, `none`, `minmax`, `zscore_sigmoid`, `rank_exp`); `auto` uses `zscore_sigmoid` for multi-index and `none` for single-index.
+- `retrieval_source_balance_beta`: source-balancing strength for multi-index top-k selection (`0` disables balancing).
 
 Useful detection quality knobs in `detector`:
 - `min_area_px`: filters tiny unstable detections.
@@ -330,12 +428,24 @@ Useful detection quality knobs in `detector`:
 Useful fusion knobs:
 - `fusion.retrieval_score_norm`: `none`, `zscore_sigmoid`, `minmax`, `rank_exp`.
 - `fusion.source_prior_retrieval`, `fusion.source_prior_geoclip`, `fusion.source_prior_exif`: source-level priors applied before posterior normalization.
+- `fusion.source_prior_retrieval_by_source`: optional per-retrieval-source priors (for IDs like `retrieval:<source>:<item>` in multi-index retrieval).
 - `fusion.use_spatial_consensus`: enables neighborhood agreement likelihood in fusion.
 - `fusion.spatial_sigma_km`: spatial kernel scale in kilometers.
 - `fusion.spatial_consensus_weight`: strength of spatial consensus in posterior weighting.
 - `fusion.use_cross_source_agreement`: enables cross-provider support likelihood in fusion.
 - `fusion.cross_source_sigma_km`: distance scale for cross-source agreement kernel.
 - `fusion.cross_source_weight`: strength of cross-source agreement in posterior weighting.
+- `fusion.use_plausibility_rerank`: applies post-posterior spatial coherence reranking.
+- `fusion.plausibility_radius_km`: radius used for plausibility neighborhood support.
+- `fusion.plausibility_weight`: strength of plausibility reranking.
+- `fusion.use_adaptive_outlier_guard`: enables adaptive robust outlier suppression based on weighted candidate support.
+- `fusion.outlier_guard_strength`: strength of adaptive outlier suppression (`0` keeps baseline behavior).
+- `fusion.outlier_guard_min_scale_km`: minimum spatial scale for outlier guard stability.
+- `fusion.outlier_guard_mad_scale`: MAD multiplier controlling tolerance to dispersed hypotheses.
+- `fusion.confidence_calibration_logit_scale`, `fusion.confidence_calibration_logit_bias`: calibrate top-1 posterior before tiering.
+- `fusion.confidence_high_threshold`, `fusion.confidence_medium_threshold`: enforce stricter tier gates.
+- `fusion.confidence_high_min_cross_source_support`, `fusion.confidence_medium_min_cross_source_support`: cap high/medium tiers when top-1 cross-source support is weak.
+- `fusion.confidence_high_max_uncertainty_m`, `fusion.confidence_medium_max_uncertainty_m`: cap high/medium tiers when fused uncertainty is too large.
 - `fusion.credible_mass`, `fusion.min_credible_candidates`: robust posterior subset used for fused mean/covariance.
 - `fusion.use_top_cluster_for_stats`, `fusion.credible_cluster_radius_km`, `fusion.min_credible_cluster_weight`: constrain fused stats to the dominant spatial mode when hypotheses are ambiguous.
 
@@ -345,6 +455,11 @@ Useful fusion knobs:
 - Typical local path: `data/geo_index/*.npz`
 - Typical local path: `data/models/*`
 - Typical local path: `data/dota_v1/*`
+- Open geo bootstrap (Wikimedia API, broader coverage):
+```powershell
+.\.venv\Scripts\python -m src.tools.download_open_geo --mode api --limit 300 --per-anchor 25 --output data/open_geo
+.\.venv\Scripts\python -m src.tools.build_geo_index --images-dir data/open_geo/images --metadata data/open_geo/metadata.csv --output data/geo_index/open_geo_clip.npz
+```
 - See [Geo Tech Notes](src/docs/GEO_TECH.md) for deeper implementation and dataset details.
 
 ## Engineering and Contribution
