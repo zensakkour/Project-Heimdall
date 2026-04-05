@@ -1,0 +1,26 @@
+name: Eval Gate
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+jobs:
+  geo-regression-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run geo baseline gate
+        run: |
+          python -m src.tools.check_geo_regression \
+            --baseline docs/eval/geo_eval_baseline.json \
+            --candidate docs/eval/geo_eval_current.json
+

@@ -214,6 +214,18 @@ If filesystem watcher issues occur, run without reload:
 .\.venv\Scripts\python -m src.tools.generate_ui_data --jsonl runs/results.jsonl
 ```
 
+### Geo baseline gate (regression check)
+
+```powershell
+.\.venv\Scripts\python -m src.tools.check_geo_regression --baseline docs/eval/geo_eval_baseline.json --candidate docs/eval/geo_eval_current.json
+```
+
+Update workflow:
+
+1. Run geo eval and save latest report to `docs/eval/geo_eval_current.json`.
+2. Run the regression gate command above.
+3. If metric changes are intentional, update `docs/eval/geo_eval_baseline.json` in a dedicated PR with rationale.
+
 ### Run test suite
 
 ```powershell
