@@ -13,13 +13,12 @@ From repository root:
 
 ```powershell
 .\.venv\Scripts\python -m src.tools.generate_ui_data --jsonl runs/results.jsonl
-.\.venv\Scripts\python -m uvicorn src.tools.ui_server:app --reload --port 8000
+.\.venv\Scripts\python -m src.tools.dev_app
 ```
 
 Open:
 
-- `http://127.0.0.1:8000/`
-- `http://127.0.0.1:8000/analysis/`
+- Open the URL printed in your terminal (example: `http://127.0.0.1:8000/analysis/`).
 
 ## Frontend Layout
 
@@ -41,3 +40,31 @@ Open:
 ## Screenshot Assets
 
 README screenshots are stored in `docs/images/` at repo root.
+
+## Demo Video Asset
+
+Place the desktop demo video at:
+
+- `docs/images/analysis-demo.webm`
+- `docs/images/analysis-desktop.png`
+
+Generate/update video automatically:
+
+```powershell
+.\.venv\Scripts\python -m pip install playwright
+.\.venv\Scripts\python -m playwright install chromium
+.\.venv\Scripts\python -m src.tools.record_demo_video
+```
+
+Optional (include `Analyze Image` run if deps are healthy):
+
+```powershell
+.\.venv\Scripts\python -m src.tools.record_demo_video --with-analyze
+```
+
+Recommended demo interactions to include:
+
+1. Upload image and run `Analyze Image`.
+2. Rotate/pan the 3D globe by dragging.
+3. Zoom in/out with mouse scroll on globe.
+4. Use map buttons: `Zoom In`, `Zoom Out`, `Reset`.
