@@ -43,10 +43,6 @@ Current non-goals include:
 GitHub does not render embedded `<video>` tags in README reliably, so use the preview image above to open the video.
 Direct link: [Watch/download demo video](docs/images/analysis-demo.webm)
 
-### Analysis App Screenshot (Desktop)
-
-![Heimdall analysis desktop](docs/images/analysis-desktop.png)
-
 To regenerate this demo automatically:
 
 ```powershell
