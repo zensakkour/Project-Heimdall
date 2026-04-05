@@ -980,6 +980,28 @@ function useSavedBenchmarkView() {
 }
 
 let benchmarkRunsCache = [];
+let currentBenchmarkRun = null;
+
+function fmtRunLabel(run) {
+  if (!run) return "unknown";
+  const runId = run.run_id || "-";
+  const generatedAt = run.generated_at || "-";
+  return `${generatedAt} | run_id=${runId}`;
+}
+
+function setBenchmarkOutputMeta(source, run) {
+  const el = byId("bench-output-meta");
+  if (!el) return;
+  if (source === "current" && run) {
+    el.textContent = `Showing: current run | ${fmtRunLabel(run)}`;
+    return;
+  }
+  if (source === "saved" && run) {
+    el.textContent = `Showing: selected saved run | ${fmtRunLabel(run)}`;
+    return;
+  }
+  el.textContent = "Showing: no run selected.";
+}
 
 function populateBenchmarkCompareSelectors(runs) {
   const baselineSelect = byId("bench-compare-baseline");
@@ -1030,8 +1052,16 @@ function populateBenchmarkCompareSelectors(runs) {
 function updateSelectedBenchmarkRunMeta() {
   const selectEl = byId("bench-run-history");
   const metaEl = byId("bench-run-meta");
-  const mode = useSavedBenchmarkView() ? "selected saved run" : "latest run";
+  const mode = useSavedBenchmarkView() ? "selected saved run" : "current run only";
   if (!metaEl) return;
+  if (!useSavedBenchmarkView()) {
+    if (currentBenchmarkRun) {
+      metaEl.textContent = `Mode: ${mode} | Current run: ${fmtRunLabel(currentBenchmarkRun)}`;
+    } else {
+      metaEl.textContent = `Mode: ${mode} | No current run yet.`;
+    }
+    return;
+  }
   if (!selectEl || !selectEl.value) {
     metaEl.textContent = `Mode: ${mode} | No historical run selected.`;
     return;
@@ -1121,6 +1151,7 @@ async function loadSelectedBenchmarkRun(options = {}) {
     }
     const payload = await res.json();
     renderBenchmarkSummary(payload);
+    setBenchmarkOutputMeta("saved", payload);
     if (outputEl) outputEl.textContent = JSON.stringify(payload, null, 2);
     if (!silent && statusEl) {
       statusEl.textContent = `Loaded run: ${payload?.generated_at || runId}`;
@@ -1290,9 +1321,12 @@ async function pollBenchmarks() {
   if (status === "done" && data.last_result) {
     try {
       const parsed = JSON.parse(data.last_result);
+      currentBenchmarkRun = parsed;
       await refreshBenchmarkRuns(data.run_id || parsed.run_id || null);
       if (!useSavedBenchmarkView()) {
         renderBenchmarkSummary(parsed);
+        setBenchmarkOutputMeta("current", parsed);
+        if (outputEl) outputEl.textContent = JSON.stringify(parsed, null, 2);
       }
     } catch {
       // Keep raw output visible.
@@ -1327,6 +1361,7 @@ async function startBenchmarks() {
 
   if (statusEl) statusEl.textContent = "Status: starting...";
   if (outputEl) outputEl.textContent = "Running benchmark comparison...";
+  setBenchmarkOutputMeta("none", null);
   if (progressWrap) progressWrap.classList.add("active");
   if (progressBar) progressBar.style.width = "0%";
   if (progressText) progressText.textContent = "0% - Preparing benchmark jobs";
@@ -1391,26 +1426,17 @@ if (benchViewHistoryToggle) {
       await loadSelectedBenchmarkRun({ force: true });
       return;
     }
-    await loadBenchmarkSummaryFromFile();
-  });
-}
-
-async function loadBenchmarkSummaryFromFile(options = {}) {
-  const statusEl = byId("bench-status");
-  const outputEl = byId("bench-output");
-  const silent = Boolean(options?.silent);
-  try {
-    const res = await fetch("/data/benchmark_compare.json", { cache: "no-store" });
-    if (!res.ok) return;
-    const payload = await res.json();
-    renderBenchmarkSummary(payload);
-    if (outputEl) outputEl.textContent = JSON.stringify(payload, null, 2);
-    if (!silent && statusEl) {
-      statusEl.textContent = `Loaded latest run: ${payload?.generated_at || "-"}`;
+    if (currentBenchmarkRun) {
+      renderBenchmarkSummary(currentBenchmarkRun);
+      const outputEl = byId("bench-output");
+      if (outputEl) outputEl.textContent = JSON.stringify(currentBenchmarkRun, null, 2);
+      setBenchmarkOutputMeta("current", currentBenchmarkRun);
+    } else {
+      const outputEl = byId("bench-output");
+      if (outputEl) outputEl.textContent = "No benchmark output yet. Run a benchmark first.";
+      setBenchmarkOutputMeta("none", null);
     }
-  } catch {
-    // No cached benchmark summary yet.
-  }
+  });
 }
 
 async function initBenchmarkHistory() {
@@ -1419,7 +1445,8 @@ async function initBenchmarkHistory() {
     await loadSelectedBenchmarkRun({ silent: true, force: true });
     return;
   }
-  await loadBenchmarkSummaryFromFile({ silent: true });
+  updateSelectedBenchmarkRunMeta();
+  setBenchmarkOutputMeta("none", null);
 }
 
 initBenchmarkHistory();
