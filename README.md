@@ -62,22 +62,22 @@ Optional (include Analyze Image run if model deps are healthy):
 Record the new demo while showing these interactions:
 
 1. Launch app with `.\.venv\Scripts\python -m src.tools.dev_app`.
-2. Open the printed `/analysis/` URL.
-3. Keep recording clean (no error banners in UI).
-4. In the 3D globe, drag to rotate/pan.
-5. Use mouse wheel scroll to zoom in and zoom out on the globe.
-6. Click map controls (`Zoom In`, `Zoom Out`, `Reset`) to show full interaction flow.
-7. Keep final files at `docs/images/analysis-demo.webm` and `docs/images/analysis-desktop.png`.
+1. Open the printed `/analysis/` URL.
+1. Keep recording clean (no error banners in UI).
+1. In the 3D globe, drag to rotate/pan.
+1. Use mouse wheel scroll to zoom in and zoom out on the globe.
+1. Click map controls (`Zoom In`, `Zoom Out`, `Reset`) to show full interaction flow.
+1. Keep final files at `docs/images/analysis-demo.webm` and `docs/images/analysis-desktop.png`.
 
 ## Architecture Overview
 
 The platform is organized as a modular pipeline:
 
 1. Detection: runs detector backends through a unified interface.
-2. Geo candidate retrieval: proposes top-N location hypotheses.
-3. Verification and fusion: combines retrieval + verification signals into posterior weights.
-4. Scoring and serialization: emits structured outputs for CLI, batch runs, and UI.
-5. Dashboard/API layer: serves analysis and evaluation workflows.
+1. Geo candidate retrieval: proposes top-N location hypotheses.
+1. Verification and fusion: combines retrieval + verification signals into posterior weights.
+1. Scoring and serialization: emits structured outputs for CLI, batch runs, and UI.
+1. Dashboard/API layer: serves analysis and evaluation workflows.
 
 ## Core Modules
 
@@ -204,13 +204,13 @@ If filesystem watcher issues occur, run without reload:
 .\.venv\Scripts\python -m src.tools.dev_app
 ```
 
-2. Open the `/analysis/` URL printed in terminal.
-3. Select strategy profile.
-4. Upload image and click `Analyze Image`.
-5. Review detections, geo ranking, and fusion map.
-6. Interact with 3D globe: drag to rotate/pan.
-7. Scroll wheel to zoom in and zoom out.
-8. Use `Zoom In`, `Zoom Out`, and `Reset` buttons.
+1. Open the `/analysis/` URL printed in terminal.
+1. Select strategy profile.
+1. Upload image and click `Analyze Image`.
+1. Review detections, geo ranking, and fusion map.
+1. Interact with 3D globe: drag to rotate/pan.
+1. Scroll wheel to zoom in and zoom out.
+1. Use `Zoom In`, `Zoom Out`, and `Reset` buttons.
 
 <<<<<<< HEAD
 Runtime diagnostics:
