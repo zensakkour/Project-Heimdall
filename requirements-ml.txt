@@ -1,0 +1,10 @@
+# Optional ML/model dependencies for full inference quality.
+# Install torch/torchvision/torchaudio separately to match your CPU/CUDA target.
+opencv-python
+ultralytics
+geoclip
+huggingface_hub
+safetensors
+datasets
+transformers
+rasterio

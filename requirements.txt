@@ -1,21 +1,3 @@
-# Pin versions once dependencies are selected
-telethon
-pyrogram
-pytest
-jsonschema
-pillow
-fastapi
-uvicorn
-python-multipart
-opencv-python
-ultralytics
-geoclip
-huggingface_hub
-safetensors
-# Install torch/torchvision/torchaudio separately to match your GPU/CUDA.
-# See README for the CUDA-aware install step.
-awscli
-datasets
-numpy
-transformers
-rasterio
+# Full install = core runtime + ML stack.
+-r requirements-core.txt
+-r requirements-ml.txt
