@@ -295,8 +295,11 @@ Useful geo quality knobs in `geolocator`:
 - `candidate_dedupe_radius_m`: merges near-duplicate candidates from multiple providers.
 - `candidate_max_results`: caps merged candidate count before fusion.
 
-Useful fusion knob:
+Useful fusion knobs:
 - `fusion.retrieval_score_norm`: `none`, `zscore_sigmoid`, `minmax`, `rank_exp`.
+- `fusion.use_spatial_consensus`: enables neighborhood agreement likelihood in fusion.
+- `fusion.spatial_sigma_km`: spatial kernel scale in kilometers.
+- `fusion.spatial_consensus_weight`: strength of spatial consensus in posterior weighting.
 
 ## Data and Model Notes
 
