@@ -37,6 +37,9 @@
   "fusion": {
     "retrieval_temperature": 0.08,
     "retrieval_score_norm": "none",
+    "source_prior_retrieval": 1.0,
+    "source_prior_geoclip": 1.0,
+    "source_prior_exif": 1.0,
     "use_spatial_consensus": true,
     "spatial_sigma_km": 1.5,
     "spatial_consensus_weight": 1.5,

@@ -235,3 +235,5 @@ Do not delete or edit past entries. Append new work at the end.
 - Added spatial-consensus likelihood in fusion (`use_spatial_consensus`, `spatial_sigma_km`, `spatial_consensus_weight`) to down-rank isolated outliers.
 - Extended evaluation metrics with calibration/error metrics (`ece`, `brier`, `nll`) and added coverage tests.
 - Updated README and GEO_TECH documentation with a current technology status snapshot and new fusion/config knobs.
+- Added source-aware fusion priors (source_prior_retrieval, source_prior_geoclip, source_prior_exif) and confidence diagnostics in fusion outputs.
+- Extended fusion serialization/schema with ambiguity and posterior concentration metrics.
