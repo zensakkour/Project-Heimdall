@@ -23,13 +23,27 @@ REQS = ROOT / "requirements.txt"
 LOCK = ROOT / "requirements.lock.txt"
 
 
-def _read_requirements(path: Path) -> list[str]:
+def _read_requirements(path: Path, visited: Optional[set[Path]] = None) -> list[str]:
     if not path.exists():
         return []
+    if visited is None:
+        visited = set()
+    resolved = path.resolve()
+    if resolved in visited:
+        return []
+    visited.add(resolved)
     packages = []
     for raw in path.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
         if not line or line.startswith("#"):
+            continue
+        if line.startswith("-r ") or line.startswith("--requirement "):
+            parts = line.split(maxsplit=1)
+            if len(parts) == 2:
+                nested_path = (path.parent / parts[1].strip()).resolve()
+                packages.extend(_read_requirements(nested_path, visited))
+            continue
+        if line.startswith("-"):
             continue
         packages.append(line)
     return packages
@@ -67,6 +81,8 @@ def _check_packages(packages: list[str]) -> dict:
 def _check_paths() -> dict:
     paths = {
         "requirements": REQS,
+        "requirements_core": ROOT / "requirements-core.txt",
+        "requirements_ml": ROOT / "requirements-ml.txt",
         "requirements_lock": LOCK,
         "defaults_config": ROOT / "src" / "config" / "defaults.json",
         "dashboard_live": ROOT / "src" / "dashboard" / "analysis" / "index.html",
@@ -207,4 +223,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

@@ -1,0 +1,11 @@
+# Core app/runtime dependencies (no heavyweight ML model stack).
+telethon
+pyrogram
+pytest
+jsonschema
+pillow
+fastapi
+uvicorn
+python-multipart
+awscli
+numpy

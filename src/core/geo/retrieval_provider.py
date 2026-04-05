@@ -159,7 +159,6 @@ def load_index(index_path: Path) -> RetrievalIndex:
     embeddings = embeddings / np.clip(norms, 1e-12, None)
 
     model_id = _parse_index_model_id(index_path)
-
     return RetrievalIndex(
         embeddings=embeddings,
         latitudes=latitudes,

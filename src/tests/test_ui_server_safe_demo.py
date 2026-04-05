@@ -28,6 +28,8 @@ def test_analyze_image_force_safe_demo() -> None:
 
 
 def test_analyze_image_falls_back_when_pipeline_init_fails(monkeypatch) -> None:
+    monkeypatch.setenv("HEIMDALL_USE_INFERENCE_WORKER", "0")
+
     def _boom(_cfg):
         raise RuntimeError("dependency unavailable")
 
@@ -40,4 +42,3 @@ def test_analyze_image_falls_back_when_pipeline_init_fails(monkeypatch) -> None:
     assert payload["safe_demo"] is True
     assert payload["result"]["geo"] is not None
     assert "pipeline init failed" in (payload["geo_debug"]["fallback_reason"] or "")
-

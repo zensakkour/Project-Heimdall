@@ -4,17 +4,24 @@ FastAPI server for live analysis UI.
 from __future__ import annotations
 
 import base64
+import asyncio
+import hashlib
 import importlib
 from importlib import metadata
 import json
 import io
+import logging
+import multiprocessing as mp
+import os
+from queue import Empty as QueueEmpty
 import tempfile
+import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
-import cv2
-from fastapi import FastAPI, File, Form, UploadFile
+from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
@@ -282,6 +289,34 @@ def _append_progress_snippet(snippet: str) -> None:
     with path.open("a", encoding="utf-8") as handle:
         handle.write(prefix + text + "\n")
 
+_WORKER_ENABLED_DEFAULT = os.getenv("HEIMDALL_USE_INFERENCE_WORKER", "1")
+_WORKER_IMAGE_TIMEOUT_S = float(os.getenv("HEIMDALL_INFERENCE_TIMEOUT_S", "90"))
+_WORKER_VIDEO_TIMEOUT_S = float(os.getenv("HEIMDALL_VIDEO_TIMEOUT_S", "300"))
+_MAX_IMAGE_BYTES = int(os.getenv("HEIMDALL_MAX_IMAGE_BYTES", str(20 * 1024 * 1024)))
+_MAX_VIDEO_BYTES = int(os.getenv("HEIMDALL_MAX_VIDEO_BYTES", str(256 * 1024 * 1024)))
+_MAX_METADATA_BYTES = int(os.getenv("HEIMDALL_MAX_METADATA_BYTES", str(4 * 1024 * 1024)))
+_ANALYSIS_CONCURRENCY = int(os.getenv("HEIMDALL_ANALYSIS_CONCURRENCY", "2"))
+_ANALYSIS_QUEUE_TIMEOUT_S = float(os.getenv("HEIMDALL_ANALYSIS_QUEUE_TIMEOUT_S", "5"))
+_LOGGER = logging.getLogger("heimdall.ui_server")
+if not _LOGGER.handlers:
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+_ANALYSIS_SEMAPHORE = asyncio.Semaphore(max(1, _ANALYSIS_CONCURRENCY))
+_ALLOWED_IMAGE_CONTENT_TYPES = {
+    "image/jpeg",
+    "image/jpg",
+    "image/png",
+    "image/webp",
+    "image/bmp",
+    "image/tiff",
+}
+_ALLOWED_VIDEO_CONTENT_TYPES = {
+    "video/mp4",
+    "video/webm",
+    "video/quicktime",
+    "video/x-msvideo",
+    "application/octet-stream",
+}
+
 
 def build_pipeline(cfg: Optional[HeimdallConfig]) -> "HeimdallPipeline":
     # Lazy imports keep app startup resilient when optional heavy deps are unavailable.
@@ -346,10 +381,140 @@ def build_pipeline(cfg: Optional[HeimdallConfig]) -> "HeimdallPipeline":
     )
 
 
+def _log_event(event: str, **fields: Any) -> None:
+    payload = {"event": event, "ts": _utc_now_iso()}
+    payload.update(fields)
+    try:
+        _LOGGER.info(json.dumps(payload, sort_keys=True, default=str))
+    except Exception:
+        _LOGGER.info("%s %s", event, fields)
+
+
+def _use_inference_worker() -> bool:
+    return str(os.getenv("HEIMDALL_USE_INFERENCE_WORKER", _WORKER_ENABLED_DEFAULT)).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
 def _to_bool_flag(value: Optional[str]) -> bool:
     if value is None:
         return False
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _safe_upload_name(filename: Optional[str], fallback: str) -> str:
+    name = Path(filename or fallback).name
+    cleaned = "".join(ch for ch in name if ch.isalnum() or ch in {"-", "_", ".", " "}).strip()
+    return cleaned or fallback
+
+
+def _normalized_content_type(upload: UploadFile) -> str:
+    raw = (upload.content_type or "").split(";", 1)[0].strip().lower()
+    return raw
+
+
+def _validate_upload_content_type(upload: UploadFile, allowed: set[str], label: str) -> Optional[str]:
+    ctype = _normalized_content_type(upload)
+    if not ctype:
+        return None
+    if ctype in allowed:
+        return None
+    return f"unsupported {label} content-type: {ctype}"
+
+
+async def _write_upload_limited(upload: UploadFile, target: Path, max_bytes: int) -> int:
+    total = 0
+    with target.open("wb") as handle:
+        while True:
+            chunk = await upload.read(1024 * 1024)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > max_bytes:
+                raise ValueError(f"upload too large ({total} bytes > {max_bytes})")
+            handle.write(chunk)
+    return total
+
+
+def _file_sha256(path: Path) -> Optional[str]:
+    if not path.exists() or not path.is_file():
+        return None
+    hasher = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            hasher.update(chunk)
+    return hasher.hexdigest()
+
+
+def _runtime_manifest(profile: Optional[str]) -> dict:
+    cfg_path = _config_path_for_profile(profile)
+
+    def _version(pkg: str) -> Optional[str]:
+        try:
+            return metadata.version(pkg)
+        except Exception:
+            return None
+
+    return {
+        "profile": (profile or "default"),
+        "config_path": str(cfg_path),
+        "config_sha256": _file_sha256(cfg_path),
+        "env": {
+            "inference_worker_enabled": _use_inference_worker(),
+            "timeouts_s": {
+                "image": _WORKER_IMAGE_TIMEOUT_S,
+                "video": _WORKER_VIDEO_TIMEOUT_S,
+            },
+            "limits": {
+                "max_image_bytes": _MAX_IMAGE_BYTES,
+                "max_video_bytes": _MAX_VIDEO_BYTES,
+                "max_metadata_bytes": _MAX_METADATA_BYTES,
+                "analysis_concurrency": max(1, _ANALYSIS_CONCURRENCY),
+                "analysis_queue_timeout_s": _ANALYSIS_QUEUE_TIMEOUT_S,
+            },
+        },
+        "packages": {
+            "fastapi": _version("fastapi"),
+            "uvicorn": _version("uvicorn"),
+            "numpy": _version("numpy"),
+            "pillow": _version("Pillow"),
+        },
+    }
+
+
+@app.middleware("http")
+async def request_telemetry_middleware(request: Request, call_next):
+    request_id = request.headers.get("x-request-id") or uuid.uuid4().hex[:12]
+    request.state.request_id = request_id
+    start = time.perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        duration_ms = round((time.perf_counter() - start) * 1000, 2)
+        _log_event(
+            "request.error",
+            request_id=request_id,
+            method=request.method,
+            path=request.url.path,
+            duration_ms=duration_ms,
+            error=str(exc),
+        )
+        raise
+    duration_ms = round((time.perf_counter() - start) * 1000, 2)
+    response.headers["X-Request-ID"] = request_id
+    response.headers["X-Process-Time-Ms"] = f"{duration_ms:.2f}"
+    _log_event(
+        "request.complete",
+        request_id=request_id,
+        method=request.method,
+        path=request.url.path,
+        status_code=response.status_code,
+        duration_ms=duration_ms,
+    )
+    return response
 
 
 def _make_demo_detections(width: int, height: int) -> list[Detection]:
@@ -531,7 +696,7 @@ def _check_python_deps() -> dict:
         ("torch", True),
         ("ultralytics", True),
         ("fastapi", True),
-        ("cv2", True),
+        ("cv2", False),
         ("PIL", True),
     ]
     for name, required in modules:
@@ -690,6 +855,205 @@ def _health_snapshot() -> dict:
     }
 
 
+def _make_demo_video_payload(reason: Optional[str], interval_s: float, max_frames: int) -> dict:
+    frame_count = max(1, min(max_frames, 4))
+    frames = []
+    with tempfile.TemporaryDirectory() as tmp:
+        for idx in range(frame_count):
+            image_path = Path(tmp) / f"safe_demo_frame_{idx}.png"
+            Image.new("RGB", (1280, 720), color=(10, 14, 16)).save(image_path, format="PNG")
+            result = _build_demo_assessment(1280, 720, reason)
+            annotated = draw_detections(str(image_path), result.detections)
+            frames.append(
+                {
+                    "timestamp_s": round(idx * max(interval_s, 0.25), 3),
+                    "result": assessment_to_dict(result),
+                    "image_data": _image_to_data_url(annotated),
+                }
+            )
+    return {
+        "generated_at": _utc_now_iso(),
+        "frames": frames,
+        "safe_demo": True,
+        "fallback_reason": reason,
+    }
+
+
+def _run_image_pipeline_local(image_path: Path, profile: Optional[str], force_safe_demo: bool) -> dict:
+    fallback_reason: Optional[str] = "forced" if force_safe_demo else None
+    pipeline = None
+    if fallback_reason is None:
+        try:
+            cfg = _load_config_from_env(profile)
+            pipeline = build_pipeline(cfg)
+        except Exception as exc:
+            fallback_reason = f"pipeline init failed: {exc}"
+    if fallback_reason is None and pipeline is not None:
+        try:
+            result = pipeline.run(str(image_path))
+            annotated = draw_detections(str(image_path), result.detections)
+            return {
+                "generated_at": _utc_now_iso(),
+                "result": assessment_to_dict(result),
+                "image_data": _image_to_data_url(annotated),
+                "geo_debug": {
+                    "candidate_count": len(result.candidates),
+                    "fusion": bool(result.fusion),
+                    "error": getattr(pipeline.candidate_provider, "last_error", None),
+                    "safe_demo": False,
+                },
+                "safe_demo": False,
+            }
+        except Exception as exc:
+            fallback_reason = f"pipeline run failed: {exc}"
+    return _make_demo_image_payload(image_path, fallback_reason)
+
+
+def _run_video_pipeline_local(
+    video_path: Path,
+    interval_s: float,
+    max_frames: int,
+    profile: Optional[str],
+    force_safe_demo: bool,
+) -> dict:
+    fallback_reason: Optional[str] = "forced" if force_safe_demo else None
+    pipeline = None
+    if fallback_reason is None:
+        try:
+            cfg = _load_config_from_env(profile)
+            pipeline = build_pipeline(cfg)
+        except Exception as exc:
+            fallback_reason = f"pipeline init failed: {exc}"
+
+    try:
+        import cv2
+    except Exception as exc:
+        return _make_demo_video_payload(f"opencv unavailable: {exc}", interval_s, max_frames)
+
+    cap = cv2.VideoCapture(str(video_path))
+    if not cap.isOpened():
+        raise ValueError("unable to read video")
+    try:
+        fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+        interval_frames = max(1, int(fps * interval_s))
+        with tempfile.TemporaryDirectory() as tmp:
+            frames = []
+            frame_index = 0
+            extracted = 0
+            while extracted < max_frames:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                if frame_index % interval_frames == 0:
+                    image_path = Path(tmp) / f"frame_{frame_index}.png"
+                    cv2.imwrite(str(image_path), frame)
+                    if fallback_reason is None and pipeline is not None:
+                        try:
+                            result = pipeline.run(str(image_path))
+                        except Exception as exc:
+                            fallback_reason = f"pipeline run failed: {exc}"
+                            with Image.open(image_path) as img:
+                                w, h = img.size
+                            result = _build_demo_assessment(w, h, fallback_reason)
+                    else:
+                        with Image.open(image_path) as img:
+                            w, h = img.size
+                        result = _build_demo_assessment(w, h, fallback_reason)
+                    annotated = draw_detections(str(image_path), result.detections)
+                    frames.append(
+                        {
+                            "timestamp_s": frame_index / fps,
+                            "result": assessment_to_dict(result),
+                            "image_data": _image_to_data_url(annotated),
+                        }
+                    )
+                    extracted += 1
+            return {
+                "generated_at": _utc_now_iso(),
+                "frames": frames,
+                "safe_demo": fallback_reason is not None,
+                "fallback_reason": fallback_reason,
+            }
+    finally:
+        cap.release()
+
+
+def _inference_worker(task: dict, result_queue: Any) -> None:
+    started = time.perf_counter()
+    action = task.get("action")
+    try:
+        if action == "image":
+            payload = _run_image_pipeline_local(
+                image_path=Path(task["image_path"]),
+                profile=task.get("profile"),
+                force_safe_demo=bool(task.get("force_safe_demo", False)),
+            )
+        elif action == "video":
+            payload = _run_video_pipeline_local(
+                video_path=Path(task["video_path"]),
+                interval_s=float(task.get("interval_s", 2.0)),
+                max_frames=int(task.get("max_frames", 12)),
+                profile=task.get("profile"),
+                force_safe_demo=bool(task.get("force_safe_demo", False)),
+            )
+        else:
+            raise RuntimeError(f"unknown inference action: {action}")
+        result_queue.put(
+            {
+                "ok": True,
+                "payload": payload,
+                "worker_time_ms": round((time.perf_counter() - started) * 1000, 2),
+            }
+        )
+    except Exception as exc:
+        result_queue.put(
+            {
+                "ok": False,
+                "error": str(exc),
+                "worker_time_ms": round((time.perf_counter() - started) * 1000, 2),
+            }
+        )
+
+
+def _run_inference_worker(task: dict, timeout_s: float) -> tuple[Optional[dict], Optional[str], float]:
+    ctx = mp.get_context("spawn")
+    result_queue = ctx.Queue()
+    process = ctx.Process(target=_inference_worker, args=(task, result_queue), daemon=True)
+    started = time.perf_counter()
+    process.start()
+    process.join(timeout_s)
+    if process.is_alive():
+        process.terminate()
+        process.join(2)
+        return None, f"inference timeout after {timeout_s:.1f}s", round((time.perf_counter() - started) * 1000, 2)
+    duration_ms = round((time.perf_counter() - started) * 1000, 2)
+    try:
+        result = result_queue.get_nowait()
+    except QueueEmpty:
+        exit_code = process.exitcode
+        return None, f"inference worker exited without payload (exit={exit_code})", duration_ms
+    if not result.get("ok"):
+        return None, str(result.get("error") or "worker failure"), duration_ms
+    return result.get("payload"), None, duration_ms
+
+
+def _attach_runtime_meta(
+    payload: dict,
+    request_id: str,
+    timings_ms: dict,
+    worker_mode: str,
+    manifest: Optional[dict] = None,
+) -> dict:
+    payload["request_id"] = request_id
+    payload["runtime"] = {
+        "worker_mode": worker_mode,
+        "timings_ms": timings_ms,
+    }
+    if manifest is not None:
+        payload["runtime"]["manifest"] = manifest
+    return payload
+
+
 @app.get("/")
 def index() -> FileResponse:
     return FileResponse(DASHBOARD_DIR / "index.html")
@@ -723,122 +1087,249 @@ def health_deps() -> JSONResponse:
     return JSONResponse(snapshot, status_code=200 if snapshot["status"] == "ok" else 503)
 
 
+@app.get("/health/runtime")
+def health_runtime() -> JSONResponse:
+    payload = {
+        "status": "ok",
+        "timestamp": _utc_now_iso(),
+        "inference_worker_enabled": _use_inference_worker(),
+        "timeouts_s": {
+            "image": _WORKER_IMAGE_TIMEOUT_S,
+            "video": _WORKER_VIDEO_TIMEOUT_S,
+        },
+        "limits": {
+            "max_image_bytes": _MAX_IMAGE_BYTES,
+            "max_video_bytes": _MAX_VIDEO_BYTES,
+            "max_metadata_bytes": _MAX_METADATA_BYTES,
+            "analysis_concurrency": max(1, _ANALYSIS_CONCURRENCY),
+            "analysis_queue_timeout_s": _ANALYSIS_QUEUE_TIMEOUT_S,
+        },
+    }
+    return JSONResponse(payload)
+
+
 @app.post("/analyze/image")
 async def analyze_image(
+    request: Request,
     image: UploadFile = File(...),
     det_json: Optional[UploadFile] = File(None),
     geo_json: Optional[UploadFile] = File(None),
     profile: Optional[str] = None,
     safe_demo: Optional[str] = None,
 ) -> JSONResponse:
+    request_id = getattr(request.state, "request_id", uuid.uuid4().hex[:12])
+    timings_ms: dict[str, float] = {}
+    started = time.perf_counter()
     force_safe_demo = _to_bool_flag(safe_demo)
-    pipeline = None
-    fallback_reason: Optional[str] = "forced" if force_safe_demo else None
-    if not force_safe_demo:
+    worker_mode = "process" if _use_inference_worker() else "inline"
+    manifest = _runtime_manifest(profile)
+    acquired = False
+    try:
         try:
-            cfg = _load_config_from_env(profile)
-            pipeline = build_pipeline(cfg)
-        except Exception as exc:
-            fallback_reason = f"pipeline init failed: {exc}"
+            await asyncio.wait_for(_ANALYSIS_SEMAPHORE.acquire(), timeout=_ANALYSIS_QUEUE_TIMEOUT_S)
+            acquired = True
+        except asyncio.TimeoutError:
+            _log_event("analyze.image.rejected", request_id=request_id, reason="queue_timeout")
+            return JSONResponse(
+                {"error": "analysis queue is busy, retry shortly", "request_id": request_id},
+                status_code=429,
+            )
 
-    with tempfile.TemporaryDirectory() as tmp:
-        image_path = Path(tmp) / Path(image.filename).name
-        image_path.write_bytes(await image.read())
+        image_type_error = _validate_upload_content_type(image, _ALLOWED_IMAGE_CONTENT_TYPES, "image")
+        if image_type_error:
+            _log_event("analyze.image.rejected", request_id=request_id, reason=image_type_error)
+            return JSONResponse({"error": image_type_error, "request_id": request_id}, status_code=415)
 
-        if det_json is not None:
-            det_path = Path(str(image_path) + ".detections.json")
-            det_path.write_bytes(await det_json.read())
-        if geo_json is not None:
-            geo_path = Path(str(image_path) + ".geo.json")
-            geo_path.write_bytes(await geo_json.read())
+        with tempfile.TemporaryDirectory() as tmp:
+            io_started = time.perf_counter()
+            image_path = Path(tmp) / _safe_upload_name(image.filename, "upload-image.bin")
+            try:
+                image_size = await _write_upload_limited(image, image_path, _MAX_IMAGE_BYTES)
+            except ValueError as exc:
+                _log_event("analyze.image.rejected", request_id=request_id, reason=str(exc))
+                return JSONResponse({"error": str(exc), "request_id": request_id}, status_code=413)
+            timings_ms["image_bytes"] = float(image_size)
 
-        if fallback_reason is not None or pipeline is None:
-            return JSONResponse(_make_demo_image_payload(image_path, fallback_reason))
+            if det_json is not None:
+                det_path = Path(str(image_path) + ".detections.json")
+                try:
+                    det_size = await _write_upload_limited(det_json, det_path, _MAX_METADATA_BYTES)
+                    timings_ms["det_json_bytes"] = float(det_size)
+                except ValueError as exc:
+                    return JSONResponse({"error": str(exc), "request_id": request_id}, status_code=413)
+            if geo_json is not None:
+                geo_path = Path(str(image_path) + ".geo.json")
+                try:
+                    geo_size = await _write_upload_limited(geo_json, geo_path, _MAX_METADATA_BYTES)
+                    timings_ms["geo_json_bytes"] = float(geo_size)
+                except ValueError as exc:
+                    return JSONResponse({"error": str(exc), "request_id": request_id}, status_code=413)
+            timings_ms["io_write"] = round((time.perf_counter() - io_started) * 1000, 2)
 
-        try:
-            result = pipeline.run(str(image_path))
-            annotated = draw_detections(str(image_path), result.detections)
-            geo_debug = {
-                "candidate_count": len(result.candidates),
-                "fusion": bool(result.fusion),
-                "error": getattr(pipeline.candidate_provider, "last_error", None),
-                "safe_demo": False,
-            }
-            payload = {
-                "generated_at": _utc_now_iso(),
-                "result": assessment_to_dict(result),
-                "image_data": _image_to_data_url(annotated),
-                "geo_debug": geo_debug,
-                "safe_demo": False,
-            }
-            return JSONResponse(payload)
-        except Exception as exc:
-            return JSONResponse(_make_demo_image_payload(image_path, f"pipeline run failed: {exc}"))
+            if worker_mode == "process":
+                payload, worker_error, worker_roundtrip_ms = _run_inference_worker(
+                    {
+                        "action": "image",
+                        "image_path": str(image_path),
+                        "profile": profile,
+                        "force_safe_demo": force_safe_demo,
+                    },
+                    timeout_s=_WORKER_IMAGE_TIMEOUT_S,
+                )
+                timings_ms["worker_roundtrip"] = worker_roundtrip_ms
+                if payload is None:
+                    fallback_reason = f"worker failure: {worker_error}"
+                    payload = _make_demo_image_payload(image_path, fallback_reason)
+                    _log_event(
+                        "inference.worker_fallback",
+                        request_id=request_id,
+                        path="/analyze/image",
+                        reason=fallback_reason,
+                    )
+            else:
+                infer_started = time.perf_counter()
+                payload = _run_image_pipeline_local(
+                    image_path=image_path,
+                    profile=profile,
+                    force_safe_demo=force_safe_demo,
+                )
+                timings_ms["inline_inference"] = round((time.perf_counter() - infer_started) * 1000, 2)
+
+        timings_ms["total"] = round((time.perf_counter() - started) * 1000, 2)
+        _attach_runtime_meta(
+            payload,
+            request_id=request_id,
+            timings_ms=timings_ms,
+            worker_mode=worker_mode,
+            manifest=manifest,
+        )
+        _log_event(
+            "analyze.image",
+            request_id=request_id,
+            worker_mode=worker_mode,
+            safe_demo=bool(payload.get("safe_demo")),
+            total_ms=timings_ms["total"],
+        )
+        return JSONResponse(payload)
+    finally:
+        if acquired:
+            _ANALYSIS_SEMAPHORE.release()
 
 
 @app.post("/analyze/video")
 async def analyze_video(
+    request: Request,
     video: UploadFile = File(...),
     interval_s: float = Form(2.0),
     max_frames: int = Form(12),
     profile: Optional[str] = None,
     safe_demo: Optional[str] = None,
 ) -> JSONResponse:
+    request_id = getattr(request.state, "request_id", uuid.uuid4().hex[:12])
+    timings_ms: dict[str, float] = {}
+    started = time.perf_counter()
     force_safe_demo = _to_bool_flag(safe_demo)
-    pipeline = None
-    fallback_reason: Optional[str] = "forced" if force_safe_demo else None
-    if not force_safe_demo:
+    worker_mode = "process" if _use_inference_worker() else "inline"
+    manifest = _runtime_manifest(profile)
+    acquired = False
+    try:
         try:
-            cfg = _load_config_from_env(profile)
-            pipeline = build_pipeline(cfg)
-        except Exception as exc:
-            fallback_reason = f"pipeline init failed: {exc}"
+            await asyncio.wait_for(_ANALYSIS_SEMAPHORE.acquire(), timeout=_ANALYSIS_QUEUE_TIMEOUT_S)
+            acquired = True
+        except asyncio.TimeoutError:
+            _log_event("analyze.video.rejected", request_id=request_id, reason="queue_timeout")
+            return JSONResponse(
+                {"error": "analysis queue is busy, retry shortly", "request_id": request_id},
+                status_code=429,
+            )
 
-    with tempfile.TemporaryDirectory() as tmp:
-        video_path = Path(tmp) / Path(video.filename).name
-        video_path.write_bytes(await video.read())
+        if interval_s <= 0 or interval_s > 60:
+            return JSONResponse(
+                {"error": "interval_s must be in (0, 60]", "request_id": request_id},
+                status_code=400,
+            )
+        if max_frames < 1 or max_frames > 400:
+            return JSONResponse(
+                {"error": "max_frames must be in [1, 400]", "request_id": request_id},
+                status_code=400,
+            )
 
-        cap = cv2.VideoCapture(str(video_path))
-        if not cap.isOpened():
-            return JSONResponse({"error": "unable to read video"}, status_code=400)
+        video_type_error = _validate_upload_content_type(video, _ALLOWED_VIDEO_CONTENT_TYPES, "video")
+        if video_type_error:
+            _log_event("analyze.video.rejected", request_id=request_id, reason=video_type_error)
+            return JSONResponse({"error": video_type_error, "request_id": request_id}, status_code=415)
 
-        fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
-        interval_frames = max(1, int(fps * interval_s))
+        with tempfile.TemporaryDirectory() as tmp:
+            io_started = time.perf_counter()
+            video_path = Path(tmp) / _safe_upload_name(video.filename, "upload-video.bin")
+            try:
+                video_size = await _write_upload_limited(video, video_path, _MAX_VIDEO_BYTES)
+            except ValueError as exc:
+                _log_event("analyze.video.rejected", request_id=request_id, reason=str(exc))
+                return JSONResponse({"error": str(exc), "request_id": request_id}, status_code=413)
+            timings_ms["video_bytes"] = float(video_size)
+            timings_ms["io_write"] = round((time.perf_counter() - io_started) * 1000, 2)
 
-        frames = []
-        frame_index = 0
-        extracted = 0
-        while extracted < max_frames:
-            ret, frame = cap.read()
-            if not ret:
-                break
-            if frame_index % interval_frames == 0:
-                image_path = Path(tmp) / f"frame_{frame_index}.png"
-                cv2.imwrite(str(image_path), frame)
-                if fallback_reason is None and pipeline is not None:
-                    try:
-                        result = pipeline.run(str(image_path))
-                    except Exception as exc:
-                        fallback_reason = f"pipeline run failed: {exc}"
-                        with Image.open(image_path) as img:
-                            w, h = img.size
-                        result = _build_demo_assessment(w, h, fallback_reason)
-                else:
-                    with Image.open(image_path) as img:
-                        w, h = img.size
-                    result = _build_demo_assessment(w, h, fallback_reason)
-                annotated = draw_detections(str(image_path), result.detections)
-                frames.append(
+            if worker_mode == "process":
+                payload, worker_error, worker_roundtrip_ms = _run_inference_worker(
                     {
-                        "timestamp_s": frame_index / fps,
-                        "result": assessment_to_dict(result),
-                        "image_data": _image_to_data_url(annotated),
-                    }
+                        "action": "video",
+                        "video_path": str(video_path),
+                        "interval_s": interval_s,
+                        "max_frames": max_frames,
+                        "profile": profile,
+                        "force_safe_demo": force_safe_demo,
+                    },
+                    timeout_s=_WORKER_VIDEO_TIMEOUT_S,
                 )
-                extracted += 1
-            frame_index += 1
+                timings_ms["worker_roundtrip"] = worker_roundtrip_ms
+                if payload is None:
+                    if worker_error and "unable to read video" in worker_error:
+                        return JSONResponse({"error": "unable to read video", "request_id": request_id}, status_code=400)
+                    fallback_reason = f"worker failure: {worker_error}"
+                    payload = _make_demo_video_payload(fallback_reason, interval_s, max_frames)
+                    _log_event(
+                        "inference.worker_fallback",
+                        request_id=request_id,
+                        path="/analyze/video",
+                        reason=fallback_reason,
+                    )
+            else:
+                infer_started = time.perf_counter()
+                try:
+                    payload = _run_video_pipeline_local(
+                        video_path=video_path,
+                        interval_s=interval_s,
+                        max_frames=max_frames,
+                        profile=profile,
+                        force_safe_demo=force_safe_demo,
+                    )
+                except ValueError as exc:
+                    if "unable to read video" in str(exc):
+                        return JSONResponse({"error": "unable to read video", "request_id": request_id}, status_code=400)
+                    raise
+                timings_ms["inline_inference"] = round((time.perf_counter() - infer_started) * 1000, 2)
 
-        return JSONResponse({"frames": frames, "safe_demo": fallback_reason is not None})
+        timings_ms["total"] = round((time.perf_counter() - started) * 1000, 2)
+        _attach_runtime_meta(
+            payload,
+            request_id=request_id,
+            timings_ms=timings_ms,
+            worker_mode=worker_mode,
+            manifest=manifest,
+        )
+        _log_event(
+            "analyze.video",
+            request_id=request_id,
+            worker_mode=worker_mode,
+            safe_demo=bool(payload.get("safe_demo")),
+            frame_count=len(payload.get("frames", [])),
+            total_ms=timings_ms["total"],
+        )
+        return JSONResponse(payload)
+    finally:
+        if acquired:
+            _ANALYSIS_SEMAPHORE.release()
 
 
 def _image_to_data_url(image: Image.Image) -> str:
