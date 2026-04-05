@@ -21,14 +21,21 @@ def create_detector(cfg: Optional[DetectorConfig]) -> Optional[Detector]:
             cfg.weights_path,
             min_confidence=cfg.min_confidence,
             iou=cfg.nms_iou,
+            nms_mode=cfg.nms_mode,
             max_detections=cfg.max_detections,
+            min_area_px=cfg.min_area_px,
+            class_agnostic_nms=cfg.class_agnostic_nms,
+            use_tta=cfg.use_tta,
             imgsz=cfg.imgsz,
         )
     if cfg.use_sidecar:
         return SidecarDetector(
             min_confidence=cfg.min_confidence,
             nms_iou=cfg.nms_iou,
+            nms_mode=cfg.nms_mode,
             max_detections=cfg.max_detections,
+            min_area_px=cfg.min_area_px,
+            class_agnostic_nms=cfg.class_agnostic_nms,
             use_classic=cfg.use_classic,
         )
     if cfg.use_classic:

@@ -36,8 +36,18 @@ def fuse_candidates(
     capture_time = extract_capture_time(image_path)
     observed_shadow = _mean_shadow_azimuth(detections)
     retrieval_scores = _normalized_retrieval_scores(candidates, cfg.retrieval_score_norm)
+    spatial_likes = _spatial_consensus_likelihoods(
+        candidates,
+        retrieval_scores,
+        sigma_km=cfg.spatial_sigma_km,
+    )
+    cross_source_likes = _cross_source_agreement_likelihoods(
+        candidates,
+        retrieval_scores,
+        sigma_km=cfg.cross_source_sigma_km,
+    )
 
-    for cand, norm_score in zip(candidates, retrieval_scores):
+    for idx, (cand, norm_score) in enumerate(zip(candidates, retrieval_scores)):
         retrieval_like = _to_unit_interval(norm_score)
         retrieval_logp = _temperature_scaled_logprob(retrieval_like, cfg.retrieval_temperature)
         shadow_residual = None
@@ -55,6 +65,17 @@ def fuse_candidates(
 
         logp = retrieval_logp
         likelihoods = {"retrieval": retrieval_like}
+        source_prior = _source_prior_for_candidate(cand, cfg)
+        logp += math.log(max(source_prior, 1e-12))
+        likelihoods["source_prior"] = source_prior
+        if cfg.use_spatial_consensus:
+            spatial_like = spatial_likes[idx]
+            logp += max(0.0, cfg.spatial_consensus_weight) * math.log(max(spatial_like, 1e-12))
+            likelihoods["spatial"] = spatial_like
+        if cfg.use_cross_source_agreement:
+            cross_like = cross_source_likes[idx]
+            logp += max(0.0, cfg.cross_source_weight) * math.log(max(cross_like, 1e-12))
+            likelihoods["cross_source"] = cross_like
         if shadow_like is not None:
             logp += math.log(max(shadow_like, 1e-12))
             likelihoods["shadow"] = shadow_like
@@ -75,6 +96,7 @@ def fuse_candidates(
         )
 
     weights = _softmax(log_weights)
+    norm_entropy, eff_count, top1, top2_margin, conf_tier, ambiguous = _fusion_confidence_metrics(weights)
 
     fused: List[FusionCandidate] = []
     for cand, weight, evidence in zip(candidates, weights, evidences):
@@ -97,7 +119,8 @@ def fuse_candidates(
     limit = cfg.top_k if cfg.top_k > 0 else len(fused)
     fused = fused[:limit]
 
-    mean_lat, mean_lon, cov = _weighted_mean_cov(fused)
+    stats_candidates = _select_stats_candidates(fused, cfg, ambiguous=ambiguous)
+    mean_lat, mean_lon, cov = _weighted_mean_cov(stats_candidates)
     ellipse = _covariance_to_ellipse(cov)
     uncertainty_radius = max(ellipse.major_axis_m, ellipse.minor_axis_m)
 
@@ -108,6 +131,13 @@ def fuse_candidates(
         covariance_m=cov,
         ellipse=ellipse,
         uncertainty_radius_m=uncertainty_radius,
+        normalized_entropy=norm_entropy,
+        effective_candidate_count=eff_count,
+        top1_posterior=top1,
+        top2_margin=top2_margin,
+        confidence_tier=conf_tier,
+        ambiguous=ambiguous,
+        credible_set_size=len(stats_candidates),
     )
 
 
@@ -147,9 +177,18 @@ def _candidate_source(cand: GeoCandidate) -> str:
     match_id = cand.match_id or ""
     if match_id.startswith("exif:"):
         return "exif"
-    if match_id == "geoclip":
+    if match_id == "geoclip" or match_id.startswith("geoclip:"):
         return "geoclip"
     return "retrieval"
+
+
+def _source_prior_for_candidate(cand: GeoCandidate, cfg: FusionConfig) -> float:
+    src = _candidate_source(cand)
+    if src == "exif":
+        return max(1e-3, float(cfg.source_prior_exif))
+    if src == "geoclip":
+        return max(1e-3, float(cfg.source_prior_geoclip))
+    return max(1e-3, float(cfg.source_prior_retrieval))
 
 
 def _zscore_sigmoid(values: List[float]) -> List[float]:
@@ -215,6 +254,180 @@ def _to_unit_interval(value: float) -> float:
     if 0.0 <= value <= 1.0:
         return value
     return 1.0 / (1.0 + math.exp(-value))
+
+
+def _haversine_km(a: GeoCandidate, b: GeoCandidate) -> float:
+    radius_km = 6371.0
+    lat1 = math.radians(a.latitude)
+    lat2 = math.radians(b.latitude)
+    dlat = lat2 - lat1
+    dlon = math.radians(b.longitude - a.longitude)
+    term = math.sin(dlat / 2.0) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2.0) ** 2
+    arc = 2.0 * math.atan2(math.sqrt(term), math.sqrt(max(1.0 - term, 0.0)))
+    return radius_km * arc
+
+
+def _spatial_consensus_likelihoods(
+    candidates: Sequence[GeoCandidate],
+    retrieval_scores: Sequence[float],
+    sigma_km: float,
+) -> List[float]:
+    if not candidates:
+        return []
+    if len(candidates) == 1:
+        return [1.0]
+
+    sigma = max(0.1, float(sigma_km))
+    priors = [max(1e-3, _to_unit_interval(score)) for score in retrieval_scores]
+    total = sum(priors)
+    if total <= 0.0:
+        priors = [1.0 / len(candidates) for _ in candidates]
+    else:
+        priors = [p / total for p in priors]
+
+    raw = []
+    for cand_i in candidates:
+        density = 0.0
+        for cand_j, prior_j in zip(candidates, priors):
+            dist = _haversine_km(cand_i, cand_j)
+            kernel = math.exp(-0.5 * (dist / sigma) ** 2)
+            density += prior_j * kernel
+        raw.append(density)
+
+    peak = max(raw) if raw else 0.0
+    if peak <= 0.0:
+        return [1.0 for _ in candidates]
+    return [max(1e-3, min(1.0, value / peak)) for value in raw]
+
+
+def _cross_source_agreement_likelihoods(
+    candidates: Sequence[GeoCandidate],
+    retrieval_scores: Sequence[float],
+    sigma_km: float,
+) -> List[float]:
+    if not candidates:
+        return []
+    if len(candidates) == 1:
+        return [1.0]
+
+    sources = [_candidate_source(cand) for cand in candidates]
+    if len(set(sources)) < 2:
+        return [1.0 for _ in candidates]
+
+    sigma = max(0.1, float(sigma_km))
+    priors = [max(1e-3, _to_unit_interval(score)) for score in retrieval_scores]
+    total = sum(priors)
+    if total <= 0.0:
+        priors = [1.0 / len(candidates) for _ in candidates]
+    else:
+        priors = [p / total for p in priors]
+
+    raw: List[float] = []
+    for idx_i, cand_i in enumerate(candidates):
+        src_i = sources[idx_i]
+        weighted_sum = 0.0
+        other_prior = 0.0
+        for idx_j, (cand_j, prior_j) in enumerate(zip(candidates, priors)):
+            if idx_i == idx_j or sources[idx_j] == src_i:
+                continue
+            other_prior += prior_j
+            dist = _haversine_km(cand_i, cand_j)
+            weighted_sum += prior_j * math.exp(-0.5 * (dist / sigma) ** 2)
+
+        if other_prior <= 0.0:
+            raw.append(1.0)
+            continue
+        raw.append(weighted_sum / other_prior)
+
+    peak = max(raw) if raw else 0.0
+    if peak <= 0.0:
+        return [1.0 for _ in candidates]
+    return [max(1e-3, min(1.0, value / peak)) for value in raw]
+
+
+def _fusion_confidence_metrics(weights: Sequence[float]) -> Tuple[float, float, float, float, str, bool]:
+    if not weights:
+        return 1.0, 0.0, 0.0, 0.0, "low", True
+    n = len(weights)
+    safe = [max(0.0, float(w)) for w in weights]
+    total = sum(safe)
+    if total <= 0.0:
+        safe = [1.0 / n for _ in range(n)]
+    else:
+        safe = [w / total for w in safe]
+
+    entropy = -sum(w * math.log(max(w, 1e-12)) for w in safe)
+    max_entropy = math.log(max(n, 2))
+    norm_entropy = max(0.0, min(1.0, entropy / max_entropy))
+    eff_count = 1.0 / max(sum(w * w for w in safe), 1e-12)
+
+    ranked = sorted(safe, reverse=True)
+    top1 = ranked[0]
+    top2 = ranked[1] if len(ranked) > 1 else 0.0
+    margin = top1 - top2
+
+    if top1 >= 0.70 and margin >= 0.20 and norm_entropy <= 0.55:
+        tier = "high"
+    elif top1 >= 0.45 and margin >= 0.08 and norm_entropy <= 0.80:
+        tier = "medium"
+    else:
+        tier = "low"
+
+    ambiguous = tier == "low" or eff_count >= max(3.0, 0.65 * n)
+    return norm_entropy, eff_count, top1, margin, tier, ambiguous
+
+
+def _credible_set_for_stats(
+    fused: Sequence[FusionCandidate],
+    credible_mass: float,
+    min_candidates: int,
+) -> List[FusionCandidate]:
+    if not fused:
+        return []
+    target = max(0.50, min(0.999, float(credible_mass)))
+    required = max(1, int(min_candidates))
+    selected: List[FusionCandidate] = []
+    cumulative = 0.0
+    for item in fused:
+        selected.append(item)
+        cumulative += max(0.0, item.posterior_weight)
+        if cumulative >= target and len(selected) >= required:
+            break
+    while len(selected) < min(required, len(fused)):
+        selected.append(fused[len(selected)])
+    return selected
+
+
+def _select_stats_candidates(
+    fused: Sequence[FusionCandidate],
+    cfg: FusionConfig,
+    ambiguous: bool,
+) -> List[FusionCandidate]:
+    base = _credible_set_for_stats(
+        fused,
+        credible_mass=cfg.credible_mass,
+        min_candidates=cfg.min_credible_candidates,
+    )
+    if not base or not ambiguous or not cfg.use_top_cluster_for_stats:
+        return base
+
+    anchor = base[0]
+    radius_km = max(1.0, float(cfg.credible_cluster_radius_km))
+    min_cluster_weight = max(0.0, min(1.0, float(cfg.min_credible_cluster_weight)))
+    required = min(max(1, int(cfg.min_credible_candidates)), len(base))
+
+    cluster = [
+        item
+        for item in base
+        if _haversine_km(anchor.candidate, item.candidate) <= radius_km
+    ]
+    if not cluster:
+        return base
+
+    cluster_weight = sum(max(0.0, item.posterior_weight) for item in cluster)
+    if len(cluster) >= required and cluster_weight >= min_cluster_weight:
+        return cluster
+    return base
 
 
 def _expected_shadow_azimuth(captured, latitude: float, longitude: float) -> float:
@@ -329,5 +542,3 @@ def _explain_candidate(
         parts.append(f"terrain_residual={terrain_residual:.1f}")
     parts.append(f"likelihoods={','.join(f'{k}:{v:.3g}' for k, v in likelihoods.items())}")
     return "; ".join(parts)
-
-

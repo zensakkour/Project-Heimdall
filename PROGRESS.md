@@ -1,4 +1,4 @@
-# Progress Log (Append-Only)
+﻿# Progress Log (Append-Only)
 
 Do not delete or edit past entries. Append new work at the end.
 
@@ -227,3 +227,19 @@ Do not delete or edit past entries. Append new work at the end.
 - Restored a real world map view using Leaflet tiles for fusion candidates and uncertainty ring.
 - Added top-N filtering, hover/click tooltips for geo candidates, and geo confidence in the summary.
 - Added detection confidence bars and UI legend explaining dots/mean/ring.
+
+## 2026-04-05
+- Added geo candidate quality hardening: multi-provider candidate validation, near-duplicate merge, and bounded candidate output before fusion.
+- Hardened retrieval index loading and query scoring path for safer runtime behavior.
+- Improved fusion robustness with additional retrieval normalization modes, dateline-safe longitude statistics, and expanded geo-fusion tests.
+- Added spatial-consensus likelihood in fusion (`use_spatial_consensus`, `spatial_sigma_km`, `spatial_consensus_weight`) to down-rank isolated outliers.
+- Extended evaluation metrics with calibration/error metrics (`ece`, `brier`, `nll`) and added coverage tests.
+- Updated README and GEO_TECH documentation with a current technology status snapshot and new fusion/config knobs.
+- Added source-aware fusion priors (source_prior_retrieval, source_prior_geoclip, source_prior_exif) and confidence diagnostics in fusion outputs.
+- Extended fusion serialization/schema with ambiguity and posterior concentration metrics.
+- Added configurable detection quality controls (min area filter, class-aware/agnostic NMS, optional TTA) and applied them in Ultralytics + sidecar pipelines.
+- Added robust fusion credible-set statistics and exposed credible_set_size in serialized outputs/schema.
+- Added top-cluster robust fusion stats mode to avoid multimodal midpoint bias in ambiguous geolocation outputs.
+- Replaced deprecated datetime.utcnow() usage in UI server health/analysis payload timestamps.
+- Added true OBB-IoU NMS option (detector.nms_mode=obb) and wired it across detector adapters for better rotated-box suppression behavior.
+- Added cross-source agreement fusion likelihood to reward hypotheses corroborated across retrieval/GeoCLIP/EXIF sources and reduce source-isolated outlier dominance.
