@@ -24,6 +24,7 @@ This is the current technical state of the geo stack in the development branch:
   - Posterior uncertainty radius + ellipse
   - Confidence diagnostics (`normalized_entropy`, `effective_candidate_count`, `top1_posterior`, `top2_margin`, `confidence_tier`, `ambiguous`)
   - Credible-set fusion stats (`credible_mass`, `min_credible_candidates`)
+  - Optional top-cluster stats mode to avoid multimodal midpoint bias (`use_top_cluster_for_stats`, `credible_cluster_radius_km`, `min_credible_cluster_weight`)
 - Evaluation tooling is operational:
   - Geo regression gate baseline checks
   - Fusion sweep/tuning script

@@ -247,3 +247,44 @@ def test_credible_set_stats_reduce_far_tail_bias() -> None:
     assert credible.credible_set_size <= full.credible_set_size
     # Credible-set statistics should stay closer to the dominant Paris cluster.
     assert abs(credible.mean_latitude - 48.8568) < abs(full.mean_latitude - 48.8568)
+
+
+def test_top_cluster_stats_prevent_midpoint_between_modes() -> None:
+    candidates = [
+        GeoCandidate(latitude=48.8566, longitude=2.3522, retrieval_score=0.91, match_id="paris_a"),
+        GeoCandidate(latitude=35.6764, longitude=139.6500, retrieval_score=0.90, match_id="tokyo"),
+        GeoCandidate(latitude=48.8570, longitude=2.3530, retrieval_score=0.89, match_id="paris_b"),
+    ]
+    no_cluster_cfg = FusionConfig(
+        retrieval_temperature=0.6,
+        retrieval_score_norm="none",
+        use_spatial_consensus=False,
+        credible_mass=0.99,
+        min_credible_candidates=2,
+        use_top_cluster_for_stats=False,
+        use_shadow=False,
+        use_terrain=False,
+        top_k=3,
+    )
+    cluster_cfg = FusionConfig(
+        retrieval_temperature=0.6,
+        retrieval_score_norm="none",
+        use_spatial_consensus=False,
+        credible_mass=0.99,
+        min_credible_candidates=2,
+        use_top_cluster_for_stats=True,
+        credible_cluster_radius_km=250.0,
+        min_credible_cluster_weight=0.25,
+        use_shadow=False,
+        use_terrain=False,
+        top_k=3,
+    )
+
+    no_cluster = fuse_candidates("missing.jpg", candidates, detections=[], config=no_cluster_cfg)
+    cluster = fuse_candidates("missing.jpg", candidates, detections=[], config=cluster_cfg)
+    assert no_cluster is not None
+    assert cluster is not None
+
+    paris_lat = 48.8568
+    assert abs(cluster.mean_latitude - paris_lat) < abs(no_cluster.mean_latitude - paris_lat)
+    assert cluster.credible_set_size <= no_cluster.credible_set_size

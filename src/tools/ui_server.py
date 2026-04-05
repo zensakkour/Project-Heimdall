@@ -9,7 +9,7 @@ from importlib import metadata
 import json
 import io
 import tempfile
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -43,6 +43,10 @@ app = FastAPI()
 
 _EVAL_STATE = {"status": "idle", "last_result": None}
 _GEO_EVAL_STATE = {"status": "idle", "last_result": None, "progress": None, "progress_path": None}
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def build_pipeline(cfg: Optional[HeimdallConfig]) -> "HeimdallPipeline":
@@ -203,7 +207,7 @@ def _make_demo_image_payload(image_path: Path, reason: Optional[str]) -> dict:
     result = _build_demo_assessment(width, height, reason)
     annotated = draw_detections(str(image_path), result.detections)
     return {
-        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "generated_at": _utc_now_iso(),
         "result": assessment_to_dict(result),
         "image_data": _image_to_data_url(annotated),
         "geo_debug": {
@@ -401,7 +405,7 @@ def _health_snapshot() -> dict:
     status = "ok" if not required_failures else "degraded"
     return {
         "status": status,
-        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "timestamp": _utc_now_iso(),
         "required_failures": required_failures,
         "deps": deps,
         "config_paths": config_paths,
@@ -485,7 +489,7 @@ async def analyze_image(
                 "safe_demo": False,
             }
             payload = {
-                "generated_at": datetime.utcnow().isoformat() + "Z",
+                "generated_at": _utc_now_iso(),
                 "result": assessment_to_dict(result),
                 "image_data": _image_to_data_url(annotated),
                 "geo_debug": geo_debug,
