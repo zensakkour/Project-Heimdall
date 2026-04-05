@@ -194,6 +194,11 @@ If filesystem watcher issues occur, run without reload:
 7. Scroll wheel to zoom in and zoom out.
 8. Use `Zoom In`, `Zoom Out`, and `Reset` buttons.
 
+Runtime diagnostics:
+
+- `GET /health` returns service readiness summary.
+- `GET /health/deps` returns detailed dependency/file/path/write diagnostics.
+
 ## Common Workflows
 
 ### Run single-image inference (CLI)
