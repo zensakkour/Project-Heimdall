@@ -3,7 +3,11 @@
     "weights_path": "yolo11x-obb.pt",
     "min_confidence": 0.25,
     "nms_iou": 0.5,
+    "nms_mode": "obb",
     "max_detections": 100,
+    "min_area_px": 16.0,
+    "class_agnostic_nms": false,
+    "use_tta": false,
     "use_sidecar": true,
     "use_classic": false,
     "imgsz": 1280
@@ -37,10 +41,24 @@
   "fusion": {
     "retrieval_temperature": 0.12,
     "retrieval_score_norm": "zscore_sigmoid",
+    "source_prior_retrieval": 1.0,
+    "source_prior_geoclip": 1.0,
+    "source_prior_exif": 1.0,
+    "use_spatial_consensus": true,
+    "spatial_sigma_km": 2.0,
+    "spatial_consensus_weight": 1.0,
+    "use_cross_source_agreement": true,
+    "cross_source_sigma_km": 15.0,
+    "cross_source_weight": 1.0,
     "shadow_sigma_deg": 20.0,
     "terrain_sigma": 100.0,
     "use_shadow": true,
     "use_terrain": false,
+    "credible_mass": 0.9,
+    "min_credible_candidates": 2,
+    "use_top_cluster_for_stats": true,
+    "credible_cluster_radius_km": 500.0,
+    "min_credible_cluster_weight": 0.35,
     "top_k": 15
   }
 }

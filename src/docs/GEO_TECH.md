@@ -1,5 +1,39 @@
 ﻿# Geolocation + Object Localization Tech (Current)
 
+## Status Snapshot (As of April 5, 2026)
+
+This is the current technical state of the geo stack in the development branch:
+
+- Candidate generation is multi-source and resilient:
+  - Retrieval index provider (`GeoRetrievalProvider`)
+  - GeoSpot/GeoCLIP provider (`GeoCLIPProvider`)
+  - EXIF and sidecar fallbacks
+- Candidate quality controls are in place:
+  - Invalid coordinate/score filtering
+  - Near-duplicate clustering/merging across providers
+  - Capped merged candidate list before fusion
+- Detection quality controls are configurable:
+  - Minimum OBB area filter (`detector.min_area_px`)
+  - NMS mode (`detector.nms_mode`: `obb` or `aabb`)
+  - Class-aware vs class-agnostic NMS (`detector.class_agnostic_nms`)
+  - Optional test-time augmentation (`detector.use_tta`)
+- Fusion is robust and configurable:
+  - Retrieval score normalization modes (`none`, `zscore_sigmoid`, `minmax`, `rank_exp`)
+  - Source priors (`source_prior_retrieval`, `source_prior_geoclip`, `source_prior_exif`)
+  - Spatial consensus likelihood (`use_spatial_consensus`, `spatial_sigma_km`, `spatial_consensus_weight`)
+  - Cross-source agreement likelihood (`use_cross_source_agreement`, `cross_source_sigma_km`, `cross_source_weight`)
+  - Dateline-safe longitude averaging and covariance
+  - Posterior uncertainty radius + ellipse
+  - Confidence diagnostics (`normalized_entropy`, `effective_candidate_count`, `top1_posterior`, `top2_margin`, `confidence_tier`, `ambiguous`)
+  - Credible-set fusion stats (`credible_mass`, `min_credible_candidates`)
+  - Optional top-cluster stats mode to avoid multimodal midpoint bias (`use_top_cluster_for_stats`, `credible_cluster_radius_km`, `min_credible_cluster_weight`)
+- Evaluation tooling is operational:
+  - Geo regression gate baseline checks
+  - Fusion sweep/tuning script
+  - Calibration/error metrics: `ece`, `brier`, `nll`
+
+Current focus is benchmark-driven tuning (retrieval coverage + fusion calibration), not new UI scope.
+
 ## Overview
 This doc describes the current geolocation and object localization stack, how it is wired, and the exact software/model versions detected in this environment.
 
@@ -180,6 +214,9 @@ Key settings in config:
 - `geolocator.top_n` (candidate pool size)
 - `fusion.top_k` (candidates kept for fusion)
 - `fusion.retrieval_temperature` (score scaling)
+- `fusion.use_spatial_consensus` / `fusion.use_cross_source_agreement`
+- `fusion.spatial_sigma_km` / `fusion.cross_source_sigma_km`
+- `fusion.spatial_consensus_weight` / `fusion.cross_source_weight`
 - `fusion.use_shadow` / `fusion.use_terrain`
 - `fusion.shadow_sigma_deg` / `fusion.terrain_sigma`
 
@@ -221,3 +258,5 @@ python -c "import torch; print(torch.cuda.is_available()); print(torch.cuda.get_
 - CLI: `python -m src.cli <image>`
 - Full UI: `python -m uvicorn src.tools.ui_server:app --reload --port 8000`
 - Analysis page: `http://127.0.0.1:8000/analysis/`
+
+

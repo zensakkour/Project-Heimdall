@@ -69,6 +69,13 @@ class FusionResult:
     covariance_m: Tuple[Tuple[float, float], Tuple[float, float]]
     ellipse: UncertaintyEllipse
     uncertainty_radius_m: float
+    normalized_entropy: float = 1.0
+    effective_candidate_count: float = 0.0
+    top1_posterior: float = 0.0
+    top2_margin: float = 0.0
+    confidence_tier: str = "low"
+    ambiguous: bool = True
+    credible_set_size: int = 0
 
 
 @dataclass(frozen=True)
