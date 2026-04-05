@@ -1,5 +1,29 @@
 ﻿# Geolocation + Object Localization Tech (Current)
 
+## Status Snapshot (As of April 5, 2026)
+
+This is the current technical state of the geo stack in the development branch:
+
+- Candidate generation is multi-source and resilient:
+  - Retrieval index provider (`GeoRetrievalProvider`)
+  - GeoSpot/GeoCLIP provider (`GeoCLIPProvider`)
+  - EXIF and sidecar fallbacks
+- Candidate quality controls are in place:
+  - Invalid coordinate/score filtering
+  - Near-duplicate clustering/merging across providers
+  - Capped merged candidate list before fusion
+- Fusion is robust and configurable:
+  - Retrieval score normalization modes (`none`, `zscore_sigmoid`, `minmax`, `rank_exp`)
+  - Spatial consensus likelihood (`use_spatial_consensus`, `spatial_sigma_km`, `spatial_consensus_weight`)
+  - Dateline-safe longitude averaging and covariance
+  - Posterior uncertainty radius + ellipse
+- Evaluation tooling is operational:
+  - Geo regression gate baseline checks
+  - Fusion sweep/tuning script
+  - Calibration/error metrics: `ece`, `brier`, `nll`
+
+Current focus is benchmark-driven tuning (retrieval coverage + fusion calibration), not new UI scope.
+
 ## Overview
 This doc describes the current geolocation and object localization stack, how it is wired, and the exact software/model versions detected in this environment.
 
@@ -221,3 +245,5 @@ python -c "import torch; print(torch.cuda.is_available()); print(torch.cuda.get_
 - CLI: `python -m src.cli <image>`
 - Full UI: `python -m uvicorn src.tools.ui_server:app --reload --port 8000`
 - Analysis page: `http://127.0.0.1:8000/analysis/`
+
+
