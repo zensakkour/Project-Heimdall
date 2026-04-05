@@ -17,13 +17,9 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
 
-from src.core.detection.factory import create_detector
-from src.core.geo import GeoCLIPProvider, GeoLocator, GeoRetrievalProvider, MultiCandidateProvider
 from src.core.logic.config import HeimdallConfig, load_config
-from src.core.logic.pipeline import HeimdallPipeline
 from src.core.logic.serialize import assessment_to_dict
 from src.core.logic.visualize import draw_detections
-from src.tools.run_dota_eval import main as run_dota_eval
 
 
 APP_ROOT = Path(__file__).resolve().parents[2]
@@ -36,7 +32,12 @@ _EVAL_STATE = {"status": "idle", "last_result": None}
 _GEO_EVAL_STATE = {"status": "idle", "last_result": None, "progress": None, "progress_path": None}
 
 
-def build_pipeline(cfg: Optional[HeimdallConfig]) -> HeimdallPipeline:
+def build_pipeline(cfg: Optional[HeimdallConfig]) -> "HeimdallPipeline":
+    # Lazy imports keep app startup resilient when optional heavy deps are unavailable.
+    from src.core.detection.factory import create_detector
+    from src.core.geo import GeoCLIPProvider, GeoLocator, GeoRetrievalProvider, MultiCandidateProvider
+    from src.core.logic.pipeline import HeimdallPipeline
+
     if cfg is None:
         return HeimdallPipeline()
     detector = create_detector(cfg.detector)
@@ -73,6 +74,15 @@ def build_pipeline(cfg: Optional[HeimdallConfig]) -> HeimdallPipeline:
         score_config=cfg.score,
         verification_config=cfg.verification,
     )
+
+
+def _runtime_error_response(exc: Exception) -> JSONResponse:
+    message = (
+        "Runtime dependency error while initializing the analysis pipeline. "
+        "Your Python environment may be missing or corrupted model dependencies "
+        f"(details: {exc})."
+    )
+    return JSONResponse({"error": message}, status_code=500)
 
 
 def _load_config_from_env(profile: Optional[str] = None) -> Optional[HeimdallConfig]:
@@ -138,8 +148,11 @@ async def analyze_image(
     geo_json: Optional[UploadFile] = File(None),
     profile: Optional[str] = None,
 ) -> JSONResponse:
-    cfg = _load_config_from_env(profile)
-    pipeline = build_pipeline(cfg)
+    try:
+        cfg = _load_config_from_env(profile)
+        pipeline = build_pipeline(cfg)
+    except Exception as exc:
+        return _runtime_error_response(exc)
 
     with tempfile.TemporaryDirectory() as tmp:
         image_path = Path(tmp) / Path(image.filename).name
@@ -175,8 +188,11 @@ async def analyze_video(
     max_frames: int = Form(12),
     profile: Optional[str] = None,
 ) -> JSONResponse:
-    cfg = _load_config_from_env(profile)
-    pipeline = build_pipeline(cfg)
+    try:
+        cfg = _load_config_from_env(profile)
+        pipeline = build_pipeline(cfg)
+    except Exception as exc:
+        return _runtime_error_response(exc)
 
     with tempfile.TemporaryDirectory() as tmp:
         video_path = Path(tmp) / Path(video.filename).name
@@ -229,6 +245,8 @@ def start_eval() -> JSONResponse:
     def _run() -> None:
         _EVAL_STATE["status"] = "running"
         try:
+            from src.tools.run_dota_eval import main as run_dota_eval
+
             cfg = load_config("src/config/defaults.json")
             run_dota_eval(
                 [
