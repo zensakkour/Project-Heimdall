@@ -115,10 +115,21 @@ def main(argv: Optional[List[str]] = None) -> None:
     parser.add_argument("--retrieval-temps", default="0.05,0.08,0.12", help="Comma list.")
     parser.add_argument("--retrieval-topk", default="25,50", help="Comma list.")
     parser.add_argument("--fusion-topk", default="10,25", help="Comma list.")
+    parser.add_argument("--retrieval-diversity-radius-km", default="0.0", help="Comma list.")
+    parser.add_argument("--retrieval-diversity-lambda", default="1.0", help="Comma list.")
+    parser.add_argument("--retrieval-diversity-min-keep", default="1", help="Comma list.")
     parser.add_argument("--retrieval-norms", default="none,zscore_sigmoid,minmax,rank_exp", help="Comma list.")
     parser.add_argument("--spatial-consensus", default="true,false", help="Comma list of booleans.")
     parser.add_argument("--spatial-sigmas-km", default="1.0,2.0,5.0", help="Comma list.")
     parser.add_argument("--spatial-weights", default="0.5,1.0,2.0", help="Comma list.")
+    parser.add_argument("--cross-source-weights", default="1.0", help="Comma list.")
+    parser.add_argument("--plausibility-rerank", default="true", help="Comma list of booleans.")
+    parser.add_argument("--plausibility-radius-km", default="200.0", help="Comma list.")
+    parser.add_argument("--plausibility-weights", default="1.0", help="Comma list.")
+    parser.add_argument("--outlier-guard", default="true", help="Comma list of booleans.")
+    parser.add_argument("--outlier-guard-strengths", default="1.0", help="Comma list.")
+    parser.add_argument("--outlier-guard-min-scale-km", default="120.0", help="Comma list.")
+    parser.add_argument("--outlier-guard-mad-scale", default="3.0", help="Comma list.")
     args = parser.parse_args(argv)
 
     cfg = load_config(args.config)
@@ -137,51 +148,116 @@ def main(argv: Optional[List[str]] = None) -> None:
     retrieval_temps = _parse_float_list(args.retrieval_temps)
     retrieval_topk = _parse_int_list(args.retrieval_topk)
     fusion_topk = _parse_int_list(args.fusion_topk)
+    retrieval_diversity_radius = _parse_float_list(args.retrieval_diversity_radius_km)
+    retrieval_diversity_lambda = _parse_float_list(args.retrieval_diversity_lambda)
+    retrieval_diversity_min_keep = _parse_int_list(args.retrieval_diversity_min_keep)
     retrieval_norms = _parse_str_list(args.retrieval_norms)
     spatial_consensus_flags = _parse_bool_list(args.spatial_consensus)
     spatial_sigmas_km = _parse_float_list(args.spatial_sigmas_km)
     spatial_weights = _parse_float_list(args.spatial_weights)
+    cross_source_weights = _parse_float_list(args.cross_source_weights)
+    plausibility_flags = _parse_bool_list(args.plausibility_rerank)
+    plausibility_radius_km = _parse_float_list(args.plausibility_radius_km)
+    plausibility_weights = _parse_float_list(args.plausibility_weights)
+    outlier_guard_flags = _parse_bool_list(args.outlier_guard)
+    outlier_guard_strengths = _parse_float_list(args.outlier_guard_strengths)
+    outlier_guard_min_scale_km = _parse_float_list(args.outlier_guard_min_scale_km)
+    outlier_guard_mad_scale = _parse_float_list(args.outlier_guard_mad_scale)
 
     results = []
     for scale in geospot_scales:
         for temp in retrieval_temps:
             for topk in retrieval_topk:
                 for ftopk in fusion_topk:
-                    for norm in retrieval_norms:
-                        for use_spatial in spatial_consensus_flags:
-                            sigma_values = spatial_sigmas_km if use_spatial else [cfg.fusion.spatial_sigma_km]
-                            weight_values = spatial_weights if use_spatial else [0.0]
-                            for spatial_sigma in sigma_values:
-                                for spatial_weight in weight_values:
-                                    tuned_geo = replace(
-                                        cfg.geolocator,
-                                        geospot_score_scale=scale,
-                                        retrieval_top_k=topk,
-                                    )
-                                    tuned_fusion = replace(
-                                        cfg.fusion,
-                                        retrieval_temperature=temp,
-                                        retrieval_score_norm=norm,
-                                        use_spatial_consensus=use_spatial,
-                                        spatial_sigma_km=spatial_sigma,
-                                        spatial_consensus_weight=spatial_weight,
-                                        top_k=ftopk,
-                                    )
-                                    tuned_cfg = replace(cfg, geolocator=tuned_geo, fusion=tuned_fusion)
-                                    metrics = _evaluate(tuned_cfg, images_dir, records)
-                                    results.append(
-                                        {
-                                            "geospot_score_scale": scale,
-                                            "retrieval_temperature": temp,
-                                            "retrieval_top_k": topk,
-                                            "fusion_top_k": ftopk,
-                                            "retrieval_score_norm": norm,
-                                            "use_spatial_consensus": use_spatial,
-                                            "spatial_sigma_km": spatial_sigma,
-                                            "spatial_consensus_weight": spatial_weight,
-                                            **metrics,
-                                        }
-                                    )
+                    for diversity_radius in retrieval_diversity_radius:
+                        for diversity_lambda in retrieval_diversity_lambda:
+                            for diversity_min_keep in retrieval_diversity_min_keep:
+                                for norm in retrieval_norms:
+                                    for use_spatial in spatial_consensus_flags:
+                                        sigma_values = spatial_sigmas_km if use_spatial else [cfg.fusion.spatial_sigma_km]
+                                        spatial_weight_values = spatial_weights if use_spatial else [0.0]
+                                        for spatial_sigma in sigma_values:
+                                            for spatial_weight in spatial_weight_values:
+                                                for cross_weight in cross_source_weights:
+                                                    for use_plausibility in plausibility_flags:
+                                                        plausibility_radius_values = (
+                                                            plausibility_radius_km if use_plausibility else [cfg.fusion.plausibility_radius_km]
+                                                        )
+                                                        plausibility_weight_values = (
+                                                            plausibility_weights if use_plausibility else [0.0]
+                                                        )
+                                                        for plaus_radius in plausibility_radius_values:
+                                                            for plaus_weight in plausibility_weight_values:
+                                                                for use_outlier_guard in outlier_guard_flags:
+                                                                    outlier_strength_values = (
+                                                                        outlier_guard_strengths if use_outlier_guard else [0.0]
+                                                                    )
+                                                                    outlier_min_scale_values = (
+                                                                        outlier_guard_min_scale_km
+                                                                        if use_outlier_guard
+                                                                        else [cfg.fusion.outlier_guard_min_scale_km]
+                                                                    )
+                                                                    outlier_mad_values = (
+                                                                        outlier_guard_mad_scale
+                                                                        if use_outlier_guard
+                                                                        else [cfg.fusion.outlier_guard_mad_scale]
+                                                                    )
+                                                                    for outlier_strength in outlier_strength_values:
+                                                                        for outlier_min_scale in outlier_min_scale_values:
+                                                                            for outlier_mad in outlier_mad_values:
+                                                                                tuned_geo = replace(
+                                                                                    cfg.geolocator,
+                                                                                    geospot_score_scale=scale,
+                                                                                    retrieval_top_k=topk,
+                                                                                    retrieval_diversity_radius_km=diversity_radius,
+                                                                                    retrieval_diversity_lambda=diversity_lambda,
+                                                                                    retrieval_diversity_min_keep=diversity_min_keep,
+                                                                                )
+                                                                                tuned_fusion = replace(
+                                                                                    cfg.fusion,
+                                                                                    retrieval_temperature=temp,
+                                                                                    retrieval_score_norm=norm,
+                                                                                    use_spatial_consensus=use_spatial,
+                                                                                    spatial_sigma_km=spatial_sigma,
+                                                                                    spatial_consensus_weight=spatial_weight,
+                                                                                    cross_source_weight=cross_weight,
+                                                                                    use_plausibility_rerank=use_plausibility,
+                                                                                    plausibility_radius_km=plaus_radius,
+                                                                                    plausibility_weight=plaus_weight,
+                                                                                    use_adaptive_outlier_guard=use_outlier_guard,
+                                                                                    outlier_guard_strength=outlier_strength,
+                                                                                    outlier_guard_min_scale_km=outlier_min_scale,
+                                                                                    outlier_guard_mad_scale=outlier_mad,
+                                                                                    top_k=ftopk,
+                                                                                )
+                                                                                tuned_cfg = replace(
+                                                                                    cfg, geolocator=tuned_geo, fusion=tuned_fusion
+                                                                                )
+                                                                                metrics = _evaluate(tuned_cfg, images_dir, records)
+                                                                                results.append(
+                                                                                    {
+                                                                                        "geospot_score_scale": scale,
+                                                                                        "retrieval_temperature": temp,
+                                                                                        "retrieval_top_k": topk,
+                                                                                        "retrieval_diversity_radius_km": diversity_radius,
+                                                                                        "retrieval_diversity_lambda": diversity_lambda,
+                                                                                        "retrieval_diversity_min_keep": diversity_min_keep,
+                                                                                        "fusion_top_k": ftopk,
+                                                                                        "retrieval_score_norm": norm,
+                                                                                        "use_spatial_consensus": use_spatial,
+                                                                                        "spatial_sigma_km": spatial_sigma,
+                                                                                        "spatial_consensus_weight": spatial_weight,
+                                                                                        "cross_source_weight": cross_weight,
+                                                                                        "use_plausibility_rerank": use_plausibility,
+                                                                                        "plausibility_radius_km": plaus_radius,
+                                                                                        "plausibility_weight": plaus_weight,
+                                                                                        "use_adaptive_outlier_guard": use_outlier_guard,
+                                                                                        "outlier_guard_strength": outlier_strength,
+                                                                                        "outlier_guard_min_scale_km": outlier_min_scale,
+                                                                                        "outlier_guard_mad_scale": outlier_mad,
+                                                                                        **metrics,
+                                                                                    }
+                                                                                )
 
     results.sort(key=lambda r: math.inf if r["median_km"] is None else r["median_km"])
     payload = {

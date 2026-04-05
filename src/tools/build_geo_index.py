@@ -132,6 +132,7 @@ def build_index(
         longitudes=np.array(longitudes, dtype=np.float32),
         ids=np.array(ids, dtype=object),
         paths=np.array(paths, dtype=object),
+        model_id=np.asarray(model_id, dtype=np.str_),
     )
     return len(embeddings)
 
@@ -172,6 +173,7 @@ def build_index_from_sidecars(images: List[Path], output: Path, model_id: str) -
         longitudes=np.array(longitudes, dtype=np.float32),
         ids=np.array(ids, dtype=object),
         paths=np.array(paths, dtype=object),
+        model_id=np.asarray(model_id, dtype=np.str_),
     )
     return len(embeddings)
 

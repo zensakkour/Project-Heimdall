@@ -62,3 +62,36 @@ def test_multi_provider_collects_provider_errors() -> None:
     assert provider.last_error is not None
     assert "provider_failed" in provider.last_error
     assert "index_not_found" in provider.last_error
+
+
+def test_multi_provider_source_balance_can_prevent_single_source_domination() -> None:
+    provider_a = _StaticProvider(
+        values=[
+            GeoCandidate(latitude=48.8566, longitude=2.3522, retrieval_score=0.99, match_id="retrieval:a:1"),
+            GeoCandidate(latitude=40.7128, longitude=-74.0060, retrieval_score=0.98, match_id="retrieval:a:2"),
+        ]
+    )
+    provider_b = _StaticProvider(
+        values=[
+            GeoCandidate(latitude=35.6764, longitude=139.6500, retrieval_score=0.97, match_id="geoclip"),
+        ]
+    )
+    plain = MultiCandidateProvider(
+        [provider_a, provider_b],
+        dedupe_radius_m=0.0,
+        source_balance_beta=0.0,
+        max_candidates=2,
+    )
+    out_plain = plain.candidates("dummy.jpg")
+    assert [cand.match_id for cand in out_plain] == ["retrieval:a:1", "retrieval:a:2"]
+
+    balanced = MultiCandidateProvider(
+        [provider_a, provider_b],
+        dedupe_radius_m=0.0,
+        source_balance_beta=0.8,
+        max_candidates=2,
+    )
+    out_balanced = balanced.candidates("dummy.jpg")
+    ids = {cand.match_id for cand in out_balanced}
+    assert "retrieval:a:1" in ids
+    assert "geoclip" in ids
