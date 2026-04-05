@@ -147,12 +147,36 @@
 .summary {
   min-height: 24px;
   padding: 12px 14px;
-  border: 1px solid rgba(127, 184, 138, 0.16);
+  border: 1px solid rgba(127, 184, 138, 0.2);
   border-radius: 12px;
-  background: rgba(3, 5, 5, 0.7);
+  background: rgba(4, 7, 7, 0.82);
   color: var(--muted);
   font-size: 15px;
   line-height: 1.45;
+  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
+}
+
+.summary.state-idle {
+  border-color: rgba(127, 184, 138, 0.2);
+  color: var(--muted);
+}
+
+.summary.state-loading {
+  border-color: rgba(159, 216, 167, 0.36);
+  background: rgba(8, 13, 11, 0.86);
+  color: #d6e9dd;
+}
+
+.summary.state-success {
+  border-color: rgba(127, 184, 138, 0.36);
+  background: rgba(7, 12, 10, 0.88);
+  color: #dff4e6;
+}
+
+.summary.state-error {
+  border-color: rgba(255, 107, 107, 0.5);
+  background: rgba(22, 8, 8, 0.78);
+  color: #ffd1d1;
 }
 
 .progress {
@@ -311,6 +335,14 @@
   overflow: hidden;
 }
 
+.geo-empty {
+  padding: 14px;
+  border-top: 1px solid rgba(127, 184, 138, 0.12);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .geo-rank-item {
   display: grid;
   grid-template-columns: auto 1fr auto;
@@ -410,6 +442,16 @@
   background: rgba(7, 10, 10, 0.8);
   cursor: pointer;
   transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.list-empty {
+  display: flex;
+  align-items: center;
+  min-height: 46px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(127, 184, 138, 0.16);
+  background: rgba(6, 10, 10, 0.7);
 }
 
 .list-item:hover {
