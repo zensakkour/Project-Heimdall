@@ -112,6 +112,31 @@ The platform is organized as a modular pipeline:
 - API server: `src/tools/ui_server.py` (FastAPI).
 - Analysis frontend: `src/dashboard/analysis/`.
 
+## Technology Status (As of April 5, 2026)
+
+Current implementation status:
+
+- Geo candidate stack:
+  - Multi-provider candidate generation (retrieval index + GeoSpot/GeoCLIP + EXIF/sidecar fallbacks).
+  - Candidate validation, near-duplicate merge, and bounded candidate output before fusion.
+- Fusion and uncertainty:
+  - Log-space probabilistic fusion with configurable retrieval normalization (`none`, `zscore_sigmoid`, `minmax`, `rank_exp`).
+  - Spatial-consensus likelihood to down-rank isolated outliers and favor geographically consistent hypotheses.
+  - Dateline-safe longitude fusion and uncertainty ellipse/radius outputs.
+  - Optional shadow/terrain likelihood terms.
+- Runtime resiliency:
+  - Health endpoints and dependency diagnostics (`/health`, `/health/deps`).
+  - Safe-demo analysis fallback when heavy model dependencies are unavailable.
+- Evaluation and tuning:
+  - Geo regression gate tooling (`check_geo_regression`) with baseline/current reports in `docs/eval/`.
+  - Fusion tuning script (`tune_geo_fusion`) supporting retrieval and spatial-consensus sweeps.
+  - Calibration/error metrics (`ece`, `brier`, `nll`) in `eval_metrics`.
+
+Current technical focus:
+
+- Expanding retrieval coverage quality (more diverse geo references and hard negatives).
+- Continuing fusion calibration against tracked geo benchmarks.
+
 ## Repository Structure
 
 ```text
