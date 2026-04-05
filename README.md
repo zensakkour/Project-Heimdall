@@ -112,6 +112,32 @@ The platform is organized as a modular pipeline:
 - API server: `src/tools/ui_server.py` (FastAPI).
 - Analysis frontend: `src/dashboard/analysis/`.
 
+## Technology Status (As of April 5, 2026)
+
+Current implementation status:
+
+- Geo candidate stack:
+  - Multi-provider candidate generation (retrieval index + GeoSpot/GeoCLIP + EXIF/sidecar fallbacks).
+  - Candidate validation, near-duplicate merge, and bounded candidate output before fusion.
+- Fusion and uncertainty:
+  - Log-space probabilistic fusion with configurable retrieval normalization (`none`, `zscore_sigmoid`, `minmax`, `rank_exp`).
+  - Spatial-consensus likelihood to down-rank isolated outliers and favor geographically consistent hypotheses.
+  - Cross-source agreement likelihood to reward hypotheses supported across retrieval/GeoCLIP/EXIF sources.
+  - Dateline-safe longitude fusion and uncertainty ellipse/radius outputs.
+  - Optional shadow/terrain likelihood terms.
+- Runtime resiliency:
+  - Health endpoints and dependency diagnostics (`/health`, `/health/deps`).
+  - Safe-demo analysis fallback when heavy model dependencies are unavailable.
+- Evaluation and tuning:
+  - Geo regression gate tooling (`check_geo_regression`) with baseline/current reports in `docs/eval/`.
+  - Fusion tuning script (`tune_geo_fusion`) supporting retrieval and consensus-weight sweeps.
+  - Calibration/error metrics (`ece`, `brier`, `nll`) in `eval_metrics`.
+
+Current technical focus:
+
+- Expanding retrieval coverage quality (more diverse geo references and hard negatives).
+- Continuing fusion calibration against tracked geo benchmarks.
+
 ## Repository Structure
 
 ```text
@@ -295,8 +321,23 @@ Useful geo quality knobs in `geolocator`:
 - `candidate_dedupe_radius_m`: merges near-duplicate candidates from multiple providers.
 - `candidate_max_results`: caps merged candidate count before fusion.
 
-Useful fusion knob:
+Useful detection quality knobs in `detector`:
+- `min_area_px`: filters tiny unstable detections.
+- `nms_mode`: `obb` (oriented IoU) or `aabb` (axis-aligned IoU) suppression mode.
+- `class_agnostic_nms`: when `false`, NMS keeps overlapping boxes from different classes.
+- `use_tta`: enables test-time augmentation in Ultralytics inference.
+
+Useful fusion knobs:
 - `fusion.retrieval_score_norm`: `none`, `zscore_sigmoid`, `minmax`, `rank_exp`.
+- `fusion.source_prior_retrieval`, `fusion.source_prior_geoclip`, `fusion.source_prior_exif`: source-level priors applied before posterior normalization.
+- `fusion.use_spatial_consensus`: enables neighborhood agreement likelihood in fusion.
+- `fusion.spatial_sigma_km`: spatial kernel scale in kilometers.
+- `fusion.spatial_consensus_weight`: strength of spatial consensus in posterior weighting.
+- `fusion.use_cross_source_agreement`: enables cross-provider support likelihood in fusion.
+- `fusion.cross_source_sigma_km`: distance scale for cross-source agreement kernel.
+- `fusion.cross_source_weight`: strength of cross-source agreement in posterior weighting.
+- `fusion.credible_mass`, `fusion.min_credible_candidates`: robust posterior subset used for fused mean/covariance.
+- `fusion.use_top_cluster_for_stats`, `fusion.credible_cluster_radius_km`, `fusion.min_credible_cluster_weight`: constrain fused stats to the dominant spatial mode when hypotheses are ambiguous.
 
 ## Data and Model Notes
 

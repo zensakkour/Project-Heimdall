@@ -14,7 +14,11 @@ class DetectorConfig:
     weights_path: Optional[str] = None
     min_confidence: float = 0.25
     nms_iou: float = 0.5
+    nms_mode: str = "obb"
     max_detections: int = 100
+    min_area_px: float = 16.0
+    class_agnostic_nms: bool = False
+    use_tta: bool = False
     use_sidecar: bool = True
     use_classic: bool = False
     imgsz: int = 1280
@@ -49,10 +53,24 @@ class VerificationConfig:
 class FusionConfig:
     retrieval_temperature: float = 0.2
     retrieval_score_norm: str = "none"
+    source_prior_retrieval: float = 1.0
+    source_prior_geoclip: float = 1.0
+    source_prior_exif: float = 1.0
+    use_spatial_consensus: bool = True
+    spatial_sigma_km: float = 2.0
+    spatial_consensus_weight: float = 1.0
+    use_cross_source_agreement: bool = True
+    cross_source_sigma_km: float = 15.0
+    cross_source_weight: float = 1.0
     shadow_sigma_deg: float = 20.0
     terrain_sigma: float = 100.0
     use_shadow: bool = True
     use_terrain: bool = False
+    credible_mass: float = 0.9
+    min_credible_candidates: int = 2
+    use_top_cluster_for_stats: bool = True
+    credible_cluster_radius_km: float = 500.0
+    min_credible_cluster_weight: float = 0.35
     top_k: int = 5
 
 
@@ -86,7 +104,11 @@ def load_config(path: str) -> HeimdallConfig:
             weights_path=det.get("weights_path"),
             min_confidence=det.get("min_confidence", 0.25),
             nms_iou=det.get("nms_iou", 0.5),
+            nms_mode=det.get("nms_mode", "obb"),
             max_detections=det.get("max_detections", 100),
+            min_area_px=det.get("min_area_px", 16.0),
+            class_agnostic_nms=det.get("class_agnostic_nms", False),
+            use_tta=det.get("use_tta", False),
             use_sidecar=det.get("use_sidecar", True),
             use_classic=det.get("use_classic", False),
             imgsz=det.get("imgsz", 1280),
@@ -110,10 +132,24 @@ def load_config(path: str) -> HeimdallConfig:
         fusion=FusionConfig(
             retrieval_temperature=fusion.get("retrieval_temperature", 0.2),
             retrieval_score_norm=fusion.get("retrieval_score_norm", "none"),
+            source_prior_retrieval=fusion.get("source_prior_retrieval", 1.0),
+            source_prior_geoclip=fusion.get("source_prior_geoclip", 1.0),
+            source_prior_exif=fusion.get("source_prior_exif", 1.0),
+            use_spatial_consensus=fusion.get("use_spatial_consensus", True),
+            spatial_sigma_km=fusion.get("spatial_sigma_km", 2.0),
+            spatial_consensus_weight=fusion.get("spatial_consensus_weight", 1.0),
+            use_cross_source_agreement=fusion.get("use_cross_source_agreement", True),
+            cross_source_sigma_km=fusion.get("cross_source_sigma_km", 15.0),
+            cross_source_weight=fusion.get("cross_source_weight", 1.0),
             shadow_sigma_deg=fusion.get("shadow_sigma_deg", 20.0),
             terrain_sigma=fusion.get("terrain_sigma", 100.0),
             use_shadow=fusion.get("use_shadow", True),
             use_terrain=fusion.get("use_terrain", False),
+            credible_mass=fusion.get("credible_mass", 0.9),
+            min_credible_candidates=fusion.get("min_credible_candidates", 2),
+            use_top_cluster_for_stats=fusion.get("use_top_cluster_for_stats", True),
+            credible_cluster_radius_km=fusion.get("credible_cluster_radius_km", 500.0),
+            min_credible_cluster_weight=fusion.get("min_credible_cluster_weight", 0.35),
             top_k=fusion.get("top_k", 5),
         ),
         score=ScoreConfig(
@@ -129,5 +165,3 @@ def load_config(path: str) -> HeimdallConfig:
             use_shadow_heading=ver.get("use_shadow_heading", True),
         ),
     )
-
-

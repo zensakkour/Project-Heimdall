@@ -9,7 +9,7 @@ from importlib import metadata
 import json
 import io
 import tempfile
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -43,6 +43,10 @@ app = FastAPI()
 
 _EVAL_STATE = {"status": "idle", "last_result": None}
 _GEO_EVAL_STATE = {"status": "idle", "last_result": None, "progress": None, "progress_path": None}
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def build_pipeline(cfg: Optional[HeimdallConfig]) -> "HeimdallPipeline":
@@ -165,6 +169,13 @@ def _build_demo_assessment(width: int, height: int, reason: Optional[str]) -> As
         covariance_m=((260.0, 0.0), (0.0, 180.0)),
         ellipse=UncertaintyEllipse(major_axis_m=520.0, minor_axis_m=300.0, orientation_deg=19.0),
         uncertainty_radius_m=420.0,
+        normalized_entropy=0.76,
+        effective_candidate_count=2.2,
+        top1_posterior=0.56,
+        top2_margin=0.28,
+        confidence_tier="medium",
+        ambiguous=False,
+        credible_set_size=2,
     )
     return Assessment(
         detections=detections,
@@ -196,7 +207,7 @@ def _make_demo_image_payload(image_path: Path, reason: Optional[str]) -> dict:
     result = _build_demo_assessment(width, height, reason)
     annotated = draw_detections(str(image_path), result.detections)
     return {
-        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "generated_at": _utc_now_iso(),
         "result": assessment_to_dict(result),
         "image_data": _image_to_data_url(annotated),
         "geo_debug": {
@@ -394,7 +405,7 @@ def _health_snapshot() -> dict:
     status = "ok" if not required_failures else "degraded"
     return {
         "status": status,
-        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "timestamp": _utc_now_iso(),
         "required_failures": required_failures,
         "deps": deps,
         "config_paths": config_paths,
@@ -478,7 +489,7 @@ async def analyze_image(
                 "safe_demo": False,
             }
             payload = {
-                "generated_at": datetime.utcnow().isoformat() + "Z",
+                "generated_at": _utc_now_iso(),
                 "result": assessment_to_dict(result),
                 "image_data": _image_to_data_url(annotated),
                 "geo_debug": geo_debug,

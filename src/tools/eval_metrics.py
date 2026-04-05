@@ -205,6 +205,29 @@ def compute_ece(confidences: Iterable[float], correctness: Iterable[int], bins: 
     return ece
 
 
+def compute_brier(confidences: Iterable[float], correctness: Iterable[int]) -> float:
+    conf_list = list(confidences)
+    corr_list = list(correctness)
+    if not conf_list:
+        return 0.0
+    return sum((c - float(y)) ** 2 for c, y in zip(conf_list, corr_list)) / len(conf_list)
+
+
+def compute_nll(confidences: Iterable[float], correctness: Iterable[int], eps: float = 1e-6) -> float:
+    conf_list = list(confidences)
+    corr_list = list(correctness)
+    if not conf_list:
+        return 0.0
+    total = 0.0
+    for c, y in zip(conf_list, corr_list):
+        p = max(eps, min(1.0 - eps, c))
+        if int(y) == 1:
+            total += -math.log(p)
+        else:
+            total += -math.log(1.0 - p)
+    return total / len(conf_list)
+
+
 def load_results(path: Path) -> list[dict]:
     rows = []
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -282,6 +305,8 @@ def main() -> int:
         "top1": (top1_hits / with_gt) if with_gt else None,
         "topk": (topk_hits / with_gt) if with_gt else None,
         "ece": compute_ece(confidences, correctness, bins=args.ece_bins) if with_gt else None,
+        "brier": compute_brier(confidences, correctness) if with_gt else None,
+        "nll": compute_nll(confidences, correctness) if with_gt else None,
         "avg_uncertainty_radius_m": (sum(uncertainty_values) / len(uncertainty_values))
         if uncertainty_values
         else None,
