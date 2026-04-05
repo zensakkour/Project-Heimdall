@@ -1,0 +1,72 @@
+{
+  "version": 1,
+  "profiles": {
+    "core": {
+      "description": "Canonical desktop benchmark suite for geo quality and backbone ranking.",
+      "geo_scenarios": [
+        {
+          "name": "leaky_reference",
+          "config": "runs/bench_cfg/cfg_current_leaky.json",
+          "images_dir": "data/spacenet_paris_test/chips",
+          "metadata": "data/spacenet_paris_test/metadata.csv",
+          "limit": 120,
+          "retrieval_only": true
+        },
+        {
+          "name": "realistic_single",
+          "config": "runs/bench_cfg/cfg_realistic_single.json",
+          "images_dir": "data/spacenet_paris_test/chips",
+          "metadata": "data/spacenet_paris_test/metadata.csv",
+          "limit": 120,
+          "retrieval_only": true
+        },
+        {
+          "name": "candidate_multi",
+          "config": "runs/bench_cfg/cfg_candidate_multi.json",
+          "images_dir": "data/spacenet_paris_test/chips",
+          "metadata": "data/spacenet_paris_test/metadata.csv",
+          "limit": 120,
+          "retrieval_only": true
+        }
+      ],
+      "backbone_benchmark": {
+        "train_images_dir": "data/spacenet_paris/chips",
+        "train_metadata": "data/spacenet_paris/metadata.csv",
+        "eval_images_dir": "data/spacenet_paris_test/chips",
+        "eval_metadata": "data/spacenet_paris_test/metadata.csv",
+        "model_ids": [
+          "openai/clip-vit-large-patch14",
+          "google/siglip-base-patch16-224"
+        ],
+        "train_limit": 120,
+        "eval_limit": 60,
+        "seed": 42,
+        "retrieval_top_k": 50,
+        "retrieval_min_score": 0.1,
+        "retrieval_min_keep_topk": 2,
+        "query_tta_degrees": [
+          0,
+          90,
+          180,
+          270
+        ],
+        "query_tta_reduce": "max",
+        "reuse_indices": true
+      },
+      "tracked_metrics": {
+        "scenarios": [
+          "mean_km",
+          "median_km",
+          "within_5km_pct",
+          "within_10km_pct"
+        ],
+        "backbone": [
+          "mean_km",
+          "median_km",
+          "within_5km_pct",
+          "within_10km_pct"
+        ]
+      }
+    }
+  }
+}

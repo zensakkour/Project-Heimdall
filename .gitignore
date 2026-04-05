@@ -15,6 +15,8 @@ __pycache__/
 # UI generated data
 /src/dashboard/data/*.json
 /src/dashboard/data/*.jsonl
+/src/dashboard/data/benchmark_runs/
+/src/dashboard/data/benchmark_compares/
 # C++ build artifacts
 build/
 out/
@@ -40,6 +42,7 @@ out/
 /data/**
 /yolo11x-obb.pt
 /runs/
+/runs/benchmark_history/
 !**/.gitkeep
 # OS
 .DS_Store

@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "profile": "core",
+  "baseline_run_id": null,
+  "baseline_commit_sha": null,
+  "promoted_at": null,
+  "baseline_summary_path": "docs/eval/baseline_summary.json",
+  "notes": "Run benchmark_ci once, then promote a run: python -m src.tools.benchmark_ci --profile core --promote <run_id>"
+}

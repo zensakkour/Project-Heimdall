@@ -943,3 +943,458 @@ const browseMetadata = byId("geo-eval-browse-metadata");
 if (browseMetadata) {
   browseMetadata.addEventListener("click", () => pickPath("/fs/pick_file", "geo-eval-metadata"));
 }
+
+function fmtMetric(value, digits = 3) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return "-";
+  return Number(value).toFixed(digits);
+}
+
+function useSavedBenchmarkView() {
+  const toggle = byId("bench-view-history");
+  return Boolean(toggle && toggle.checked);
+}
+
+let benchmarkRunsCache = [];
+
+function populateBenchmarkCompareSelectors(runs) {
+  const baselineSelect = byId("bench-compare-baseline");
+  const candidateSelect = byId("bench-compare-candidate");
+  if (!baselineSelect || !candidateSelect) return;
+
+  const previousBaseline = baselineSelect.value || "";
+  const previousCandidate = candidateSelect.value || "";
+  baselineSelect.innerHTML = "";
+  candidateSelect.innerHTML = "";
+
+  if (!runs.length) {
+    const emptyBaseline = document.createElement("option");
+    emptyBaseline.value = "";
+    emptyBaseline.textContent = "No saved runs yet";
+    baselineSelect.appendChild(emptyBaseline);
+    const emptyCandidate = document.createElement("option");
+    emptyCandidate.value = "";
+    emptyCandidate.textContent = "No saved runs yet";
+    candidateSelect.appendChild(emptyCandidate);
+    return;
+  }
+
+  runs.forEach((run) => {
+    const runId = run?.run_id || "";
+    if (!runId) return;
+    const label = `${run?.generated_at || runId} | Best: ${run?.best_model || "-"}`;
+
+    const bOpt = document.createElement("option");
+    bOpt.value = runId;
+    bOpt.textContent = label;
+    baselineSelect.appendChild(bOpt);
+
+    const cOpt = document.createElement("option");
+    cOpt.value = runId;
+    cOpt.textContent = label;
+    candidateSelect.appendChild(cOpt);
+  });
+
+  const runIds = runs.map((run) => run?.run_id).filter(Boolean);
+  const defaultCandidate = runIds[0] || "";
+  const defaultBaseline = runIds[1] || defaultCandidate;
+
+  baselineSelect.value = runIds.includes(previousBaseline) ? previousBaseline : defaultBaseline;
+  candidateSelect.value = runIds.includes(previousCandidate) ? previousCandidate : defaultCandidate;
+}
+
+function updateSelectedBenchmarkRunMeta() {
+  const selectEl = byId("bench-run-history");
+  const metaEl = byId("bench-run-meta");
+  const mode = useSavedBenchmarkView() ? "selected saved run" : "latest run";
+  if (!metaEl) return;
+  if (!selectEl || !selectEl.value) {
+    metaEl.textContent = `Mode: ${mode} | No historical run selected.`;
+    return;
+  }
+  const selected = selectEl.selectedOptions && selectEl.selectedOptions.length
+    ? selectEl.selectedOptions[0]
+    : null;
+  if (!selected) {
+    metaEl.textContent = `Mode: ${mode} | No historical run selected.`;
+    return;
+  }
+  const generatedAt = selected.dataset.generatedAt || selected.value;
+  const bestModel = selected.dataset.bestModel || "-";
+  const modelCount = selected.dataset.modelCount || "0";
+  metaEl.textContent =
+    `Mode: ${mode} | Selected run: ${generatedAt} | Best: ${bestModel} | Models: ${modelCount}`;
+}
+
+async function refreshBenchmarkRuns(preferredRunId = null) {
+  const selectEl = byId("bench-run-history");
+  if (!selectEl) return [];
+  const currentRunId = preferredRunId || selectEl.value || "";
+  let runs = [];
+  try {
+    const res = await fetch("/eval/benchmarks/runs?limit=200", { cache: "no-store" });
+    if (!res.ok) return [];
+    const payload = await res.json();
+    runs = Array.isArray(payload?.runs) ? payload.runs : [];
+  } catch {
+    benchmarkRunsCache = [];
+    populateBenchmarkCompareSelectors([]);
+    return [];
+  }
+
+  benchmarkRunsCache = runs;
+  selectEl.innerHTML = "";
+  if (!runs.length) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "No saved runs yet";
+    selectEl.appendChild(option);
+    populateBenchmarkCompareSelectors([]);
+    updateSelectedBenchmarkRunMeta();
+    return [];
+  }
+
+  runs.forEach((run) => {
+    const runId = run?.run_id || "";
+    if (!runId) return;
+    const option = document.createElement("option");
+    option.value = runId;
+    option.dataset.generatedAt = run?.generated_at || runId;
+    option.dataset.bestModel = run?.best_model || "-";
+    option.dataset.modelCount = String(Number(run?.model_count || 0));
+    option.textContent = `${option.dataset.generatedAt} | Best: ${option.dataset.bestModel}`;
+    selectEl.appendChild(option);
+  });
+
+  const target = currentRunId && runs.some((run) => run?.run_id === currentRunId)
+    ? currentRunId
+    : runs[0]?.run_id;
+  if (target) {
+    selectEl.value = target;
+  }
+  populateBenchmarkCompareSelectors(runs);
+  updateSelectedBenchmarkRunMeta();
+  return runs;
+}
+
+async function loadSelectedBenchmarkRun(options = {}) {
+  const selectEl = byId("bench-run-history");
+  const statusEl = byId("bench-status");
+  const outputEl = byId("bench-output");
+  const silent = Boolean(options?.silent);
+  const force = Boolean(options?.force);
+  if (!force && !useSavedBenchmarkView()) return;
+  if (!selectEl || !selectEl.value) return;
+  const runId = selectEl.value;
+  if (!silent && statusEl) {
+    statusEl.textContent = `Loading saved run: ${runId}`;
+  }
+  try {
+    const res = await fetch(`/eval/benchmarks/runs/${encodeURIComponent(runId)}`, { cache: "no-store" });
+    if (!res.ok) {
+      if (statusEl) statusEl.textContent = `Failed to load run: ${runId}`;
+      return;
+    }
+    const payload = await res.json();
+    renderBenchmarkSummary(payload);
+    if (outputEl) outputEl.textContent = JSON.stringify(payload, null, 2);
+    if (!silent && statusEl) {
+      statusEl.textContent = `Loaded run: ${payload?.generated_at || runId}`;
+    }
+  } catch {
+    if (statusEl) statusEl.textContent = `Failed to load run: ${runId}`;
+  }
+}
+
+function renderBenchmarkCompareSummary(compare) {
+  const statusEl = byId("bench-compare-status");
+  if (!statusEl) return;
+  const baseline = compare?.baseline_generated_at || compare?.baseline_run_id || "-";
+  const candidate = compare?.candidate_generated_at || compare?.candidate_run_id || "-";
+  const scenarioCount = Array.isArray(compare?.scenario_deltas) ? compare.scenario_deltas.length : 0;
+  const modelCount = Array.isArray(compare?.model_deltas) ? compare.model_deltas.length : 0;
+  statusEl.textContent =
+    `Compared baseline ${baseline} vs candidate ${candidate} | ` +
+    `Scenarios: ${scenarioCount} | Models: ${modelCount}`;
+}
+
+async function runBenchmarkComparison(options = {}) {
+  const baselineSelect = byId("bench-compare-baseline");
+  const candidateSelect = byId("bench-compare-candidate");
+  const outputEl = byId("bench-compare-output");
+  const statusEl = byId("bench-compare-status");
+  const appendProgress = Boolean(options?.appendProgress);
+  if (!baselineSelect || !candidateSelect) return;
+  const baselineRunId = baselineSelect.value || "";
+  const candidateRunId = candidateSelect.value || "";
+  if (!baselineRunId || !candidateRunId) {
+    if (statusEl) statusEl.textContent = "Pick baseline and candidate runs first.";
+    return;
+  }
+  if (baselineRunId === candidateRunId) {
+    if (statusEl) statusEl.textContent = "Baseline and candidate must be different runs.";
+    return;
+  }
+  if (statusEl) statusEl.textContent = "Comparing benchmark runs...";
+  const params = new URLSearchParams({
+    baseline_run_id: baselineRunId,
+    candidate_run_id: candidateRunId,
+    append_progress: appendProgress ? "1" : "0",
+  });
+  try {
+    const res = await fetch(`/eval/benchmarks/compare?${params.toString()}`, { method: "POST" });
+    if (!res.ok) {
+      let msg = `Compare failed (${res.status})`;
+      try {
+        const err = await res.json();
+        if (err?.error) msg = `Compare failed: ${err.error}`;
+      } catch {
+        // keep default message
+      }
+      if (statusEl) statusEl.textContent = msg;
+      return;
+    }
+    const payload = await res.json();
+    renderBenchmarkCompareSummary(payload);
+    if (statusEl && appendProgress) {
+      statusEl.textContent += payload.progress_appended
+        ? " | Appended to PROGRESS.md"
+        : " | Did not append to PROGRESS.md";
+    }
+    if (outputEl) {
+      const snippet = payload?.progress_md_snippet
+        ? `${payload.progress_md_snippet}\n\n`
+        : "";
+      outputEl.textContent = snippet + JSON.stringify(payload, null, 2);
+    }
+  } catch {
+    if (statusEl) statusEl.textContent = "Compare failed due to network/server error.";
+  }
+}
+
+function renderBenchmarkSummary(summary) {
+  const geoBody = byId("bench-geo-body");
+  const modelBody = byId("bench-model-body");
+  const bestModel = byId("bench-best-model");
+  if (!geoBody || !modelBody || !bestModel) return;
+
+  const geoRows = Array.isArray(summary?.geo_scenarios) ? summary.geo_scenarios : [];
+  geoBody.innerHTML = "";
+  if (!geoRows.length) {
+    geoBody.innerHTML = '<tr><td colspan="5">No scenario metrics.</td></tr>';
+  } else {
+    geoRows.forEach((row) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${row.scenario || row.name || "-"}</td>
+        <td>${fmtMetric(row.mean_km, 3)}</td>
+        <td>${fmtMetric(row.median_km, 3)}</td>
+        <td>${fmtMetric(row.within_5km_pct, 2)}</td>
+        <td>${fmtMetric(row.within_10km_pct, 2)}</td>
+      `;
+      geoBody.appendChild(tr);
+    });
+  }
+
+  const modelRows = Array.isArray(summary?.backbone_benchmark?.models)
+    ? summary.backbone_benchmark.models
+    : [];
+  modelBody.innerHTML = "";
+  if (!modelRows.length) {
+    modelBody.innerHTML = '<tr><td colspan="5">No backbone metrics.</td></tr>';
+  } else {
+    modelRows.forEach((row) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${row.model_id || "-"}</td>
+        <td>${fmtMetric(row.mean_km, 3)}</td>
+        <td>${fmtMetric(row.median_km, 3)}</td>
+        <td>${fmtMetric(row.within_5km_pct, 2)}</td>
+        <td>${fmtMetric(row.within_10km_pct, 2)}</td>
+      `;
+      modelBody.appendChild(tr);
+    });
+  }
+
+  const considered = modelRows
+    .map((row) => row?.model_id)
+    .filter((id) => typeof id === "string" && id.trim().length > 0);
+  const uniqueConsidered = [...new Set(considered)];
+  const consideredText = uniqueConsidered.length ? uniqueConsidered.join(", ") : "-";
+  bestModel.textContent =
+    `Best model: ${summary?.backbone_benchmark?.best_model || "-"} | ` +
+    `Models considered: ${consideredText}`;
+}
+
+async function pollBenchmarks() {
+  const statusEl = byId("bench-status");
+  const outputEl = byId("bench-output");
+  const progressWrap = byId("bench-progress");
+  const progressBar = byId("bench-progress-bar");
+  const progressText = byId("bench-progress-text");
+  const res = await fetch("/eval/benchmarks/status");
+  if (!res.ok) return;
+  const data = await res.json();
+  const status = data.status || "idle";
+  const stage = data.stage || "-";
+  if (statusEl) statusEl.textContent = `Status: ${status} | Stage: ${stage}`;
+  if (data.progress && progressBar && progressText) {
+    const total = Number(data.progress.total || 0);
+    const current = Number(data.progress.current || 0);
+    const pctRaw = Number(data.progress.percent);
+    const pct =
+      Number.isFinite(pctRaw) && pctRaw >= 0
+        ? Math.min(100, Math.max(0, Math.round(pctRaw)))
+        : total > 0
+          ? Math.min(100, Math.max(0, Math.round((current / total) * 100)))
+          : 0;
+    const msg = data.progress.message || "";
+    progressBar.style.width = `${pct}%`;
+    progressText.textContent = msg ? `${pct}% - ${msg}` : `${pct}%`;
+  }
+  if (progressWrap) {
+    const showProgress =
+      status === "running" ||
+      status === "done" ||
+      status === "error" ||
+      Boolean(data.progress);
+    progressWrap.classList.toggle("active", showProgress);
+  }
+  if (outputEl && data.last_result && !useSavedBenchmarkView()) {
+    outputEl.textContent = data.last_result;
+  }
+  if (status === "done" && data.last_result) {
+    try {
+      const parsed = JSON.parse(data.last_result);
+      await refreshBenchmarkRuns(data.run_id || parsed.run_id || null);
+      if (!useSavedBenchmarkView()) {
+        renderBenchmarkSummary(parsed);
+      }
+    } catch {
+      // Keep raw output visible.
+    }
+  }
+  if (status === "running") {
+    setTimeout(pollBenchmarks, 1500);
+  }
+}
+
+async function startBenchmarks() {
+  const statusEl = byId("bench-status");
+  const outputEl = byId("bench-output");
+  const progressWrap = byId("bench-progress");
+  const progressBar = byId("bench-progress-bar");
+  const progressText = byId("bench-progress-text");
+  const params = new URLSearchParams({
+    images_dir: byId("bench-images-dir")?.value?.trim() || "data/spacenet_paris_test/chips",
+    metadata: byId("bench-metadata")?.value?.trim() || "data/spacenet_paris_test/metadata.csv",
+    limit: String(Number(byId("bench-geo-limit")?.value || "120")),
+    train_images_dir: byId("bench-train-images-dir")?.value?.trim() || "data/spacenet_paris/chips",
+    train_metadata: byId("bench-train-metadata")?.value?.trim() || "data/spacenet_paris/metadata.csv",
+    eval_images_dir: byId("bench-images-dir")?.value?.trim() || "data/spacenet_paris_test/chips",
+    eval_metadata: byId("bench-metadata")?.value?.trim() || "data/spacenet_paris_test/metadata.csv",
+    train_limit: String(Number(byId("bench-train-limit")?.value || "120")),
+    eval_limit: String(Number(byId("bench-eval-limit")?.value || "60")),
+    model_ids:
+      byId("bench-model-ids")?.value?.trim() ||
+      "openai/clip-vit-large-patch14,google/siglip-base-patch16-224",
+    reuse_indices: byId("bench-reuse-indices")?.checked ? "1" : "0",
+  });
+
+  if (statusEl) statusEl.textContent = "Status: starting...";
+  if (outputEl) outputEl.textContent = "Running benchmark comparison...";
+  if (progressWrap) progressWrap.classList.add("active");
+  if (progressBar) progressBar.style.width = "0%";
+  if (progressText) progressText.textContent = "0% - Preparing benchmark jobs";
+  await fetch(`/eval/benchmarks/start?${params.toString()}`, { method: "POST" });
+  pollBenchmarks();
+}
+
+const benchRunBtn = byId("bench-run");
+if (benchRunBtn) {
+  benchRunBtn.addEventListener("click", startBenchmarks);
+}
+
+const benchRunRefreshBtn = byId("bench-run-refresh");
+if (benchRunRefreshBtn) {
+  benchRunRefreshBtn.addEventListener("click", async () => {
+    await refreshBenchmarkRuns();
+    if (useSavedBenchmarkView()) {
+      await loadSelectedBenchmarkRun({ silent: true, force: true });
+    }
+  });
+}
+
+const benchRunLoadBtn = byId("bench-run-load");
+if (benchRunLoadBtn) {
+  benchRunLoadBtn.addEventListener("click", async () => {
+    const toggle = byId("bench-view-history");
+    if (toggle) toggle.checked = true;
+    updateSelectedBenchmarkRunMeta();
+    await loadSelectedBenchmarkRun({ force: true });
+  });
+}
+
+const benchRunHistorySelect = byId("bench-run-history");
+if (benchRunHistorySelect) {
+  benchRunHistorySelect.addEventListener("change", async () => {
+    updateSelectedBenchmarkRunMeta();
+    if (useSavedBenchmarkView()) {
+      await loadSelectedBenchmarkRun({ silent: true, force: true });
+    }
+  });
+}
+
+const benchCompareRunBtn = byId("bench-compare-run");
+if (benchCompareRunBtn) {
+  benchCompareRunBtn.addEventListener("click", async () => {
+    await runBenchmarkComparison({ appendProgress: false });
+  });
+}
+
+const benchCompareAppendBtn = byId("bench-compare-append-progress");
+if (benchCompareAppendBtn) {
+  benchCompareAppendBtn.addEventListener("click", async () => {
+    await runBenchmarkComparison({ appendProgress: true });
+  });
+}
+
+const benchViewHistoryToggle = byId("bench-view-history");
+if (benchViewHistoryToggle) {
+  benchViewHistoryToggle.addEventListener("change", async () => {
+    updateSelectedBenchmarkRunMeta();
+    if (useSavedBenchmarkView()) {
+      await loadSelectedBenchmarkRun({ force: true });
+      return;
+    }
+    await loadBenchmarkSummaryFromFile();
+  });
+}
+
+async function loadBenchmarkSummaryFromFile(options = {}) {
+  const statusEl = byId("bench-status");
+  const outputEl = byId("bench-output");
+  const silent = Boolean(options?.silent);
+  try {
+    const res = await fetch("/data/benchmark_compare.json", { cache: "no-store" });
+    if (!res.ok) return;
+    const payload = await res.json();
+    renderBenchmarkSummary(payload);
+    if (outputEl) outputEl.textContent = JSON.stringify(payload, null, 2);
+    if (!silent && statusEl) {
+      statusEl.textContent = `Loaded latest run: ${payload?.generated_at || "-"}`;
+    }
+  } catch {
+    // No cached benchmark summary yet.
+  }
+}
+
+async function initBenchmarkHistory() {
+  const runs = await refreshBenchmarkRuns();
+  if (runs.length && useSavedBenchmarkView()) {
+    await loadSelectedBenchmarkRun({ silent: true, force: true });
+    return;
+  }
+  await loadBenchmarkSummaryFromFile({ silent: true });
+}
+
+initBenchmarkHistory();
