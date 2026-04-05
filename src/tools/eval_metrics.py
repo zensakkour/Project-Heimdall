@@ -107,9 +107,7 @@ def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 
 def extract_candidates(row: dict) -> list[Candidate]:
-    fusion = row.get("fusion")
-    if isinstance(row.get("result"), dict) and isinstance(row["result"].get("fusion"), dict):
-        fusion = row["result"].get("fusion")
+    fusion = extract_fusion(row)
 
     candidates: list[Candidate] = []
     if isinstance(fusion, dict):
@@ -159,9 +157,7 @@ def extract_candidates(row: dict) -> list[Candidate]:
 
 
 def extract_uncertainty_radius(row: dict) -> Optional[float]:
-    fusion = row.get("fusion")
-    if isinstance(row.get("result"), dict) and isinstance(row["result"].get("fusion"), dict):
-        fusion = row["result"].get("fusion")
+    fusion = extract_fusion(row)
     if isinstance(fusion, dict):
         radius = fusion.get("uncertainty_radius_m")
         if isinstance(radius, (int, float)):
@@ -173,6 +169,33 @@ def extract_uncertainty_radius(row: dict) -> Optional[float]:
         radius = geo.get("uncertainty_radius_m") or geo.get("uncertainty_m")
         if isinstance(radius, (int, float)):
             return float(radius)
+    return None
+
+
+def extract_fusion(row: dict) -> Optional[dict]:
+    fusion = row.get("fusion")
+    if isinstance(row.get("result"), dict) and isinstance(row["result"].get("fusion"), dict):
+        fusion = row["result"].get("fusion")
+    return fusion if isinstance(fusion, dict) else None
+
+
+def extract_confidence_tier(row: dict) -> Optional[str]:
+    fusion = extract_fusion(row)
+    if fusion is None:
+        return None
+    tier = fusion.get("confidence_tier")
+    if isinstance(tier, str):
+        return tier.lower().strip()
+    return None
+
+
+def extract_top1_cross_source_support(row: dict) -> Optional[float]:
+    fusion = extract_fusion(row)
+    if fusion is None:
+        return None
+    support = fusion.get("top1_cross_source_support")
+    if isinstance(support, (int, float)):
+        return max(0.0, min(1.0, float(support)))
     return None
 
 
@@ -228,6 +251,18 @@ def compute_nll(confidences: Iterable[float], correctness: Iterable[int], eps: f
     return total / len(conf_list)
 
 
+def _distance_bucket_km(distance_km: float) -> str:
+    if distance_km <= 1.0:
+        return "0-1km"
+    if distance_km <= 5.0:
+        return "1-5km"
+    if distance_km <= 25.0:
+        return "5-25km"
+    if distance_km <= 100.0:
+        return "25-100km"
+    return ">100km"
+
+
 def load_results(path: Path) -> list[dict]:
     rows = []
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -260,6 +295,13 @@ def main() -> int:
     confidences: list[float] = []
     correctness: list[int] = []
     uncertainty_values: list[float] = []
+    top1_distances_km: list[float] = []
+    top5_25km_hits = 0
+    top1_cross_source_support_values: list[float] = []
+    high_conf_total = 0
+    high_conf_hits = 0
+    medium_or_higher_total = 0
+    medium_or_higher_hits = 0
 
     for row in rows:
         total += 1
@@ -274,6 +316,9 @@ def main() -> int:
         radius = extract_uncertainty_radius(row)
         if radius is not None:
             uncertainty_values.append(radius)
+        top1_cross_source_support = extract_top1_cross_source_support(row)
+        if top1_cross_source_support is not None:
+            top1_cross_source_support_values.append(top1_cross_source_support)
 
         if ground_truth is None:
             continue
@@ -287,23 +332,57 @@ def main() -> int:
         with_gt += 1
         best = candidates[0]
         best_dist = haversine_m(gt.latitude, gt.longitude, best.latitude, best.longitude)
+        top1_distances_km.append(best_dist / 1000.0)
         best_hit = 1 if best_dist <= args.radius_m else 0
         top1_hits += best_hit
+        tier = extract_confidence_tier(row)
+        if tier == "high":
+            high_conf_total += 1
+            high_conf_hits += best_hit
+        if tier in {"high", "medium"}:
+            medium_or_higher_total += 1
+            medium_or_higher_hits += best_hit
 
         for cand in candidates[: args.top_k]:
             dist = haversine_m(gt.latitude, gt.longitude, cand.latitude, cand.longitude)
             if dist <= args.radius_m:
                 topk_hits += 1
                 break
+        for cand in candidates[:5]:
+            dist = haversine_m(gt.latitude, gt.longitude, cand.latitude, cand.longitude)
+            if dist <= 25_000.0:
+                top5_25km_hits += 1
+                break
 
         confidences.append(normalize_confidence(best.score))
         correctness.append(best_hit)
+
+    distance_buckets = {"0-1km": 0, "1-5km": 0, "5-25km": 0, "25-100km": 0, ">100km": 0}
+    for dist_km in top1_distances_km:
+        distance_buckets[_distance_bucket_km(dist_km)] += 1
 
     payload = {
         "total": total,
         "with_ground_truth": with_gt,
         "top1": (top1_hits / with_gt) if with_gt else None,
         "topk": (topk_hits / with_gt) if with_gt else None,
+        "top1_mean_km": (sum(top1_distances_km) / len(top1_distances_km)) if top1_distances_km else None,
+        "top1_median_km": (
+            sorted(top1_distances_km)[len(top1_distances_km) // 2] if top1_distances_km else None
+        ),
+        "top5_within_25km_pct": (100.0 * top5_25km_hits / with_gt) if with_gt else None,
+        "avg_top1_cross_source_support": (
+            sum(top1_cross_source_support_values) / len(top1_cross_source_support_values)
+        )
+        if top1_cross_source_support_values
+        else None,
+        "high_confidence_coverage_pct": (100.0 * high_conf_total / with_gt) if with_gt else None,
+        "high_confidence_top1": (high_conf_hits / high_conf_total) if high_conf_total else None,
+        "medium_or_higher_coverage_pct": (100.0 * medium_or_higher_total / with_gt) if with_gt else None,
+        "medium_or_higher_top1": (medium_or_higher_hits / medium_or_higher_total)
+        if medium_or_higher_total
+        else None,
+        "failure_buckets_top1": distance_buckets,
         "ece": compute_ece(confidences, correctness, bins=args.ece_bins) if with_gt else None,
         "brier": compute_brier(confidences, correctness) if with_gt else None,
         "nll": compute_nll(confidences, correctness) if with_gt else None,
@@ -324,5 +403,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
-
