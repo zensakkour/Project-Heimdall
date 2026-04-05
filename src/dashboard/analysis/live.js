@@ -370,21 +370,21 @@ function ensureLiveMap() {
         const conf = Number(props.rawWeight || 0);
         const posterior = props.posterior !== undefined ? Number(props.posterior) : null;
         const retr = props.retrieval !== undefined ? Number(props.retrieval) : null;
-        const html = [
-          `<strong>Candidate #${rank}</strong>`,
+        const lines = [
+          `Candidate #${rank}`,
           `Lat/Lon: ${coords[1].toFixed(5)}, ${coords[0].toFixed(5)}`,
           `Confidence: ${(conf * 100).toFixed(1)}%`,
         ];
         if (posterior !== null && !Number.isNaN(posterior)) {
-          html.push(`Fusion weight: ${(posterior * 100).toFixed(1)}%`);
+          lines.push(`Fusion weight: ${(posterior * 100).toFixed(1)}%`);
         }
         if (retr !== null && !Number.isNaN(retr)) {
-          html.push(`Retrieval score: ${(retr * 100).toFixed(1)}%`);
+          lines.push(`Retrieval score: ${(retr * 100).toFixed(1)}%`);
         }
         if (livePopup) livePopup.remove();
         livePopup = new maplibregl.Popup({ offset: 12 })
           .setLngLat(coords)
-          .setHTML(html.join("<br/>"))
+          .setText(lines.join("\n"))
           .addTo(liveMap);
       });
 
@@ -394,7 +394,7 @@ function ensureLiveMap() {
         if (livePopup) livePopup.remove();
         livePopup = new maplibregl.Popup({ offset: 12 })
           .setLngLat(coords)
-          .setHTML(`Fused mean<br/>Lat/Lon: ${coords[1].toFixed(5)}, ${coords[0].toFixed(5)}`)
+          .setText(`Fused mean\nLat/Lon: ${coords[1].toFixed(5)}, ${coords[0].toFixed(5)}`)
           .addTo(liveMap);
       });
 
@@ -607,9 +607,12 @@ function drawScene(activeIndex) {
 function renderList(detections, imageDataUrl) {
   const list = byId("detection-list");
   const details = byId("details");
-  list.innerHTML = "";
+  list.replaceChildren();
   if (!detections || detections.length === 0) {
-    list.innerHTML = `<div class="list-empty muted">No detections found for this image.</div>`;
+    const empty = document.createElement("div");
+    empty.className = "list-empty muted";
+    empty.textContent = "No detections found for this image.";
+    list.appendChild(empty);
     details.textContent = "No detections available.";
     return;
   }
@@ -617,13 +620,23 @@ function renderList(detections, imageDataUrl) {
     const item = document.createElement("div");
     item.className = "list-item";
     const conf = Math.max(0, Math.min(1, det.confidence ?? 0));
-    item.innerHTML = `
-      <span>${det.label}</span>
-      <div class="list-meta">
-        <div class="confidence-bar"><div class="confidence-fill" style="width:${(conf * 100).toFixed(1)}%"></div></div>
-        <span class="confidence">${(conf * 100).toFixed(1)}%</span>
-      </div>
-    `;
+    const label = document.createElement("span");
+    label.textContent = String(det.label ?? "unknown");
+    const meta = document.createElement("div");
+    meta.className = "list-meta";
+    const bar = document.createElement("div");
+    bar.className = "confidence-bar";
+    const fill = document.createElement("div");
+    fill.className = "confidence-fill";
+    fill.style.width = `${(conf * 100).toFixed(1)}%`;
+    bar.appendChild(fill);
+    const confText = document.createElement("span");
+    confText.className = "confidence";
+    confText.textContent = `${(conf * 100).toFixed(1)}%`;
+    meta.appendChild(bar);
+    meta.appendChild(confText);
+    item.appendChild(label);
+    item.appendChild(meta);
     item.addEventListener("click", () => {
       document.querySelectorAll(".list-item").forEach((el) => el.classList.remove("active"));
       item.classList.add("active");
@@ -764,14 +777,20 @@ if (topSelect) {
 function renderGeoRanking(items) {
   const container = byId("geo-ranking");
   if (!container) return;
-  container.innerHTML = "";
+  container.replaceChildren();
   const header = document.createElement("div");
   header.className = "geo-rank-item geo-rank-header";
-  header.innerHTML = `
-    <span class="rank-badge">Rank</span>
-    <span>Coordinates</span>
-    <span class="rank-conf">Confidence</span>
-  `;
+  const headerRank = document.createElement("span");
+  headerRank.className = "rank-badge";
+  headerRank.textContent = "Rank";
+  const headerCoords = document.createElement("span");
+  headerCoords.textContent = "Coordinates";
+  const headerConf = document.createElement("span");
+  headerConf.className = "rank-conf";
+  headerConf.textContent = "Confidence";
+  header.appendChild(headerRank);
+  header.appendChild(headerCoords);
+  header.appendChild(headerConf);
   container.appendChild(header);
   if (!items || items.length === 0) {
     container.classList.add("muted");
@@ -786,11 +805,17 @@ function renderGeoRanking(items) {
     const row = document.createElement("div");
     row.className = "geo-rank-item";
     row.dataset.rank = String(item.rank);
-    row.innerHTML = `
-      <span class="rank-badge">#${item.rank}</span>
-      <span>${item.latitude.toFixed(4)}, ${item.longitude.toFixed(4)}</span>
-      <span class="rank-conf">${(item.weight * 100).toFixed(1)}%</span>
-    `;
+    const rank = document.createElement("span");
+    rank.className = "rank-badge";
+    rank.textContent = `#${item.rank}`;
+    const coords = document.createElement("span");
+    coords.textContent = `${item.latitude.toFixed(4)}, ${item.longitude.toFixed(4)}`;
+    const conf = document.createElement("span");
+    conf.className = "rank-conf";
+    conf.textContent = `${(item.weight * 100).toFixed(1)}%`;
+    row.appendChild(rank);
+    row.appendChild(coords);
+    row.appendChild(conf);
     row.addEventListener("click", () => {
       setSelectedRank(item.rank);
       ensureLiveMap();

@@ -14,6 +14,13 @@ function formatMaybe(value, digits = 3) {
   return Number(value).toFixed(digits);
 }
 
+function appendCell(row, value) {
+  const cell = document.createElement("td");
+  cell.textContent = String(value);
+  row.appendChild(cell);
+  return cell;
+}
+
 let mapView = null;
 let trackView = null;
 let currentRow = null;
@@ -384,8 +391,8 @@ function renderFusionDetail(row) {
   const summary = $("fusion-summary");
   const grid = $("fusion-candidates");
   const tbody = $("candidate-table-body");
-  grid.innerHTML = "";
-  tbody.innerHTML = "";
+  grid.replaceChildren();
+  tbody.replaceChildren();
 
   const fusion = row?.fusion;
   if (!fusion) {
@@ -408,16 +415,14 @@ function renderFusionDetail(row) {
     const cand = item.candidate || {};
     const evidence = item.evidence || {};
     const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${idx + 1}</td>
-      <td>${formatMaybe(cand.latitude, 5)}</td>
-      <td>${formatMaybe(cand.longitude, 5)}</td>
-      <td>${formatMaybe(item.posterior_weight, 3)}</td>
-      <td>${formatMaybe(cand.retrieval_score, 3)}</td>
-      <td>${formatMaybe(evidence.shadow_residual_deg, 1)}</td>
-      <td>${formatMaybe(evidence.terrain_residual, 1)}</td>
-      <td>${cand.match_id || "-"}</td>
-    `;
+    appendCell(tr, idx + 1);
+    appendCell(tr, formatMaybe(cand.latitude, 5));
+    appendCell(tr, formatMaybe(cand.longitude, 5));
+    appendCell(tr, formatMaybe(item.posterior_weight, 3));
+    appendCell(tr, formatMaybe(cand.retrieval_score, 3));
+    appendCell(tr, formatMaybe(evidence.shadow_residual_deg, 1));
+    appendCell(tr, formatMaybe(evidence.terrain_residual, 1));
+    appendCell(tr, cand.match_id || "-");
     tbody.appendChild(tr);
   });
 
@@ -426,25 +431,30 @@ function renderFusionDetail(row) {
     const evidence = item.evidence || {};
     const card = document.createElement("div");
     card.className = "fusion-card";
-    card.innerHTML = `
-      <div class="fusion-header">#${idx + 1}  -  w=${formatMaybe(item.posterior_weight, 3)}</div>
-      <div class="fusion-row">Lat/Lon: ${formatMaybe(cand.latitude, 5)}, ${formatMaybe(
-        cand.longitude,
-        5
-      )}</div>
-      <div class="fusion-row">Retrieval: ${formatMaybe(cand.retrieval_score, 3)} ${
-      cand.match_id ? ` -  ${cand.match_id}` : ""
-    }</div>
-      <div class="fusion-row">Shadow residual: ${formatMaybe(
-        evidence.shadow_residual_deg,
-        1
-      )} deg</div>
-      <div class="fusion-row">Terrain residual: ${formatMaybe(evidence.terrain_residual, 1)}</div>
-      <div class="fusion-row">Likelihoods: ${Object.entries(evidence.likelihoods || {})
-        .map(([k, v]) => `${k}:${formatMaybe(v, 4)}`)
-        .join(", ")}</div>
-      <div class="fusion-row muted">${evidence.explanation || "-"}</div>
-    `;
+    const header = document.createElement("div");
+    header.className = "fusion-header";
+    header.textContent = `#${idx + 1}  -  w=${formatMaybe(item.posterior_weight, 3)}`;
+    const latLon = document.createElement("div");
+    latLon.className = "fusion-row";
+    latLon.textContent = `Lat/Lon: ${formatMaybe(cand.latitude, 5)}, ${formatMaybe(cand.longitude, 5)}`;
+    const retrieval = document.createElement("div");
+    retrieval.className = "fusion-row";
+    retrieval.textContent = `Retrieval: ${formatMaybe(cand.retrieval_score, 3)}${cand.match_id ? ` -  ${cand.match_id}` : ""}`;
+    const shadow = document.createElement("div");
+    shadow.className = "fusion-row";
+    shadow.textContent = `Shadow residual: ${formatMaybe(evidence.shadow_residual_deg, 1)} deg`;
+    const terrain = document.createElement("div");
+    terrain.className = "fusion-row";
+    terrain.textContent = `Terrain residual: ${formatMaybe(evidence.terrain_residual, 1)}`;
+    const likelihoods = document.createElement("div");
+    likelihoods.className = "fusion-row";
+    likelihoods.textContent = `Likelihoods: ${Object.entries(evidence.likelihoods || {})
+      .map(([k, v]) => `${k}:${formatMaybe(v, 4)}`)
+      .join(", ")}`;
+    const explanation = document.createElement("div");
+    explanation.className = "fusion-row muted";
+    explanation.textContent = evidence.explanation || "-";
+    card.append(header, latLon, retrieval, shadow, terrain, likelihoods, explanation);
     grid.appendChild(card);
   });
 
@@ -454,7 +464,7 @@ function renderFusionDetail(row) {
 function renderObjects(row) {
   const body = $("object-table-body");
   const summary = $("verification-summary");
-  body.innerHTML = "";
+  body.replaceChildren();
   if (!row) {
     summary.textContent = "Verification status will appear here.";
     return;
@@ -472,16 +482,17 @@ function renderObjects(row) {
   const detections = Array.isArray(row.detections) ? row.detections : [];
   if (!detections.length) {
     const tr = document.createElement("tr");
-    tr.innerHTML = "<td colspan=\"2\">No detections</td>";
+    const td = document.createElement("td");
+    td.colSpan = 2;
+    td.textContent = "No detections";
+    tr.appendChild(td);
     body.appendChild(tr);
     return;
   }
   detections.forEach((det) => {
     const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${det.label || "-"}</td>
-      <td>${formatMaybe(det.confidence, 2)}</td>
-    `;
+    appendCell(tr, det.label || "-");
+    appendCell(tr, formatMaybe(det.confidence, 2));
     body.appendChild(tr);
   });
 }
@@ -509,18 +520,16 @@ function render(summary) {
   $("high").textContent = summary.high_tier_count?.toString() || "0";
 
   const tbody = $("scores-body");
-  tbody.innerHTML = "";
+  tbody.replaceChildren();
   scores.forEach((row, index) => {
     const tr = document.createElement("tr");
     tr.dataset.index = index.toString();
-    tr.innerHTML = `
-      <td>${row.image}</td>
-      <td>${formatNumber(row.score)}</td>
-      <td>${row.geo_tier || "-"}</td>
-      <td>${formatNumber(row.geo_conf, 2)}</td>
-      <td>${row.uncertainty_m ?? "-"}</td>
-      <td>${row.fusion?.uncertainty_radius_m ?? "-"}</td>
-    `;
+    appendCell(tr, row.image);
+    appendCell(tr, formatNumber(row.score));
+    appendCell(tr, row.geo_tier || "-");
+    appendCell(tr, formatNumber(row.geo_conf, 2));
+    appendCell(tr, row.uncertainty_m ?? "-");
+    appendCell(tr, row.fusion?.uncertainty_radius_m ?? "-");
     tr.addEventListener("click", () => {
       currentRow = row;
       renderFusionDetail(row);
@@ -578,5 +587,4 @@ if (topSelect) {
     if (currentRow) renderMap(currentRow);
   });
 }
-
 

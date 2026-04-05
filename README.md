@@ -195,6 +195,18 @@ Install project dependencies:
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
+pip install -r requirements-core.txt
+```
+
+Install the ML stack when you need full model inference:
+
+```powershell
+pip install -r requirements-ml.txt
+```
+
+Or install everything in one shot:
+
+```powershell
 pip install -r requirements.txt
 ```
 
@@ -288,11 +300,23 @@ Runtime diagnostics:
 
 - `GET /health` returns service readiness summary.
 - `GET /health/deps` returns detailed dependency/file/path/write diagnostics.
+- `GET /health/runtime` returns worker-mode and inference timeout settings.
 
 Safe demo behavior:
 
 - If model dependencies are unavailable, `/analyze/image` and `/analyze/video` now return a realistic mock result instead of a hard error.
 - You can also force this mode via query flag: `/analyze/image?safe_demo=1`.
+
+Inference hardening toggles:
+
+- `HEIMDALL_USE_INFERENCE_WORKER=1` (default) runs inference in an isolated worker process.
+- `HEIMDALL_INFERENCE_TIMEOUT_S=90` controls image inference timeout.
+- `HEIMDALL_VIDEO_TIMEOUT_S=300` controls video inference timeout.
+- `HEIMDALL_MAX_IMAGE_BYTES` limits image upload size (default 20 MB).
+- `HEIMDALL_MAX_VIDEO_BYTES` limits video upload size (default 256 MB).
+- `HEIMDALL_ANALYSIS_CONCURRENCY` caps concurrent analysis runs (default 2).
+- `HEIMDALL_ANALYSIS_QUEUE_TIMEOUT_S` controls queue wait timeout before `429` (default 5 s).
+- Responses now include `request_id` and runtime timing metadata for diagnostics.
 
 ## Common Workflows
 
