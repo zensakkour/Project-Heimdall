@@ -63,7 +63,11 @@ def build_pipeline(cfg: Optional[HeimdallConfig]) -> "HeimdallPipeline":
         score_scale=cfg.geolocator.geospot_score_scale,
     )
     if cfg.geolocator.retrieval_index_path:
-        candidate_provider = MultiCandidateProvider([retrieval_provider, geoclip_provider])
+        candidate_provider = MultiCandidateProvider(
+            [retrieval_provider, geoclip_provider],
+            dedupe_radius_m=cfg.geolocator.candidate_dedupe_radius_m,
+            max_candidates=cfg.geolocator.candidate_max_results,
+        )
     else:
         candidate_provider = geoclip_provider
     return HeimdallPipeline(
@@ -382,5 +386,4 @@ def pick_file() -> JSONResponse:
 app.mount("/dashboard", StaticFiles(directory=DASHBOARD_DIR), name="dashboard")
 app.mount("/analysis", StaticFiles(directory=LIVE_DIR, html=True), name="analysis")
 app.mount("/", StaticFiles(directory=DASHBOARD_DIR, html=True), name="root")
-
 
