@@ -212,7 +212,6 @@ If filesystem watcher issues occur, run without reload:
 1. Scroll wheel to zoom in and zoom out.
 1. Use `Zoom In`, `Zoom Out`, and `Reset` buttons.
 
-<<<<<<< HEAD
 Runtime diagnostics:
 
 - `GET /health` returns service readiness summary.
@@ -292,6 +291,13 @@ Config files are under `src/config/`:
 
 Pass a config where supported with `--config <path>`.
 
+Useful geo quality knobs in `geolocator`:
+- `candidate_dedupe_radius_m`: merges near-duplicate candidates from multiple providers.
+- `candidate_max_results`: caps merged candidate count before fusion.
+
+Useful fusion knob:
+- `fusion.retrieval_score_norm`: `none`, `zscore_sigmoid`, `minmax`, `rank_exp`.
+
 ## Data and Model Notes
 
 - Large datasets and model artifacts are intentionally not stored in Git.
@@ -310,7 +316,6 @@ Pass a config where supported with `--config <path>`.
 - Progress tracking: [PROGRESS.md](PROGRESS.md)
 - Issue templates: [`.github/ISSUE_TEMPLATE`](.github/ISSUE_TEMPLATE)
 - PR template: [`.github/pull_request_template.md`](.github/pull_request_template.md)
-- Dependency updates: [`.github/dependabot.yml`](.github/dependabot.yml)
 - CI workflow: [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
 
 ## License
