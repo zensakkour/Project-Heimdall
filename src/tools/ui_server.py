@@ -12,6 +12,7 @@ from importlib import metadata
 import json
 import io
 import logging
+import math
 import multiprocessing as mp
 import os
 from queue import Empty as QueueEmpty
@@ -289,6 +290,18 @@ def _append_progress_snippet(snippet: str) -> None:
     prefix = "\n\n" if path.exists() and path.read_text(encoding="utf-8").strip() else ""
     with path.open("a", encoding="utf-8") as handle:
         handle.write(prefix + text + "\n")
+
+
+def _json_safe(value: Any) -> Any:
+    if isinstance(value, float):
+        if math.isnan(value) or math.isinf(value):
+            return None
+        return value
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(v) for v in value]
+    return value
 
 _WORKER_ENABLED_DEFAULT = os.getenv("HEIMDALL_USE_INFERENCE_WORKER", "1")
 _WORKER_IMAGE_TIMEOUT_S = float(os.getenv("HEIMDALL_INFERENCE_TIMEOUT_S", "90"))
@@ -1628,9 +1641,11 @@ def start_benchmarks(
                     "path": str(ui_backbone),
                 },
             }
-            summary_out.write_text(json.dumps(summary, indent=2), encoding="utf-8")
-            run_summary_out.write_text(json.dumps(summary, indent=2), encoding="utf-8")
-            _BENCHMARK_STATE["last_result"] = json.dumps(summary, indent=2)
+            summary = _json_safe(summary)
+            serialized = json.dumps(summary, indent=2, allow_nan=False)
+            run_summary_out.write_text(serialized, encoding="utf-8")
+            summary_out.write_text(serialized, encoding="utf-8")
+            _BENCHMARK_STATE["last_result"] = serialized
             _BENCHMARK_STATE["status"] = "done"
             _set_progress(4, total_steps, "done", "Benchmark run complete")
         except Exception as exc:
@@ -1638,7 +1653,15 @@ def start_benchmarks(
             _BENCHMARK_STATE["stage"] = "error"
             if _BENCHMARK_STATE.get("progress"):
                 _BENCHMARK_STATE["progress"]["message"] = "Benchmark run failed"
-            _BENCHMARK_STATE["last_result"] = str(exc)
+            _BENCHMARK_STATE["last_result"] = json.dumps(
+                {
+                    "status": "error",
+                    "run_id": run_id,
+                    "error": str(exc),
+                    "stage": _BENCHMARK_STATE.get("stage"),
+                },
+                indent=2,
+            )
 
     import threading
 
