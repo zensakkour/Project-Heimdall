@@ -34,11 +34,43 @@ Current non-goals include:
 - Scraping pipelines and broad ingestion connectors
 - Text/LLM reasoning as a dependency in core inference
 
-## Screenshots
+## Demo
 
-### Analysis UI (Desktop)
+### Analysis App Video (Desktop)
+
+<video src="docs/images/analysis-demo.webm" controls muted playsinline width="100%"></video>
+
+Fallback link: [Watch/download demo video](docs/images/analysis-demo.webm)
+
+### Analysis App Screenshot (Desktop)
 
 ![Heimdall analysis desktop](docs/images/analysis-desktop.png)
+
+To regenerate this demo automatically:
+
+```powershell
+.\.venv\Scripts\python -m pip install playwright
+.\.venv\Scripts\python -m playwright install chromium
+.\.venv\Scripts\python -m src.tools.record_demo_video
+```
+
+Optional (include Analyze Image run if model deps are healthy):
+
+```powershell
+.\.venv\Scripts\python -m src.tools.record_demo_video --with-analyze
+```
+
+### Demo Recording Checklist (for replacement video)
+
+Record the new demo while showing these interactions:
+
+1. Launch app with `.\.venv\Scripts\python -m src.tools.dev_app`.
+2. Open the printed `/analysis/` URL.
+3. Keep recording clean (no error banners in UI).
+4. In the 3D globe, drag to rotate/pan.
+5. Use mouse wheel scroll to zoom in and zoom out on the globe.
+6. Click map controls (`Zoom In`, `Zoom Out`, `Reset`) to show full interaction flow.
+7. Keep final files at `docs/images/analysis-demo.webm` and `docs/images/analysis-desktop.png`.
 
 ## Architecture Overview
 
@@ -117,6 +149,20 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
+Development app launch (auto-picks free port):
+
+```powershell
+.\.venv\Scripts\python -m src.tools.dev_app
+```
+
+This starts the full app server: API + dashboard + analysis UI.
+
+If filesystem watcher issues occur, run without reload:
+
+```powershell
+.\.venv\Scripts\python -m src.tools.dev_app --no-reload
+```
+
 ## Quick Start
 
 ### 1. Generate dashboard summary data
@@ -125,16 +171,31 @@ pip install -r requirements.txt
 .\.venv\Scripts\python -m src.tools.generate_ui_data --jsonl runs/results.jsonl
 ```
 
-### 2. Start the analysis server
+### 2. Start the app server
 
 ```powershell
-.\.venv\Scripts\python -m uvicorn src.tools.ui_server:app --reload --port 8000
+.\.venv\Scripts\python -m src.tools.dev_app
 ```
 
 ### 3. Open the app
 
-- `http://127.0.0.1:8000/`
-- `http://127.0.0.1:8000/analysis/`
+- Open the URL printed in your terminal (example: `http://127.0.0.1:8000/analysis/`).
+
+## How To Use The App
+
+1. Start the server:
+
+```powershell
+.\.venv\Scripts\python -m src.tools.dev_app
+```
+
+2. Open the `/analysis/` URL printed in terminal.
+3. Select strategy profile.
+4. Upload image and click `Analyze Image`.
+5. Review detections, geo ranking, and fusion map.
+6. Interact with 3D globe: drag to rotate/pan.
+7. Scroll wheel to zoom in and zoom out.
+8. Use `Zoom In`, `Zoom Out`, and `Reset` buttons.
 
 ## Common Workflows
 
@@ -160,6 +221,26 @@ pip install -r requirements.txt
 
 ```powershell
 .\.venv\Scripts\python -m pytest -q
+```
+
+## Troubleshooting
+
+If startup fails with `WinError 1392` under `.venv\Lib\site-packages\torch\...`, your venv is corrupted.
+Recreate it from scratch:
+
+```powershell
+deactivate
+rmdir /s /q .venv
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+Then reinstall your matching `torch/torchvision/torchaudio` build (CPU or CUDA) and rerun:
+
+```powershell
+.\.venv\Scripts\python -m src.tools.dev_app
 ```
 
 ## Config Profiles

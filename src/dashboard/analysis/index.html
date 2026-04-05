@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -10,176 +10,185 @@
       href="https://unpkg.com/maplibre-gl@5.0.0/dist/maplibre-gl.css"
       crossorigin=""
     />
-    <link rel="stylesheet" href="../theme.css?v=4" />
+    <link rel="stylesheet" href="../theme.css?v=5" />
     <link rel="stylesheet" href="../styles.css?v=4" />
-    <link rel="stylesheet" href="live.css?v=19" />
+    <link rel="stylesheet" href="live.css?v=22" />
   </head>
   <body>
     <div class="layout">
-      <header class="page-header">
-        <div class="page-header-brand">
-          <div class="brand-mark" aria-hidden="true">
-            <img class="brand-logo" src="../assets/logo.svg?v=3" alt="Heimdall logo" />
-          </div>
-          <h1>Project Heimdall</h1>
-          <p class="muted">Operational intelligence - The Watcher of the Gods</p>
-        </div>
-      </header>
-      <nav class="mode-tabs" aria-label="View mode">
-        <button class="mode-tab" data-tab="analysis" aria-pressed="true">Analysis</button>
-        <button class="mode-tab" data-tab="scoring" aria-pressed="false">Scoring</button>
-      </nav>
-      <div id="tab-analysis">
-      <section class="card">
-        <div class="section-head">
-          <div class="section-title">
-            <div>
-              <h2>Inputs</h2>
-              <p class="muted">Upload an image for analysis.</p>
+      <div class="layout-shell">
+        <header class="page-header">
+          <div class="page-header-brand">
+            <div class="brand-mark" aria-hidden="true">
+              <img class="brand-logo" src="../assets/logo.svg?v=4" alt="Heimdall logo" />
+            </div>
+            <div class="hero-copy">
+              <h1>Project Heimdall</h1>
+              <p class="muted">Operational intelligence system</p>
             </div>
           </div>
-          <div class="actions">
-            <div class="profile-select muted">
+          <nav class="mode-tabs" aria-label="View mode">
+            <button class="mode-tab" data-tab="analysis" aria-pressed="true">Analysis</button>
+            <button class="mode-tab" data-tab="scoring" aria-pressed="false">Scoring</button>
+          </nav>
+        </header>
+
+        <div id="tab-analysis">
+          <section class="card section-card">
+            <div class="section-head">
+              <div class="section-title">
+                <div>
+                  <h2>Input</h2>
+                  <p class="muted">Upload an image and run live geo analysis.</p>
+                </div>
+              </div>
+              <div class="actions">
+                <div class="profile-select muted">
+                  Active strategy:
+                  <select id="profile-select">
+                    <option value="paris">Paris (SpaceNet)</option>
+                    <option value="paris_test">Paris Test (SpaceNet)</option>
+                    <option value="legacy">Open Geo (Wikimedia)</option>
+                  </select>
+                </div>
+                <span id="last-updated" class="muted"></span>
+              </div>
+            </div>
+            <div class="inputs inputs-row">
+              <div class="file-input">
+                <div class="file-label">Image</div>
+                <label class="file-picker">
+                  <input type="file" id="image-file" accept="image/*" />
+                  <span class="file-button">Choose file</span>
+                  <span class="file-name" id="image-file-name">No file selected</span>
+                </label>
+              </div>
+              <button id="analyze-image">Analyze Image</button>
+            </div>
+          </section>
+
+          <section class="card section-card">
+            <h2>Live Analysis</h2>
+            <div id="summary" class="summary">Waiting for analysis...</div>
+            <div id="progress" class="progress" aria-live="polite">
+              <div class="progress-track">
+                <div id="progress-bar" class="progress-bar"></div>
+              </div>
+              <span id="progress-text" class="muted">Analyzing...</span>
+            </div>
+
+            <div class="geo-grid">
+              <div class="geo-map">
+                <div class="panel-head">
+                  <h3 class="panel-title">Fusion Map</h3>
+                  <label class="legend-control muted">
+                    Show top
+                    <select id="live-topn">
+                      <option value="1">1</option>
+                      <option value="2">2</option>
+                      <option value="3">3</option>
+                      <option value="5">5</option>
+                      <option value="10">10</option>
+                      <option value="20" selected>20</option>
+                    </select>
+                  </label>
+                </div>
+                <div id="live-map" class="globe-canvas" aria-label="Fusion map"></div>
+                <div class="map-legend muted">
+                  <span class="legend-dot candidate"></span> Candidate (size = confidence)
+                  <span class="legend-dot mean"></span> Fused mean
+                  <span class="legend-dot ring"></span> Uncertainty radius
+                  <span class="legend-sep"></span>
+                  <span id="live-topn-label">Showing top 20 candidates on map</span>
+                </div>
+                <div class="map-toolbar">
+                  <button id="map-zoom-in">Zoom In</button>
+                  <button id="map-zoom-out">Zoom Out</button>
+                  <button id="map-zoom-reset">Reset</button>
+                  <span class="muted">Scroll to zoom, drag to pan</span>
+                </div>
+              </div>
+
+              <aside class="geo-sidebar">
+                <h3 class="panel-title">Geo Ranking</h3>
+                <div id="geo-ranking" class="geo-ranking muted"></div>
+              </aside>
+            </div>
+
+            <div class="result-grid">
+              <div class="preview">
+                <canvas id="canvas" width="960" height="640"></canvas>
+                <div class="image-toolbar">
+                  <button id="zoom-in">Zoom In</button>
+                  <button id="zoom-out">Zoom Out</button>
+                  <button id="zoom-reset">Reset</button>
+                  <span class="muted">Scroll to zoom, drag to pan</span>
+                </div>
+              </div>
+
+              <div class="panel">
+                <h3>Detections</h3>
+                <div id="detection-list" class="list"></div>
+                <h3>Details</h3>
+                <pre id="details" class="details">Select a detection to inspect details.</pre>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div id="tab-scoring" class="tab-hidden">
+          <section class="card section-card">
+            <h2>Geo Scoring</h2>
+            <p class="muted">
+              Evaluate geo accuracy on a metadata CSV (lat/lon per image). Uses the active profile model.
+            </p>
+            <div class="score-strategy muted">
               Active strategy:
-              <select id="profile-select">
+              <select id="geo-eval-strategy">
                 <option value="paris">Paris (SpaceNet)</option>
                 <option value="paris_test">Paris Test (SpaceNet)</option>
                 <option value="legacy">Open Geo (Wikimedia)</option>
               </select>
             </div>
-            <span id="last-updated" class="muted"></span>
-          </div>
-        </div>
-        <div class="inputs inputs-row">
-          <div class="file-input">
-            <div class="file-label">Image</div>
-            <label class="file-picker">
-              <input type="file" id="image-file" accept="image/*" />
-              <span class="file-button">Choose file</span>
-              <span class="file-name" id="image-file-name">No file selected</span>
-            </label>
-          </div>
-          <button id="analyze-image">Analyze Image</button>
-        </div>
-      </section>
-
-      <section class="card">
-        <h2>Live Analysis</h2>
-        <div id="summary" class="summary">Waiting for analysis...</div>
-        <div id="progress" class="progress" aria-live="polite">
-          <div class="progress-track">
-            <div id="progress-bar" class="progress-bar"></div>
-          </div>
-          <span id="progress-text" class="muted">Analyzing...</span>
-        </div>
-        <div class="geo-grid">
-          <div class="geo-map">
-            <div class="panel-head">
-              <h3 class="panel-title">Fusion Map</h3>
-              <label class="legend-control muted">
-                Show top
-                <select id="live-topn">
-                  <option value="1">1</option>
-                  <option value="2">2</option>
-                  <option value="3">3</option>
-                  <option value="5">5</option>
-                  <option value="10">10</option>
-                  <option value="20" selected>20</option>
-                </select>
+            <div class="score-form">
+              <label>
+                Images directory
+                <div class="input-row">
+                  <input id="geo-eval-images" value="data/spacenet_paris/chips" />
+                  <button type="button" id="geo-eval-browse-images">Browse</button>
+                </div>
               </label>
+              <label>
+                Metadata CSV
+                <div class="input-row">
+                  <input id="geo-eval-metadata" value="data/spacenet_paris/metadata.csv" />
+                  <button type="button" id="geo-eval-browse-metadata">Browse</button>
+                </div>
+              </label>
+              <label>
+                Limit (0 = all)
+                <input id="geo-eval-limit" type="number" min="0" value="200" />
+              </label>
+              <label class="score-toggle">
+                Retrieval-only
+                <input id="geo-eval-retrieval-only" type="checkbox" checked />
+              </label>
+              <button id="geo-eval-run">Run Geo Eval</button>
             </div>
-            <div id="live-map" class="globe-canvas" aria-label="Fusion map"></div>
-            <div class="map-legend muted">
-              <span class="legend-dot candidate"></span> Candidate (size = confidence)
-              <span class="legend-dot mean"></span> Fused mean
-              <span class="legend-dot ring"></span> Uncertainty radius
-              <span class="legend-sep"></span>
-              <span id="live-topn-label">Showing top 20 candidates on map</span>
-            </div>
-            <div class="map-toolbar">
-              <button id="map-zoom-in">Zoom In</button>
-              <button id="map-zoom-out">Zoom Out</button>
-              <button id="map-zoom-reset">Reset</button>
-              <span class="muted">Scroll to zoom, drag to pan</span>
-            </div>
-          </div>
-          <aside class="geo-sidebar">
-            <h3 class="panel-title">Geo Ranking</h3>
-            <div id="geo-ranking" class="geo-ranking muted"></div>
-          </aside>
-        </div>
-        <div class="result-grid">
-          <div class="preview">
-            <canvas id="canvas" width="960" height="640"></canvas>
-            <div class="image-toolbar">
-              <button id="zoom-in">Zoom In</button>
-              <button id="zoom-out">Zoom Out</button>
-              <button id="zoom-reset">Reset</button>
-              <span class="muted">Scroll to zoom, drag to pan</span>
-            </div>
-          </div>
-          <div class="panel">
-            <h3>Detections</h3>
-            <div id="detection-list" class="list"></div>
-            <h3>Details</h3>
-            <pre id="details" class="details">Select a detection to inspect details.</pre>
-          </div>
-        </div>
-      </section>
-
-      </div>
-      <div id="tab-scoring" class="tab-hidden">
-        <section class="card">
-          <h2>Geo Scoring</h2>
-          <p class="muted">
-            Evaluate geo accuracy on a metadata CSV (lat/lon per image). Uses the active profile model.
-          </p>
-          <div class="score-strategy muted">
-            Active strategy:
-            <select id="geo-eval-strategy">
-              <option value="paris">Paris (SpaceNet)</option>
-              <option value="paris_test">Paris Test (SpaceNet)</option>
-              <option value="legacy">Open Geo (Wikimedia)</option>
-            </select>
-          </div>
-          <div class="score-form">
-            <label>
-              Images directory
-              <div class="input-row">
-                <input id="geo-eval-images" value="data/spacenet_paris/chips" />
-                <button type="button" id="geo-eval-browse-images">Browse</button>
+            <div class="progress score-progress" id="geo-eval-progress">
+              <div class="progress-track">
+                <div id="geo-eval-progress-bar" class="progress-bar"></div>
               </div>
-            </label>
-            <label>
-              Metadata CSV
-              <div class="input-row">
-                <input id="geo-eval-metadata" value="data/spacenet_paris/metadata.csv" />
-                <button type="button" id="geo-eval-browse-metadata">Browse</button>
-              </div>
-            </label>
-            <label>
-              Limit (0 = all)
-              <input id="geo-eval-limit" type="number" min="0" value="200" />
-            </label>
-            <label class="score-toggle">
-              Retrieval-only
-              <input id="geo-eval-retrieval-only" type="checkbox" checked />
-            </label>
-            <button id="geo-eval-run">Run Geo Eval</button>
-          </div>
-          <div class="progress score-progress" id="geo-eval-progress">
-            <div class="progress-track">
-              <div id="geo-eval-progress-bar" class="progress-bar"></div>
+              <span id="geo-eval-progress-text" class="muted">0%</span>
             </div>
-            <span id="geo-eval-progress-text" class="muted">0%</span>
-          </div>
-          <div id="geo-eval-status" class="muted">Idle</div>
-          <pre id="geo-eval-output" class="details">No results yet.</pre>
-        </section>
+            <div id="geo-eval-status" class="muted">Idle</div>
+            <pre id="geo-eval-output" class="details">No results yet.</pre>
+          </section>
+        </div>
       </div>
     </div>
 
     <script src="https://unpkg.com/maplibre-gl@5.0.0/dist/maplibre-gl.js" crossorigin=""></script>
-    <script src="live.js?v=21"></script>
+    <script src="live.js?v=22"></script>
   </body>
 </html>
