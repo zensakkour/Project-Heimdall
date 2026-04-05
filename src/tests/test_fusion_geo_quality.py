@@ -188,6 +188,77 @@ def test_source_priors_can_shift_ranking() -> None:
     assert boosted.candidates[0].candidate.match_id == "geoclip"
 
 
+def test_cross_source_agreement_can_downrank_source_isolated_outlier() -> None:
+    candidates = [
+        GeoCandidate(latitude=34.0522, longitude=-118.2437, retrieval_score=0.84, match_id="retrieval:outlier"),
+        GeoCandidate(latitude=48.8566, longitude=2.3522, retrieval_score=0.78, match_id="retrieval:paris"),
+        GeoCandidate(latitude=48.8570, longitude=2.3530, retrieval_score=0.76, match_id="geoclip"),
+    ]
+    without_cross_cfg = FusionConfig(
+        retrieval_temperature=0.25,
+        retrieval_score_norm="none",
+        use_spatial_consensus=False,
+        use_cross_source_agreement=False,
+        use_shadow=False,
+        use_terrain=False,
+        top_k=3,
+    )
+    with_cross_cfg = FusionConfig(
+        retrieval_temperature=0.25,
+        retrieval_score_norm="none",
+        use_spatial_consensus=False,
+        use_cross_source_agreement=True,
+        cross_source_sigma_km=8.0,
+        cross_source_weight=5.0,
+        use_shadow=False,
+        use_terrain=False,
+        top_k=3,
+    )
+
+    no_cross = fuse_candidates("missing.jpg", candidates, detections=[], config=without_cross_cfg)
+    with_cross = fuse_candidates("missing.jpg", candidates, detections=[], config=with_cross_cfg)
+    assert no_cross is not None
+    assert with_cross is not None
+    assert no_cross.candidates[0].candidate.match_id == "retrieval:outlier"
+    assert with_cross.candidates[0].candidate.match_id in {"retrieval:paris", "geoclip"}
+
+
+def test_cross_source_agreement_noop_with_single_source_family() -> None:
+    candidates = [
+        GeoCandidate(latitude=40.0, longitude=-74.0, retrieval_score=0.72, match_id="retrieval:a"),
+        GeoCandidate(latitude=41.0, longitude=-73.0, retrieval_score=0.68, match_id="retrieval:b"),
+        GeoCandidate(latitude=39.5, longitude=-75.0, retrieval_score=0.51, match_id="retrieval:c"),
+    ]
+    disabled_cfg = FusionConfig(
+        retrieval_temperature=0.35,
+        retrieval_score_norm="none",
+        use_spatial_consensus=False,
+        use_cross_source_agreement=False,
+        use_shadow=False,
+        use_terrain=False,
+        top_k=3,
+    )
+    enabled_cfg = FusionConfig(
+        retrieval_temperature=0.35,
+        retrieval_score_norm="none",
+        use_spatial_consensus=False,
+        use_cross_source_agreement=True,
+        cross_source_sigma_km=10.0,
+        cross_source_weight=4.0,
+        use_shadow=False,
+        use_terrain=False,
+        top_k=3,
+    )
+
+    disabled = fuse_candidates("missing.jpg", candidates, detections=[], config=disabled_cfg)
+    enabled = fuse_candidates("missing.jpg", candidates, detections=[], config=enabled_cfg)
+    assert disabled is not None
+    assert enabled is not None
+    assert [item.candidate.match_id for item in disabled.candidates] == [
+        item.candidate.match_id for item in enabled.candidates
+    ]
+
+
 def test_fusion_outputs_confidence_diagnostics() -> None:
     candidates = [
         GeoCandidate(latitude=0.0, longitude=0.0, retrieval_score=0.95, match_id="a"),

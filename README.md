@@ -122,6 +122,7 @@ Current implementation status:
 - Fusion and uncertainty:
   - Log-space probabilistic fusion with configurable retrieval normalization (`none`, `zscore_sigmoid`, `minmax`, `rank_exp`).
   - Spatial-consensus likelihood to down-rank isolated outliers and favor geographically consistent hypotheses.
+  - Cross-source agreement likelihood to reward hypotheses supported across retrieval/GeoCLIP/EXIF sources.
   - Dateline-safe longitude fusion and uncertainty ellipse/radius outputs.
   - Optional shadow/terrain likelihood terms.
 - Runtime resiliency:
@@ -129,7 +130,7 @@ Current implementation status:
   - Safe-demo analysis fallback when heavy model dependencies are unavailable.
 - Evaluation and tuning:
   - Geo regression gate tooling (`check_geo_regression`) with baseline/current reports in `docs/eval/`.
-  - Fusion tuning script (`tune_geo_fusion`) supporting retrieval and spatial-consensus sweeps.
+  - Fusion tuning script (`tune_geo_fusion`) supporting retrieval and consensus-weight sweeps.
   - Calibration/error metrics (`ece`, `brier`, `nll`) in `eval_metrics`.
 
 Current technical focus:
@@ -322,6 +323,7 @@ Useful geo quality knobs in `geolocator`:
 
 Useful detection quality knobs in `detector`:
 - `min_area_px`: filters tiny unstable detections.
+- `nms_mode`: `obb` (oriented IoU) or `aabb` (axis-aligned IoU) suppression mode.
 - `class_agnostic_nms`: when `false`, NMS keeps overlapping boxes from different classes.
 - `use_tta`: enables test-time augmentation in Ultralytics inference.
 
@@ -331,6 +333,9 @@ Useful fusion knobs:
 - `fusion.use_spatial_consensus`: enables neighborhood agreement likelihood in fusion.
 - `fusion.spatial_sigma_km`: spatial kernel scale in kilometers.
 - `fusion.spatial_consensus_weight`: strength of spatial consensus in posterior weighting.
+- `fusion.use_cross_source_agreement`: enables cross-provider support likelihood in fusion.
+- `fusion.cross_source_sigma_km`: distance scale for cross-source agreement kernel.
+- `fusion.cross_source_weight`: strength of cross-source agreement in posterior weighting.
 - `fusion.credible_mass`, `fusion.min_credible_candidates`: robust posterior subset used for fused mean/covariance.
 - `fusion.use_top_cluster_for_stats`, `fusion.credible_cluster_radius_km`, `fusion.min_credible_cluster_weight`: constrain fused stats to the dominant spatial mode when hypotheses are ambiguous.
 

@@ -11,6 +11,10 @@ def _box(x1: float, y1: float, x2: float, y2: float):
     return ((x1, y1), (x2, y1), (x2, y2), (x1, y2))
 
 
+def _diamond(cx: float, cy: float, r: float):
+    return ((cx, cy - r), (cx + r, cy), (cx, cy + r), (cx - r, cy))
+
+
 def test_nms_reduces_overlaps() -> None:
     dets = [
         Detection(label="a", confidence=0.9, obb=_box(0, 0, 10, 10)),
@@ -76,5 +80,28 @@ def test_rejects_tiny_detections_by_area() -> None:
     )
     assert len(kept) == 1
     assert kept[0].label == "b"
+
+
+def test_obb_nms_keeps_rotated_boxes_when_aabb_would_suppress() -> None:
+    dets = [
+        Detection(label="a", confidence=0.9, obb=_diamond(0.0, 0.0, 10.0)),
+        Detection(label="a", confidence=0.8, obb=_diamond(14.0, 14.0, 10.0)),
+    ]
+    kept_aabb = filter_detections(
+        dets,
+        min_confidence=0.0,
+        nms_iou=0.02,
+        max_detections=10,
+        nms_mode="aabb",
+    )
+    kept_obb = filter_detections(
+        dets,
+        min_confidence=0.0,
+        nms_iou=0.02,
+        max_detections=10,
+        nms_mode="obb",
+    )
+    assert len(kept_aabb) == 1
+    assert len(kept_obb) == 2
 
 
