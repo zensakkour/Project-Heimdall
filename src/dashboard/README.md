@@ -14,6 +14,7 @@ From repository root:
 ```powershell
 .\.venv\Scripts\python -m src.tools.generate_ui_data --jsonl runs/results.jsonl
 .\.venv\Scripts\python -m src.tools.dev_app
+.\.venv\Scripts\python -m src.tools.doctor
 ```
 
 Open:
