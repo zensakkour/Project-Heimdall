@@ -172,26 +172,28 @@ class GeoCLIPProvider:
                             match_id="exif:gps",
                         )
                     )
-
-        model = self._ensure_model()
-        if model is not None:
-            try:
-                top_gps, top_probs = model.predict(image_path, top_k=self.top_n)
-                for (lat, lon), prob in zip(top_gps, top_probs):
-                    score = float(prob) * self.score_scale
-                    results.append(
-                        GeoCandidate(
-                            latitude=float(lat),
-                            longitude=float(lon),
-                            retrieval_score=score,
-                            match_id="geoclip",
+        if not results:
+            model = self._ensure_model()
+            if model is not None:
+                try:
+                    top_gps, top_probs = model.predict(image_path, top_k=self.top_n)
+                    for (lat, lon), prob in zip(top_gps, top_probs):
+                        score = float(prob) * self.score_scale
+                        results.append(
+                            GeoCandidate(
+                                latitude=float(lat),
+                                longitude=float(lon),
+                                retrieval_score=score,
+                                match_id="geoclip",
+                            )
                         )
-                    )
-            except Exception as exc:
-                self.last_error = str(exc)
-                self._model_failed = True
-        elif not results:
-            self.last_error = "model_unavailable"
+                except Exception as exc:
+                    self.last_error = str(exc)
+                    self._model_failed = True
+            else:
+                self.last_error = "model_unavailable"
+        else:
+            self.last_error = None
 
         return results[: self.top_n]
 

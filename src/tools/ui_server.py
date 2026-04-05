@@ -7,6 +7,7 @@ import base64
 import asyncio
 import hashlib
 import importlib
+from dataclasses import replace as dataclass_replace
 from importlib import metadata
 import json
 import io
@@ -659,6 +660,21 @@ def _load_config_from_env(profile: Optional[str] = None) -> Optional[HeimdallCon
     return None
 
 
+def _with_forced_sidecar(cfg: HeimdallConfig) -> HeimdallConfig:
+    return dataclass_replace(
+        cfg,
+        detector=dataclass_replace(
+            cfg.detector,
+            use_sidecar=True,
+            weights_path=None,
+        ),
+        geolocator=dataclass_replace(
+            cfg.geolocator,
+            use_sidecar=True,
+        ),
+    )
+
+
 def _config_path_for_profile(profile: Optional[str]) -> Path:
     config_dir = APP_ROOT / "src" / "config"
     default_path = config_dir / "defaults.json"
@@ -879,12 +895,19 @@ def _make_demo_video_payload(reason: Optional[str], interval_s: float, max_frame
     }
 
 
-def _run_image_pipeline_local(image_path: Path, profile: Optional[str], force_safe_demo: bool) -> dict:
+def _run_image_pipeline_local(
+    image_path: Path,
+    profile: Optional[str],
+    force_safe_demo: bool,
+    force_sidecar: bool = False,
+) -> dict:
     fallback_reason: Optional[str] = "forced" if force_safe_demo else None
     pipeline = None
     if fallback_reason is None:
         try:
             cfg = _load_config_from_env(profile)
+            if cfg is not None and force_sidecar:
+                cfg = _with_forced_sidecar(cfg)
             pipeline = build_pipeline(cfg)
         except Exception as exc:
             fallback_reason = f"pipeline init failed: {exc}"
@@ -1165,6 +1188,14 @@ async def analyze_image(
                 except ValueError as exc:
                     return JSONResponse({"error": str(exc), "request_id": request_id}, status_code=413)
             timings_ms["io_write"] = round((time.perf_counter() - io_started) * 1000, 2)
+            has_uploaded_sidecars = det_json is not None or geo_json is not None
+            if has_uploaded_sidecars and worker_mode == "process":
+                worker_mode = "inline"
+                _log_event(
+                    "analyze.image.sidecar_inline",
+                    request_id=request_id,
+                    reason="uploaded sidecars require same-process config/sidecar semantics",
+                )
 
             if worker_mode == "process":
                 payload, worker_error, worker_roundtrip_ms = _run_inference_worker(
@@ -1192,6 +1223,7 @@ async def analyze_image(
                     image_path=image_path,
                     profile=profile,
                     force_safe_demo=force_safe_demo,
+                    force_sidecar=has_uploaded_sidecars,
                 )
                 timings_ms["inline_inference"] = round((time.perf_counter() - infer_started) * 1000, 2)
 
