@@ -101,6 +101,8 @@
             "normalized_entropy": { "type": "number" },
             "effective_candidate_count": { "type": "number" },
             "top1_posterior": { "type": "number" },
+            "calibrated_top1_posterior": { "type": "number" },
+            "top1_cross_source_support": { "type": "number" },
             "top2_margin": { "type": "number" },
             "confidence_tier": {
               "type": "string",
