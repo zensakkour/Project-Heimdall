@@ -1,4 +1,4 @@
-# Progress Log (Append-Only)
+﻿# Progress Log (Append-Only)
 
 Do not delete or edit past entries. Append new work at the end.
 
@@ -227,3 +227,11 @@ Do not delete or edit past entries. Append new work at the end.
 - Restored a real world map view using Leaflet tiles for fusion candidates and uncertainty ring.
 - Added top-N filtering, hover/click tooltips for geo candidates, and geo confidence in the summary.
 - Added detection confidence bars and UI legend explaining dots/mean/ring.
+
+## 2026-04-05
+- Added geo candidate quality hardening: multi-provider candidate validation, near-duplicate merge, and bounded candidate output before fusion.
+- Hardened retrieval index loading and query scoring path for safer runtime behavior.
+- Improved fusion robustness with additional retrieval normalization modes, dateline-safe longitude statistics, and expanded geo-fusion tests.
+- Added spatial-consensus likelihood in fusion (`use_spatial_consensus`, `spatial_sigma_km`, `spatial_consensus_weight`) to down-rank isolated outliers.
+- Extended evaluation metrics with calibration/error metrics (`ece`, `brier`, `nll`) and added coverage tests.
+- Updated README and GEO_TECH documentation with a current technology status snapshot and new fusion/config knobs.
