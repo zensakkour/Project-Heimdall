@@ -194,6 +194,12 @@ If filesystem watcher issues occur, run without reload:
 7. Scroll wheel to zoom in and zoom out.
 8. Use `Zoom In`, `Zoom Out`, and `Reset` buttons.
 
+<<<<<<< HEAD
+Runtime diagnostics:
+
+- `GET /health` returns service readiness summary.
+- `GET /health/deps` returns detailed dependency/file/path/write diagnostics.
+
 Safe demo behavior:
 
 - If model dependencies are unavailable, `/analyze/image` and `/analyze/video` now return a realistic mock result instead of a hard error.
