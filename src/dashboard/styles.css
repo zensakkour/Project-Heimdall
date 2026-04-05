@@ -32,10 +32,12 @@ table {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
-  border: 1px solid rgba(127, 184, 138, 0.16);
-  border-radius: 12px;
-  overflow: hidden;
-  background: rgba(5, 8, 8, 0.78);
+  border: 0;
+  border-top: 1px solid rgba(127, 184, 138, 0.16);
+  border-bottom: 1px solid rgba(127, 184, 138, 0.16);
+  border-radius: 0;
+  overflow: visible;
+  background: transparent;
 }
 
 th,
@@ -50,7 +52,7 @@ th {
   text-transform: uppercase;
   letter-spacing: 0.09em;
   color: var(--muted);
-  background: rgba(8, 12, 11, 0.84);
+  background: rgba(8, 12, 11, 0.3);
 }
 
 table.compact th,
@@ -76,10 +78,11 @@ tbody tr:hover {
 }
 
 .fusion-card {
-  background: rgba(7, 10, 10, 0.86);
-  border: 1px solid rgba(127, 184, 138, 0.16);
-  border-radius: 12px;
-  padding: 12px;
+  background: transparent;
+  border: 0;
+  border-top: 1px solid rgba(127, 184, 138, 0.16);
+  border-radius: 0;
+  padding: 12px 0 0;
 }
 
 .fusion-header {

@@ -16,4 +16,4 @@ For usage questions, setup issues, or troubleshooting:
 ## Security Issues
 
 Do not post security vulnerabilities in public issues.
-Use a private channel with maintainers when available.
+Follow [SECURITY.md](SECURITY.md).

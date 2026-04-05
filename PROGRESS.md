@@ -1,4 +1,30 @@
-﻿# Progress Log (Append-Only)
+# Project Progress
+
+## What This File Is
+
+`PROGRESS.md` is the engineering change log for this repository.
+
+- It tracks meaningful implementation work, validation runs, and tooling changes.
+- It is append-only: do not rewrite past entries.
+- New updates should be added as a new dated block at the end of the file.
+
+## Current Snapshot (April 5, 2026)
+
+- Geo stack is now multi-index and multi-provider with source balancing, score normalization, retrieval diversity/locality controls, and query-time TTA support.
+- Fusion stack includes cross-source agreement, spatial consensus, adaptive outlier guard, calibrated confidence tiering, and richer uncertainty diagnostics.
+- Tuning pipeline now supports automated retrieval plus fusion plus calibration orchestration with config rollback on failure and Markdown/JSON run summaries.
+- Benchmark tooling now includes realistic vs leaky geo-eval comparisons, hard-negative diagnostics, and backbone model comparison support.
+- Latest reported validation in this log: focused suite `18 passed`.
+- Latest reported validation in this log: non-UI suite `105 passed`.
+- Full suite in this environment can still be blocked when optional UI deps are missing.
+
+## Related References
+
+- [README.md](README.md): setup, run commands, and user-facing workflows.
+- [src/docs/GEO_TECH.md](src/docs/GEO_TECH.md): geolocation architecture and tuning notes.
+- [src/docs/REPRODUCIBILITY.md](src/docs/REPRODUCIBILITY.md): reproducibility and evaluation workflows.
+
+## Append-Only Log
 
 Do not delete or edit past entries. Append new work at the end.
 
@@ -371,3 +397,22 @@ Do not delete or edit past entries. Append new work at the end.
 - Validation in this environment:
   - focused retrieval/config/eval suites passed (`19 passed`)
   - full model/UI execution remains environment-limited when optional deps like `torch` or `fastapi` are unavailable.
+
+## 2026-04-05
+- Added professional benchmark-governance stack with fixed manifests and policy gates:
+  - `benchmarks/manifest.json` (versioned canonical suites/datasets/model set/limits)
+  - `benchmarks/policy.json` (explicit regression thresholds for core scenario metrics).
+- Added canonical CLI `src/tools/benchmark_ci.py`:
+  - `python -m src.tools.benchmark_ci --profile core`
+  - runs scenario + backbone benchmarks from manifest
+  - compares candidate against pinned baseline contract
+  - writes `docs/eval/latest_report.md` and `docs/eval/latest_pr_summary.md`
+  - appends summary rows to `docs/eval/history.jsonl`
+  - returns non-zero exit code when policy checks fail.
+- Added baseline promotion workflow:
+  - `python -m src.tools.benchmark_ci --profile core --promote <run_id>`
+  - updates pinned baseline contract (`docs/eval/baseline.json`) and baseline summary snapshot (`docs/eval/baseline_summary.json`) with run id + commit SHA.
+- Added benchmark governance artifacts in `docs/eval/`:
+  - `baseline.json`, `baseline_summary.json`, `latest_report.md`, `latest_pr_summary.md`, `history.jsonl`.
+- Added regression/unit coverage for new benchmark CI behavior in `src/tests/test_benchmark_ci.py`.
+- Updated README with the canonical benchmark workflow, promotion command, and eval-history references.

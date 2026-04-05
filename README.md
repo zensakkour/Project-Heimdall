@@ -11,6 +11,7 @@ Geospatial perception and analysis platform that combines object detection, geo-
 - Engineering progress log: [PROGRESS.md](PROGRESS.md)
 - What it is: append-only record of shipped changes, validation runs, and technical milestones.
 - How to use it: check the top snapshot for current status, then review dated entries for full history.
+- Benchmark governance: [docs/eval/latest_report.md](docs/eval/latest_report.md), [docs/eval/history.jsonl](docs/eval/history.jsonl), [docs/eval/baseline.json](docs/eval/baseline.json)
 
 ## What The Platform Does
 
@@ -277,6 +278,11 @@ Benchmark comparison in UI:
 1. Review:
    - scenario table (`leaky_reference`, `realistic_single`, `candidate_multi`)
    - backbone table (model-vs-model metrics and best model).
+1. Every benchmark run is saved with a UTC timestamp.
+1. Use `Saved runs` dropdown to load a previous run by date/time.
+1. Use `Show selected saved run` toggle to switch between viewing latest run output and a selected historical run.
+1. Use `Baseline run` + `Candidate run` and click `Compare Runs` to see metric deltas.
+1. Use `Append Compare To PROGRESS.md` to write a comparison snippet into `PROGRESS.md`.
 
 Runtime diagnostics:
 
@@ -384,6 +390,88 @@ If any tuning/calibration step fails, the command now restores the original conf
 .\.venv\Scripts\python -m src.tools.geo_impact_report --baseline docs/eval/geo_eval_baseline.json --candidate docs/eval/geo_eval_current.json --output-json runs/geo_impact.json --output-md runs/geo_impact.md
 ```
 
+### Canonical benchmark CI (pro workflow)
+
+Run the fixed benchmark suite from the versioned manifest and apply regression policy gates:
+
+```powershell
+.\.venv\Scripts\python -m src.tools.benchmark_ci --profile core
+```
+
+What this command does:
+1. Runs the canonical benchmark profile from `benchmarks/manifest.json`.
+1. Compares candidate run against the pinned baseline in `docs/eval/baseline.json`.
+1. Enforces regression thresholds from `benchmarks/policy.json`.
+1. Writes `docs/eval/latest_report.md` and `docs/eval/latest_pr_summary.md`.
+1. Appends one summary line to `docs/eval/history.jsonl`.
+1. Returns non-zero exit code if policy checks fail.
+
+Promote a tested run as the new pinned baseline:
+
+```powershell
+.\.venv\Scripts\python -m src.tools.benchmark_ci --profile core --promote <run_id>
+```
+
+The promoted baseline contract stores:
+- baseline run id
+- baseline commit SHA
+- baseline summary reference used for future comparisons
+
+### Benchmark Tool Guide (step-by-step)
+
+Use this when you want to benchmark geo quality before/after changes and keep a professional history.
+
+Prerequisites:
+1. Install dependencies and `torch`.
+1. Ensure benchmark data paths used in `benchmarks/manifest.json` exist locally.
+1. Activate your venv.
+
+First-time setup (initialize baseline):
+1. Run one benchmark:
+
+```powershell
+.\.venv\Scripts\python -m src.tools.benchmark_ci --profile core
+```
+
+1. Note the `Run complete: <run_id>` value printed in terminal.
+1. Promote that run as baseline:
+
+```powershell
+.\.venv\Scripts\python -m src.tools.benchmark_ci --profile core --promote <run_id>
+```
+
+Daily/PR workflow:
+1. Run benchmark on your branch:
+
+```powershell
+.\.venv\Scripts\python -m src.tools.benchmark_ci --profile core
+```
+
+1. Check policy result:
+   - exit code `0`: pass (or skipped if no baseline).
+   - exit code `1`: regression policy failed.
+1. Open generated report:
+   - `docs/eval/latest_report.md`
+1. Copy PR-ready summary from:
+   - `docs/eval/latest_pr_summary.md`
+
+Where benchmark outputs go:
+- Run payload (UI-loadable): `src/dashboard/data/benchmark_runs/<run_id>.json`
+- Full artifacts per run: `runs/benchmark_history/<run_id>/`
+- Pinned baseline contract: `docs/eval/baseline.json`
+- Baseline snapshot: `docs/eval/baseline_summary.json`
+- Append-only ledger: `docs/eval/history.jsonl`
+
+How to benchmark different settings:
+1. Edit `benchmarks/manifest.json` profile `core` (datasets, limits, model list, scenarios).
+1. Re-run `benchmark_ci`.
+1. If results are intentionally better and stable, promote the new run id.
+
+How this connects to UI:
+1. Open `Scoring` tab in app.
+1. Use `Saved runs` dropdown to inspect past run payloads by timestamp.
+1. Use baseline/candidate selectors to compare two run ids and optionally append compare snippet to `PROGRESS.md`.
+
 ### Run test suite
 
 ```powershell
@@ -486,6 +574,8 @@ Useful fusion knobs:
 ## Engineering and Contribution
 
 - Contribution guide: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Code of conduct: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
+- Security policy: [SECURITY.md](SECURITY.md)
 - Support: [SUPPORT.md](SUPPORT.md)
 - Changelog: [CHANGELOG.md](CHANGELOG.md)
 - Progress tracking: [PROGRESS.md](PROGRESS.md)
