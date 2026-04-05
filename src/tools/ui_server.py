@@ -4,6 +4,8 @@ FastAPI server for live analysis UI.
 from __future__ import annotations
 
 import base64
+import importlib
+from importlib import metadata
 import json
 import io
 import tempfile
@@ -131,6 +133,153 @@ def _config_path_for_profile(profile: Optional[str]) -> Path:
     return default_path
 
 
+def _resolve_local_path(raw: Optional[str]) -> Optional[Path]:
+    if not raw:
+        return None
+    path = Path(raw)
+    if path.is_absolute():
+        return path
+    return APP_ROOT / path
+
+
+def _check_python_deps() -> dict:
+    checks = {}
+    modules = [
+        ("torch", True),
+        ("ultralytics", True),
+        ("fastapi", True),
+        ("cv2", True),
+        ("PIL", True),
+    ]
+    for name, required in modules:
+        try:
+            spec = importlib.util.find_spec(name)
+            if spec is None:
+                checks[name] = {"ok": False, "required": required, "error": "module not found"}
+                continue
+            version = None
+            try:
+                package_name = "Pillow" if name == "PIL" else name
+                version = metadata.version(package_name)
+            except Exception:
+                version = None
+            checks[name] = {
+                "ok": True,
+                "required": required,
+                "version": version,
+            }
+        except Exception as exc:
+            checks[name] = {"ok": False, "required": required, "error": str(exc)}
+    return checks
+
+
+def _check_config_paths() -> dict:
+    config_dir = APP_ROOT / "src" / "config"
+    files = {
+        "defaults": config_dir / "defaults.json",
+        "paris": config_dir / "paris.json",
+        "paris_test": config_dir / "paris_test.json",
+        "open_geo": config_dir / "open_geo.json",
+    }
+    out = {}
+    for key, path in files.items():
+        out[key] = {"path": str(path), "exists": path.exists()}
+    return out
+
+
+def _check_model_paths() -> dict:
+    defaults_path = APP_ROOT / "src" / "config" / "defaults.json"
+    out = {}
+    if not defaults_path.exists():
+        return {"defaults_config": {"path": str(defaults_path), "exists": False}}
+    try:
+        cfg = load_config(str(defaults_path))
+    except Exception as exc:
+        return {
+            "defaults_config": {"path": str(defaults_path), "exists": True},
+            "error": str(exc),
+        }
+    checks = {
+        "detector_weights": _resolve_local_path(cfg.detector.weights_path),
+        "geolocator_model_path": _resolve_local_path(cfg.geolocator.model_path),
+        "geolocator_model_cache_dir": _resolve_local_path(cfg.geolocator.model_cache_dir),
+        "retrieval_index_path": _resolve_local_path(cfg.geolocator.retrieval_index_path),
+    }
+    for key, path in checks.items():
+        if path is None:
+            out[key] = {"path": None, "exists": False, "configured": False}
+        else:
+            out[key] = {
+                "path": str(path),
+                "exists": path.exists(),
+                "is_dir": path.is_dir(),
+                "configured": True,
+            }
+    return out
+
+
+def _can_write(directory: Path) -> tuple[bool, Optional[str]]:
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            delete=True,
+            dir=str(directory),
+            prefix="heimdall-health-",
+            suffix=".tmp",
+            encoding="utf-8",
+        ) as tmp:
+            tmp.write("ok")
+        return True, None
+    except Exception as exc:
+        return False, str(exc)
+
+
+def _check_write_permissions() -> dict:
+    targets = {
+        "runs": APP_ROOT / "runs",
+        "dashboard_data": APP_ROOT / "src" / "dashboard" / "data",
+        "data": APP_ROOT / "data",
+    }
+    out = {}
+    for key, path in targets.items():
+        ok, error = _can_write(path)
+        out[key] = {"path": str(path), "ok": ok, "error": error}
+    return out
+
+
+def _health_snapshot() -> dict:
+    deps = _check_python_deps()
+    config_paths = _check_config_paths()
+    model_paths = _check_model_paths()
+    write_permissions = _check_write_permissions()
+
+    required_failures = []
+    for name, check in deps.items():
+        if check.get("required") and not check.get("ok"):
+            required_failures.append(f"python_dep:{name}")
+    for name, check in config_paths.items():
+        if not check.get("exists"):
+            required_failures.append(f"config:{name}")
+    for name, check in write_permissions.items():
+        if not check.get("ok"):
+            required_failures.append(f"write:{name}")
+    for name, check in model_paths.items():
+        if isinstance(check, dict) and check.get("configured") and not check.get("exists"):
+            required_failures.append(f"model_path:{name}")
+
+    status = "ok" if not required_failures else "degraded"
+    return {
+        "status": status,
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "required_failures": required_failures,
+        "deps": deps,
+        "config_paths": config_paths,
+        "model_paths": model_paths,
+        "write_permissions": write_permissions,
+    }
+
+
 @app.get("/")
 def index() -> FileResponse:
     return FileResponse(DASHBOARD_DIR / "index.html")
@@ -139,6 +288,29 @@ def index() -> FileResponse:
 @app.get("/analysis")
 def analysis_index() -> RedirectResponse:
     return RedirectResponse(url="/analysis/")
+
+
+@app.get("/health")
+def health() -> JSONResponse:
+    snapshot = _health_snapshot()
+    payload = {
+        "status": snapshot["status"],
+        "timestamp": snapshot["timestamp"],
+        "required_failures": snapshot["required_failures"],
+        "summary": {
+            "deps_checked": len(snapshot["deps"]),
+            "config_paths_checked": len(snapshot["config_paths"]),
+            "model_paths_checked": len(snapshot["model_paths"]),
+            "write_targets_checked": len(snapshot["write_permissions"]),
+        },
+    }
+    return JSONResponse(payload, status_code=200 if snapshot["status"] == "ok" else 503)
+
+
+@app.get("/health/deps")
+def health_deps() -> JSONResponse:
+    snapshot = _health_snapshot()
+    return JSONResponse(snapshot, status_code=200 if snapshot["status"] == "ok" else 503)
 
 
 @app.post("/analyze/image")
@@ -382,5 +554,3 @@ def pick_file() -> JSONResponse:
 app.mount("/dashboard", StaticFiles(directory=DASHBOARD_DIR), name="dashboard")
 app.mount("/analysis", StaticFiles(directory=LIVE_DIR, html=True), name="analysis")
 app.mount("/", StaticFiles(directory=DASHBOARD_DIR, html=True), name="root")
-
-
