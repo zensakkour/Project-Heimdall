@@ -35,14 +35,6 @@ const profileButtons = Array.from(document.querySelectorAll(".profile-tab"));
 const profileSelect = byId("profile-select");
 const profileStorageKey = "heimdallProfile";
 let activeProfile = "paris";
-const profileNames = {
-  paris: "Paris (SpaceNet)",
-  paris_test: "Paris Test (SpaceNet)",
-  "paris-test": "Paris Test (SpaceNet)",
-  legacy: "Open Geo (Wikimedia)",
-  open_geo: "Open Geo (Wikimedia)",
-  "open-geo": "Open Geo (Wikimedia)",
-};
 const strategySelect = byId("geo-eval-strategy");
 
 function setActiveProfile(profile) {
@@ -176,7 +168,6 @@ let dragging = false;
 let lastX = 0;
 let lastY = 0;
 
-let liveMapView = null;
 let liveTopLimit = 20;
 let lastResult = null;
 
@@ -897,24 +888,3 @@ if (browseMetadata) {
   browseMetadata.addEventListener("click", () => pickPath("/fs/pick_file", "geo-eval-metadata"));
 }
 
-      liveMap.on("mousemove", "candidate-layer", (e) => {
-        if (!e.features || !e.features.length) return;
-        const feature = e.features[0];
-        const props = feature.properties || {};
-        const coords = feature.geometry.coordinates;
-        const rank = Number(props.rank || 0);
-        const conf = Number(props.rawWeight || 0);
-        if (hoverPopup) hoverPopup.remove();
-        hoverPopup = new maplibregl.Popup({
-          offset: 10,
-          closeButton: false,
-          closeOnClick: false,
-        })
-          .setLngLat(coords)
-          .setHTML(
-            `#${rank} · ${(conf * 100).toFixed(1)}%<br/>${coords[1].toFixed(
-              5
-            )}, ${coords[0].toFixed(5)}`
-          )
-          .addTo(liveMap);
-      });

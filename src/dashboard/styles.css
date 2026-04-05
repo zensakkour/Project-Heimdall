@@ -1,6 +1,7 @@
-﻿.status {
-  font-size: 20px;
-  font-weight: 600;
+.status {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 .status.pass {
@@ -13,35 +14,48 @@
 
 .stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
 }
 
 .stats .label {
   display: block;
+  margin-bottom: 4px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
 }
 
 table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 14px;
+  font-size: 13px;
+  border: 1px solid rgba(127, 184, 138, 0.16);
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(5, 8, 8, 0.78);
 }
 
 th,
 td {
   text-align: left;
-  padding: 10px 6px;
-  border-bottom: 1px solid var(--border);
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(127, 184, 138, 0.1);
+}
+
+th {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--muted);
+  background: rgba(8, 12, 11, 0.84);
 }
 
 table.compact th,
 table.compact td {
-  padding: 6px 6px;
+  padding: 8px 10px;
   font-size: 12px;
 }
 
@@ -56,41 +70,33 @@ tbody tr:hover {
 
 .fusion-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   margin-top: 12px;
 }
 
 .fusion-card {
-  background: rgba(9, 12, 12, 0.9);
-  border: 1px solid var(--border);
+  background: rgba(7, 10, 10, 0.86);
+  border: 1px solid rgba(127, 184, 138, 0.16);
   border-radius: 12px;
   padding: 12px;
 }
 
 .fusion-header {
-  font-weight: 600;
-  margin-bottom: 6px;
+  font-weight: 650;
+  margin-bottom: 8px;
 }
 
 .fusion-row {
-  font-size: 13px;
+  font-size: 12px;
   margin-bottom: 4px;
+  color: #cfd9d2;
 }
 
 .map-wrap {
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-
-.globe-canvas {
-  width: 100%;
-  height: 320px;
-  border-radius: 12px;
-  border: 1px solid rgba(127, 184, 138, 0.2);
-  background: radial-gradient(circle at 35% 30%, rgba(70, 100, 86, 0.35), rgba(5, 7, 7, 0.95));
-  display: block;
 }
 
 .globe-canvas.small {
@@ -120,7 +126,7 @@ tbody tr:hover {
   background: #070909;
   border: 1px solid var(--border);
   color: inherit;
-  padding: 4px 8px;
+  padding: 5px 10px;
   border-radius: 999px;
   font-size: 12px;
 }
@@ -134,7 +140,7 @@ tbody tr:hover {
 }
 
 .legend-dot.candidate {
-  background: rgba(127, 184, 138, 0.7);
+  background: rgba(127, 184, 138, 0.75);
 }
 
 .legend-dot.mean {
@@ -142,25 +148,5 @@ tbody tr:hover {
 }
 
 .legend-dot.track {
-  background: rgba(127, 184, 138, 0.9);
-}
-
-@media (max-width: 720px) {
-  table,
-  thead,
-  tbody,
-  th,
-  td,
-  tr {
-    display: block;
-  }
-  thead {
-    display: none;
-  }
-  tr {
-    margin-bottom: 12px;
-  }
-  td {
-    border-bottom: none;
-  }
+  background: rgba(127, 184, 138, 0.95);
 }
