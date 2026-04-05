@@ -194,6 +194,11 @@ If filesystem watcher issues occur, run without reload:
 7. Scroll wheel to zoom in and zoom out.
 8. Use `Zoom In`, `Zoom Out`, and `Reset` buttons.
 
+Safe demo behavior:
+
+- If model dependencies are unavailable, `/analyze/image` and `/analyze/video` now return a realistic mock result instead of a hard error.
+- You can also force this mode via query flag: `/analyze/image?safe_demo=1`.
+
 ## Common Workflows
 
 ### Run single-image inference (CLI)
