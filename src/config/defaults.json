@@ -37,6 +37,9 @@
   "fusion": {
     "retrieval_temperature": 0.12,
     "retrieval_score_norm": "zscore_sigmoid",
+    "use_spatial_consensus": true,
+    "spatial_sigma_km": 2.0,
+    "spatial_consensus_weight": 1.0,
     "shadow_sigma_deg": 20.0,
     "terrain_sigma": 100.0,
     "use_shadow": true,

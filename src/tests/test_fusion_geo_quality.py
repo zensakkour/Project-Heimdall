@@ -70,3 +70,82 @@ def test_fusion_rank_exp_mode_prefers_higher_ranked_candidates() -> None:
 
     assert result is not None
     assert result.candidates[0].candidate.match_id == "high"
+
+
+def test_spatial_consensus_can_downrank_isolated_outlier() -> None:
+    candidates = [
+        GeoCandidate(latitude=34.0522, longitude=-118.2437, retrieval_score=0.80, match_id="outlier"),
+        GeoCandidate(latitude=48.8566, longitude=2.3522, retrieval_score=0.72, match_id="cluster_a"),
+        GeoCandidate(latitude=48.8572, longitude=2.3530, retrieval_score=0.70, match_id="cluster_b"),
+    ]
+    base_cfg = FusionConfig(
+        retrieval_temperature=0.30,
+        retrieval_score_norm="none",
+        use_shadow=False,
+        use_terrain=False,
+        top_k=3,
+    )
+    with_consensus_cfg = FusionConfig(
+        retrieval_temperature=0.30,
+        retrieval_score_norm="none",
+        use_spatial_consensus=True,
+        spatial_sigma_km=8.0,
+        spatial_consensus_weight=6.0,
+        use_shadow=False,
+        use_terrain=False,
+        top_k=3,
+    )
+    without_consensus_cfg = FusionConfig(
+        retrieval_temperature=0.30,
+        retrieval_score_norm="none",
+        use_spatial_consensus=False,
+        use_shadow=False,
+        use_terrain=False,
+        top_k=3,
+    )
+
+    no_consensus = fuse_candidates("missing.jpg", candidates, detections=[], config=without_consensus_cfg)
+    with_consensus = fuse_candidates("missing.jpg", candidates, detections=[], config=with_consensus_cfg)
+    base = fuse_candidates("missing.jpg", candidates, detections=[], config=base_cfg)
+
+    assert no_consensus is not None
+    assert with_consensus is not None
+    assert base is not None
+    assert no_consensus.candidates[0].candidate.match_id == "outlier"
+    assert base.candidates[0].candidate.match_id == "outlier"
+    assert with_consensus.candidates[0].candidate.match_id in {"cluster_a", "cluster_b"}
+
+
+def test_spatial_consensus_zero_weight_behaves_like_disabled() -> None:
+    candidates = [
+        GeoCandidate(latitude=10.0, longitude=10.0, retrieval_score=0.60, match_id="a"),
+        GeoCandidate(latitude=10.1, longitude=10.1, retrieval_score=0.59, match_id="b"),
+        GeoCandidate(latitude=42.0, longitude=-7.0, retrieval_score=0.61, match_id="c"),
+    ]
+    disabled_cfg = FusionConfig(
+        retrieval_temperature=0.4,
+        retrieval_score_norm="none",
+        use_spatial_consensus=False,
+        use_shadow=False,
+        use_terrain=False,
+        top_k=3,
+    )
+    zero_weight_cfg = FusionConfig(
+        retrieval_temperature=0.4,
+        retrieval_score_norm="none",
+        use_spatial_consensus=True,
+        spatial_sigma_km=5.0,
+        spatial_consensus_weight=0.0,
+        use_shadow=False,
+        use_terrain=False,
+        top_k=3,
+    )
+
+    disabled = fuse_candidates("missing.jpg", candidates, detections=[], config=disabled_cfg)
+    zero_weight = fuse_candidates("missing.jpg", candidates, detections=[], config=zero_weight_cfg)
+
+    assert disabled is not None
+    assert zero_weight is not None
+    assert [item.candidate.match_id for item in disabled.candidates] == [
+        item.candidate.match_id for item in zero_weight.candidates
+    ]

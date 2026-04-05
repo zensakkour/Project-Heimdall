@@ -49,6 +49,9 @@ class VerificationConfig:
 class FusionConfig:
     retrieval_temperature: float = 0.2
     retrieval_score_norm: str = "none"
+    use_spatial_consensus: bool = True
+    spatial_sigma_km: float = 2.0
+    spatial_consensus_weight: float = 1.0
     shadow_sigma_deg: float = 20.0
     terrain_sigma: float = 100.0
     use_shadow: bool = True
@@ -110,6 +113,9 @@ def load_config(path: str) -> HeimdallConfig:
         fusion=FusionConfig(
             retrieval_temperature=fusion.get("retrieval_temperature", 0.2),
             retrieval_score_norm=fusion.get("retrieval_score_norm", "none"),
+            use_spatial_consensus=fusion.get("use_spatial_consensus", True),
+            spatial_sigma_km=fusion.get("spatial_sigma_km", 2.0),
+            spatial_consensus_weight=fusion.get("spatial_consensus_weight", 1.0),
             shadow_sigma_deg=fusion.get("shadow_sigma_deg", 20.0),
             terrain_sigma=fusion.get("terrain_sigma", 100.0),
             use_shadow=fusion.get("use_shadow", True),
@@ -129,5 +135,4 @@ def load_config(path: str) -> HeimdallConfig:
             use_shadow_heading=ver.get("use_shadow_heading", True),
         ),
     )
-
 

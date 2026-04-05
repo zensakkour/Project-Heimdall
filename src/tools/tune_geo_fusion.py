@@ -31,6 +31,19 @@ def _parse_str_list(raw: str) -> List[str]:
     return [x.strip() for x in raw.split(",") if x.strip()]
 
 
+def _parse_bool_list(raw: str) -> List[bool]:
+    out: List[bool] = []
+    for item in _parse_str_list(raw):
+        key = item.lower()
+        if key in {"1", "true", "yes", "on"}:
+            out.append(True)
+        elif key in {"0", "false", "no", "off"}:
+            out.append(False)
+        else:
+            raise ValueError(f"invalid boolean list value: {item}")
+    return out
+
+
 def _percentile(sorted_vals: List[float], p: float) -> Optional[float]:
     if not sorted_vals:
         return None
@@ -103,6 +116,9 @@ def main(argv: Optional[List[str]] = None) -> None:
     parser.add_argument("--retrieval-topk", default="25,50", help="Comma list.")
     parser.add_argument("--fusion-topk", default="10,25", help="Comma list.")
     parser.add_argument("--retrieval-norms", default="none,zscore_sigmoid,minmax,rank_exp", help="Comma list.")
+    parser.add_argument("--spatial-consensus", default="true,false", help="Comma list of booleans.")
+    parser.add_argument("--spatial-sigmas-km", default="1.0,2.0,5.0", help="Comma list.")
+    parser.add_argument("--spatial-weights", default="0.5,1.0,2.0", help="Comma list.")
     args = parser.parse_args(argv)
 
     cfg = load_config(args.config)
@@ -122,6 +138,9 @@ def main(argv: Optional[List[str]] = None) -> None:
     retrieval_topk = _parse_int_list(args.retrieval_topk)
     fusion_topk = _parse_int_list(args.fusion_topk)
     retrieval_norms = _parse_str_list(args.retrieval_norms)
+    spatial_consensus_flags = _parse_bool_list(args.spatial_consensus)
+    spatial_sigmas_km = _parse_float_list(args.spatial_sigmas_km)
+    spatial_weights = _parse_float_list(args.spatial_weights)
 
     results = []
     for scale in geospot_scales:
@@ -129,29 +148,40 @@ def main(argv: Optional[List[str]] = None) -> None:
             for topk in retrieval_topk:
                 for ftopk in fusion_topk:
                     for norm in retrieval_norms:
-                        tuned_geo = replace(
-                            cfg.geolocator,
-                            geospot_score_scale=scale,
-                            retrieval_top_k=topk,
-                        )
-                        tuned_fusion = replace(
-                            cfg.fusion,
-                            retrieval_temperature=temp,
-                            retrieval_score_norm=norm,
-                            top_k=ftopk,
-                        )
-                        tuned_cfg = replace(cfg, geolocator=tuned_geo, fusion=tuned_fusion)
-                        metrics = _evaluate(tuned_cfg, images_dir, records)
-                        results.append(
-                            {
-                                "geospot_score_scale": scale,
-                                "retrieval_temperature": temp,
-                                "retrieval_top_k": topk,
-                                "fusion_top_k": ftopk,
-                                "retrieval_score_norm": norm,
-                                **metrics,
-                            }
-                        )
+                        for use_spatial in spatial_consensus_flags:
+                            sigma_values = spatial_sigmas_km if use_spatial else [cfg.fusion.spatial_sigma_km]
+                            weight_values = spatial_weights if use_spatial else [0.0]
+                            for spatial_sigma in sigma_values:
+                                for spatial_weight in weight_values:
+                                    tuned_geo = replace(
+                                        cfg.geolocator,
+                                        geospot_score_scale=scale,
+                                        retrieval_top_k=topk,
+                                    )
+                                    tuned_fusion = replace(
+                                        cfg.fusion,
+                                        retrieval_temperature=temp,
+                                        retrieval_score_norm=norm,
+                                        use_spatial_consensus=use_spatial,
+                                        spatial_sigma_km=spatial_sigma,
+                                        spatial_consensus_weight=spatial_weight,
+                                        top_k=ftopk,
+                                    )
+                                    tuned_cfg = replace(cfg, geolocator=tuned_geo, fusion=tuned_fusion)
+                                    metrics = _evaluate(tuned_cfg, images_dir, records)
+                                    results.append(
+                                        {
+                                            "geospot_score_scale": scale,
+                                            "retrieval_temperature": temp,
+                                            "retrieval_top_k": topk,
+                                            "fusion_top_k": ftopk,
+                                            "retrieval_score_norm": norm,
+                                            "use_spatial_consensus": use_spatial,
+                                            "spatial_sigma_km": spatial_sigma,
+                                            "spatial_consensus_weight": spatial_weight,
+                                            **metrics,
+                                        }
+                                    )
 
     results.sort(key=lambda r: math.inf if r["median_km"] is None else r["median_km"])
     payload = {
