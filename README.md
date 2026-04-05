@@ -270,6 +270,7 @@ Pass a config where supported with `--config <path>`.
 - Issue templates: [`.github/ISSUE_TEMPLATE`](.github/ISSUE_TEMPLATE)
 - PR template: [`.github/pull_request_template.md`](.github/pull_request_template.md)
 - Dependency updates: [`.github/dependabot.yml`](.github/dependabot.yml)
+- CI workflow: [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
 
 ## License
 
