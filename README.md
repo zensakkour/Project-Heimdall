@@ -146,6 +146,24 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
+For reproducible installs, use the lockfile:
+
+```powershell
+pip install -r requirements.lock.txt
+```
+
+Environment verification:
+
+```powershell
+.\.venv\Scripts\python -m src.tools.doctor
+```
+
+Clean rebuild + verify in one command (run from a non-venv Python interpreter):
+
+```powershell
+python -m src.tools.doctor --rebuild
+```
+
 Development app launch (auto-picks free port):
 
 ```powershell
