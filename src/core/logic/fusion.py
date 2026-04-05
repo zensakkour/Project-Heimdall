@@ -38,7 +38,8 @@ def fuse_candidates(
     retrieval_scores = _normalized_retrieval_scores(candidates, cfg.retrieval_score_norm)
 
     for cand, norm_score in zip(candidates, retrieval_scores):
-        retrieval_logp = _temperature_scaled_logprob(norm_score, cfg.retrieval_temperature)
+        retrieval_like = _to_unit_interval(norm_score)
+        retrieval_logp = _temperature_scaled_logprob(retrieval_like, cfg.retrieval_temperature)
         shadow_residual = None
         shadow_like = None
         if cfg.use_shadow and capture_time is not None and observed_shadow is not None:
@@ -53,7 +54,7 @@ def fuse_candidates(
             terrain_like = gaussian_likelihood(terrain_residual, cfg.terrain_sigma)
 
         logp = retrieval_logp
-        likelihoods = {"retrieval": math.exp(retrieval_logp)}
+        likelihoods = {"retrieval": retrieval_like}
         if shadow_like is not None:
             logp += math.log(max(shadow_like, 1e-12))
             likelihoods["shadow"] = shadow_like
@@ -93,7 +94,8 @@ def fuse_candidates(
         )
 
     fused.sort(key=lambda item: item.posterior_weight, reverse=True)
-    fused = fused[: cfg.top_k]
+    limit = cfg.top_k if cfg.top_k > 0 else len(fused)
+    fused = fused[:limit]
 
     mean_lat, mean_lon, cov = _weighted_mean_cov(fused)
     ellipse = _covariance_to_ellipse(cov)
@@ -110,8 +112,11 @@ def fuse_candidates(
 
 
 def _temperature_scaled_logprob(score: float, temperature: float) -> float:
-    temp = max(1e-6, temperature)
-    return score / temp
+    temp = max(1e-3, temperature)
+    unit = _to_unit_interval(score)
+    unit = max(1e-6, min(1.0 - 1e-6, unit))
+    # Log-odds keeps ordering while being numerically stable and less scale-sensitive.
+    return math.log(unit / (1.0 - unit)) / temp
 
 
 def _softmax(logits: Iterable[float]) -> List[float]:
@@ -131,6 +136,10 @@ def _normalized_retrieval_scores(candidates: Sequence[GeoCandidate], mode: str) 
         return [cand.retrieval_score for cand in candidates]
     if mode == "zscore_sigmoid":
         return _zscore_sigmoid_by_source(candidates)
+    if mode == "minmax":
+        return _minmax_scale([cand.retrieval_score for cand in candidates])
+    if mode == "rank_exp":
+        return _rank_exp_scale([cand.retrieval_score for cand in candidates])
     return [cand.retrieval_score for cand in candidates]
 
 
@@ -150,7 +159,7 @@ def _zscore_sigmoid(values: List[float]) -> List[float]:
     var = sum((v - mean) ** 2 for v in values) / len(values)
     std = math.sqrt(var)
     if std < 1e-6:
-        return values[:]
+        return [0.5 for _ in values]
     out = []
     for v in values:
         z = (v - mean) / std
@@ -162,10 +171,8 @@ def _zscore_sigmoid_by_source(candidates: Sequence[GeoCandidate]) -> List[float]
     if not candidates:
         return []
     grouped = {}
-    order = []
     for idx, cand in enumerate(candidates):
         src = _candidate_source(cand)
-        order.append(src)
         grouped.setdefault(src, []).append((idx, cand.retrieval_score))
 
     scores = [cand.retrieval_score for cand in candidates]
@@ -178,6 +185,36 @@ def _zscore_sigmoid_by_source(candidates: Sequence[GeoCandidate]) -> List[float]
         for idx, val in zip(idxs, norm):
             scores[idx] = val
     return scores
+
+
+def _minmax_scale(values: List[float]) -> List[float]:
+    if not values:
+        return []
+    lo = min(values)
+    hi = max(values)
+    span = hi - lo
+    if span < 1e-9:
+        return [0.5 for _ in values]
+    return [(v - lo) / span for v in values]
+
+
+def _rank_exp_scale(values: List[float]) -> List[float]:
+    if not values:
+        return []
+    ranked_idx = sorted(range(len(values)), key=lambda idx: values[idx], reverse=True)
+    tau = max(1.0, len(values) / 3.0)
+    out = [0.0 for _ in values]
+    for rank, idx in enumerate(ranked_idx):
+        out[idx] = math.exp(-rank / tau)
+    return out
+
+
+def _to_unit_interval(value: float) -> float:
+    if not math.isfinite(value):
+        return 0.5
+    if 0.0 <= value <= 1.0:
+        return value
+    return 1.0 / (1.0 + math.exp(-value))
 
 
 def _expected_shadow_azimuth(captured, latitude: float, longitude: float) -> float:
@@ -202,31 +239,58 @@ def _angular_diff(a: float, b: float) -> float:
 
 
 def _weighted_mean_cov(fused: Sequence[FusionCandidate]) -> Tuple[float, float, Tuple[Tuple[float, float], Tuple[float, float]]]:
+    if not fused:
+        return 0.0, 0.0, ((0.0, 0.0), (0.0, 0.0))
     weights = [item.posterior_weight for item in fused]
-    if not weights or sum(weights) == 0.0:
+    total_weight = sum(weights)
+    if not weights or total_weight <= 0.0:
         first = fused[0]
         return first.candidate.latitude, first.candidate.longitude, ((0.0, 0.0), (0.0, 0.0))
 
-    mean_lat = sum(item.candidate.latitude * item.posterior_weight for item in fused)
-    mean_lon = sum(item.candidate.longitude * item.posterior_weight for item in fused)
+    norm_weights = [w / total_weight for w in weights]
+    mean_lat = sum(item.candidate.latitude * w for item, w in zip(fused, norm_weights))
+    mean_lon = _weighted_circular_mean_deg(
+        [item.candidate.longitude for item in fused],
+        norm_weights,
+    )
 
     lat0 = mean_lat
     meters_per_deg_lat = 111_320.0
-    meters_per_deg_lon = 111_320.0 * math.cos(math.radians(lat0))
+    meters_per_deg_lon = max(1e-6, abs(111_320.0 * math.cos(math.radians(lat0))))
 
     xs = []
     ys = []
     for item in fused:
-        dx = (item.candidate.longitude - mean_lon) * meters_per_deg_lon
+        dlon = _wrapped_longitude_diff(item.candidate.longitude, mean_lon)
+        dx = dlon * meters_per_deg_lon
         dy = (item.candidate.latitude - mean_lat) * meters_per_deg_lat
         xs.append(dx)
         ys.append(dy)
 
-    cov_xx = sum(w * (x ** 2) for w, x in zip(weights, xs))
-    cov_yy = sum(w * (y ** 2) for w, y in zip(weights, ys))
-    cov_xy = sum(w * x * y for w, x, y in zip(weights, xs, ys))
+    cov_xx = sum(w * (x ** 2) for w, x in zip(norm_weights, xs))
+    cov_yy = sum(w * (y ** 2) for w, y in zip(norm_weights, ys))
+    cov_xy = sum(w * x * y for w, x, y in zip(norm_weights, xs, ys))
 
     return mean_lat, mean_lon, ((cov_xx, cov_xy), (cov_xy, cov_yy))
+
+
+def _weighted_circular_mean_deg(angles_deg: Sequence[float], weights: Sequence[float]) -> float:
+    sin_sum = sum(w * math.sin(math.radians(a)) for a, w in zip(angles_deg, weights))
+    cos_sum = sum(w * math.cos(math.radians(a)) for a, w in zip(angles_deg, weights))
+    if abs(sin_sum) < 1e-12 and abs(cos_sum) < 1e-12:
+        return _normalize_longitude(sum(a * w for a, w in zip(angles_deg, weights)))
+    return _normalize_longitude(math.degrees(math.atan2(sin_sum, cos_sum)))
+
+
+def _wrapped_longitude_diff(lon: float, reference_lon: float) -> float:
+    return ((lon - reference_lon + 540.0) % 360.0) - 180.0
+
+
+def _normalize_longitude(lon: float) -> float:
+    wrapped = ((lon + 180.0) % 360.0) - 180.0
+    if wrapped == -180.0 and lon > 0.0:
+        return 180.0
+    return wrapped
 
 
 def _covariance_to_ellipse(cov: Tuple[Tuple[float, float], Tuple[float, float]]) -> UncertaintyEllipse:
