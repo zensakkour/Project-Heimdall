@@ -5,13 +5,18 @@
   --bg-2: #050607;
   --card: #060708;
   --panel: #050607;
+  --surface-1: rgba(8, 12, 12, 0.9);
+  --surface-2: rgba(5, 8, 8, 0.92);
   --border: rgba(127, 184, 138, 0.18);
+  --border-strong: rgba(127, 184, 138, 0.3);
   --text: #e6ece7;
   --muted: #8d9a90;
   --accent: #7fb88a;
   --accent-2: #9fd8a7;
+  --focus-ring: rgba(127, 184, 138, 0.22);
   --danger: #ff6b6b;
-  --shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+  --shadow: 0 22px 56px rgba(0, 0, 0, 0.52);
+  --shadow-soft: 0 14px 28px rgba(0, 0, 0, 0.38);
   --radius-lg: 18px;
   --radius-md: 12px;
   --radius-sm: 10px;
@@ -101,7 +106,7 @@ h3 {
 }
 
 .card {
-  background: linear-gradient(180deg, rgba(8, 12, 12, 0.84) 0%, rgba(6, 9, 9, 0.92) 100%);
+  background: linear-gradient(180deg, var(--surface-1) 0%, var(--surface-2) 100%);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 36px;
@@ -165,7 +170,8 @@ h3 {
   padding: 4px;
   border: 1px solid var(--border);
   border-radius: 999px;
-  background: rgba(5, 9, 9, 0.84);
+  background: rgba(5, 9, 9, 0.9);
+  box-shadow: inset 0 1px 0 rgba(170, 219, 179, 0.04);
 }
 
 .nav-tabs a,
@@ -192,32 +198,44 @@ h3 {
 .nav-tabs a.active,
 .mode-tab[aria-pressed="true"] {
   background: rgba(127, 184, 138, 0.15);
-  border-color: rgba(127, 184, 138, 0.34);
+  border-color: rgba(127, 184, 138, 0.4);
   color: var(--text);
   box-shadow: inset 0 0 0 1px rgba(159, 216, 167, 0.1);
 }
 
 button {
   appearance: none;
-  border: 1px solid rgba(127, 184, 138, 0.36);
-  background: linear-gradient(180deg, rgba(16, 22, 20, 0.95) 0%, rgba(10, 15, 14, 0.95) 100%);
-  color: var(--accent-2);
+  border: 1px solid rgba(127, 184, 138, 0.32);
+  background: linear-gradient(180deg, rgba(19, 27, 24, 0.95) 0%, rgba(11, 17, 15, 0.96) 100%);
+  color: #d8f2de;
   font-family: inherit;
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.02em;
-  height: 40px;
+  height: 42px;
   min-width: 120px;
-  padding: 0 16px;
-  border-radius: var(--radius-sm);
+  padding: 0 18px;
+  border-radius: 12px;
   cursor: pointer;
-  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: inset 0 1px 0 rgba(197, 233, 205, 0.06), var(--shadow-soft);
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
 
 button:hover {
   transform: translateY(-1px);
-  border-color: rgba(159, 216, 167, 0.62);
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.35);
+  border-color: rgba(159, 216, 167, 0.58);
+  background: linear-gradient(180deg, rgba(24, 34, 29, 0.96) 0%, rgba(13, 20, 18, 0.96) 100%);
+  box-shadow: inset 0 1px 0 rgba(197, 233, 205, 0.08), 0 16px 30px rgba(0, 0, 0, 0.42);
+}
+
+button:focus-visible {
+  outline: none;
+  border-color: rgba(159, 216, 167, 0.72);
+  box-shadow: 0 0 0 3px var(--focus-ring), inset 0 1px 0 rgba(197, 233, 205, 0.08), var(--shadow-soft);
+}
+
+button:active {
+  transform: translateY(0);
 }
 
 button:disabled {
@@ -240,21 +258,23 @@ label {
 input,
 select,
 textarea {
-  background: rgba(4, 6, 6, 0.95);
-  border: 1px solid rgba(127, 184, 138, 0.2);
+  background: rgba(5, 8, 8, 0.95);
+  border: 1px solid rgba(127, 184, 138, 0.24);
   color: var(--text);
   font-family: "Space Grotesk", system-ui, sans-serif;
-  border-radius: var(--radius-sm);
-  min-height: 40px;
-  padding: 10px 12px;
+  border-radius: 12px;
+  min-height: 42px;
+  padding: 10px 14px;
   font-size: 14px;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: inset 0 1px 0 rgba(189, 226, 198, 0.04);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
 
 input:hover,
 select:hover,
 textarea:hover {
-  border-color: rgba(127, 184, 138, 0.34);
+  border-color: rgba(127, 184, 138, 0.38);
+  background: rgba(6, 10, 10, 0.95);
 }
 
 input:focus,
@@ -262,7 +282,7 @@ select:focus,
 textarea:focus {
   outline: none;
   border-color: rgba(159, 216, 167, 0.68);
-  box-shadow: 0 0 0 3px rgba(127, 184, 138, 0.14);
+  box-shadow: 0 0 0 3px var(--focus-ring), inset 0 1px 0 rgba(189, 226, 198, 0.07);
 }
 
 .chip {
