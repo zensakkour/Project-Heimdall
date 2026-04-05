@@ -7,6 +7,7 @@ import argparse
 import json
 
 from src.core.geo.geoclip_provider import GeoCLIPProvider
+from src.core.logic.filtering import update_posterior
 from src.core.logic.fusion import fuse_candidates
 from src.core.logic.tracking import TrackState, associate_track
 
@@ -29,6 +30,8 @@ def main() -> int:
         if track is None:
             track = TrackState(track_id=f"track-{idx}", fused_history=[])
             tracks.append(track)
+        if track.fused_history:
+            fused = update_posterior(track.fused_history[-1], fused)
         track.fused_history.append(fused)
         outputs.append({
             "image": image_path,

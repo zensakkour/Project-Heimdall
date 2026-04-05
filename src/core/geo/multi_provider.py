@@ -37,6 +37,54 @@ def _clamp_score(value: float) -> float:
     return max(0.0, min(0.999, float(value)))
 
 
+def _candidate_source_key(match_id: Optional[str]) -> str:
+    text = (match_id or "").strip().lower()
+    if text.startswith("exif:"):
+        return "exif"
+    if text.startswith("geoclip"):
+        return "geoclip"
+    if text.startswith("retrieval:"):
+        parts = text.split(":")
+        if len(parts) >= 3 and parts[1].strip():
+            return f"retrieval:{parts[1].strip()}"
+        return "retrieval"
+    return "unknown"
+
+
+def _select_source_balanced_candidates(
+    ranked: List[GeoCandidate],
+    *,
+    top_k: int,
+    balance_beta: float,
+) -> List[GeoCandidate]:
+    if not ranked:
+        return []
+    k = min(max(1, int(top_k)), len(ranked))
+    beta = max(0.0, float(balance_beta))
+    ordered = sorted(ranked, key=lambda cand: cand.retrieval_score, reverse=True)
+    if beta <= 1e-9:
+        return ordered[:k]
+    selected: List[GeoCandidate] = []
+    remaining = list(ordered)
+    per_source_counts = {}
+    while remaining and len(selected) < k:
+        best_idx = 0
+        best_val = float("-inf")
+        for idx, cand in enumerate(remaining):
+            source = _candidate_source_key(cand.match_id)
+            count = float(per_source_counts.get(source, 0))
+            adjusted = float(cand.retrieval_score) / (1.0 + beta * count)
+            if adjusted > best_val:
+                best_val = adjusted
+                best_idx = idx
+        pick = remaining.pop(best_idx)
+        selected.append(pick)
+        source = _candidate_source_key(pick.match_id)
+        per_source_counts[source] = int(per_source_counts.get(source, 0)) + 1
+    selected.sort(key=lambda cand: cand.retrieval_score, reverse=True)
+    return selected[:k]
+
+
 @dataclass
 class _CandidateCluster:
     lat_weighted_sum: float = 0.0
@@ -89,11 +137,13 @@ class MultiCandidateProvider:
         self,
         providers: Iterable[object],
         dedupe_radius_m: float = 300.0,
+        source_balance_beta: float = 0.0,
         max_candidates: int = 80,
         min_score: float = 1e-3,
     ) -> None:
         self.providers = [p for p in providers if p is not None]
         self.dedupe_radius_m = max(0.0, float(dedupe_radius_m))
+        self.source_balance_beta = max(0.0, float(source_balance_beta))
         self.max_candidates = max(1, int(max_candidates))
         self.min_score = max(0.0, float(min_score))
         self.last_error: Optional[str] = None
@@ -117,8 +167,12 @@ class MultiCandidateProvider:
         if not gathered:
             return []
         merged = self._dedupe_candidates(gathered)
-        merged.sort(key=lambda cand: cand.retrieval_score, reverse=True)
-        return merged[: self.max_candidates]
+        merged = _select_source_balanced_candidates(
+            merged,
+            top_k=self.max_candidates,
+            balance_beta=self.source_balance_beta,
+        )
+        return merged
 
     def _dedupe_candidates(self, candidates: List[GeoCandidate]) -> List[GeoCandidate]:
         if self.dedupe_radius_m <= 0.0:

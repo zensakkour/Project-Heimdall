@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Dict, Optional, Tuple
 
 
 @dataclass(frozen=True)
@@ -35,10 +35,25 @@ class GeoConfig:
     top_n: int = 5
     geospot_score_scale: float = 1.0
     retrieval_index_path: Optional[str] = None
+    retrieval_index_paths: Tuple[str, ...] = ()
+    retrieval_index_weights: Tuple[float, ...] = ()
+    retrieval_index_model_ids: Tuple[str, ...] = ()
     retrieval_model_id: Optional[str] = None
     retrieval_top_k: int = 10
+    retrieval_per_index_top_k: int = 0
+    retrieval_index_score_norm: str = "auto"
+    retrieval_source_balance_beta: float = 0.0
     retrieval_min_score: float = 0.2
+    retrieval_min_keep_topk: int = 0
+    retrieval_diversity_radius_km: float = 0.0
+    retrieval_diversity_lambda: float = 1.0
+    retrieval_diversity_min_keep: int = 1
+    retrieval_locality_radius_km: float = 0.0
+    retrieval_locality_weight: float = 0.0
+    retrieval_query_tta_degrees: Tuple[float, ...] = (0.0,)
+    retrieval_query_tta_reduce: str = "mean"
     candidate_dedupe_radius_m: float = 300.0
+    candidate_source_balance_beta: float = 0.0
     candidate_max_results: int = 80
 
 
@@ -54,6 +69,7 @@ class FusionConfig:
     retrieval_temperature: float = 0.2
     retrieval_score_norm: str = "none"
     source_prior_retrieval: float = 1.0
+    source_prior_retrieval_by_source: Optional[Dict[str, float]] = None
     source_prior_geoclip: float = 1.0
     source_prior_exif: float = 1.0
     use_spatial_consensus: bool = True
@@ -62,6 +78,21 @@ class FusionConfig:
     use_cross_source_agreement: bool = True
     cross_source_sigma_km: float = 15.0
     cross_source_weight: float = 1.0
+    use_plausibility_rerank: bool = False
+    plausibility_radius_km: float = 200.0
+    plausibility_weight: float = 1.0
+    use_adaptive_outlier_guard: bool = False
+    outlier_guard_strength: float = 1.0
+    outlier_guard_min_scale_km: float = 120.0
+    outlier_guard_mad_scale: float = 3.0
+    confidence_calibration_logit_scale: float = 1.0
+    confidence_calibration_logit_bias: float = 0.0
+    confidence_high_threshold: float = 0.70
+    confidence_medium_threshold: float = 0.45
+    confidence_high_min_cross_source_support: Optional[float] = 0.30
+    confidence_medium_min_cross_source_support: Optional[float] = 0.10
+    confidence_high_max_uncertainty_m: Optional[float] = 500_000.0
+    confidence_medium_max_uncertainty_m: Optional[float] = 2_000_000.0
     shadow_sigma_deg: float = 20.0
     terrain_sigma: float = 100.0
     use_shadow: bool = True
@@ -90,6 +121,10 @@ class HeimdallConfig:
     fusion: FusionConfig
     score: ScoreConfig
     verification: VerificationConfig
+
+
+def has_retrieval_index(geo: GeoConfig) -> bool:
+    return bool(geo.retrieval_index_path) or bool(geo.retrieval_index_paths)
 
 
 def load_config(path: str) -> HeimdallConfig:
@@ -123,16 +158,34 @@ def load_config(path: str) -> HeimdallConfig:
             top_n=geo.get("top_n", 5),
             geospot_score_scale=geo.get("geospot_score_scale", 1.0),
             retrieval_index_path=geo.get("retrieval_index_path"),
+            retrieval_index_paths=_parse_str_tuple(geo.get("retrieval_index_paths", [])),
+            retrieval_index_weights=_parse_float_tuple_allow_empty(geo.get("retrieval_index_weights", [])),
+            retrieval_index_model_ids=_parse_str_tuple(geo.get("retrieval_index_model_ids", [])),
             retrieval_model_id=geo.get("retrieval_model_id"),
             retrieval_top_k=geo.get("retrieval_top_k", 10),
+            retrieval_per_index_top_k=geo.get("retrieval_per_index_top_k", 0),
+            retrieval_index_score_norm=_parse_index_score_norm(geo.get("retrieval_index_score_norm", "auto")),
+            retrieval_source_balance_beta=geo.get("retrieval_source_balance_beta", 0.0),
             retrieval_min_score=geo.get("retrieval_min_score", 0.2),
+            retrieval_min_keep_topk=geo.get("retrieval_min_keep_topk", 0),
+            retrieval_diversity_radius_km=geo.get("retrieval_diversity_radius_km", 0.0),
+            retrieval_diversity_lambda=geo.get("retrieval_diversity_lambda", 1.0),
+            retrieval_diversity_min_keep=geo.get("retrieval_diversity_min_keep", 1),
+            retrieval_locality_radius_km=geo.get("retrieval_locality_radius_km", 0.0),
+            retrieval_locality_weight=geo.get("retrieval_locality_weight", 0.0),
+            retrieval_query_tta_degrees=_parse_float_tuple(geo.get("retrieval_query_tta_degrees", [0.0])),
+            retrieval_query_tta_reduce=_parse_tta_reduce(geo.get("retrieval_query_tta_reduce", "mean")),
             candidate_dedupe_radius_m=geo.get("candidate_dedupe_radius_m", 300.0),
+            candidate_source_balance_beta=geo.get("candidate_source_balance_beta", 0.0),
             candidate_max_results=geo.get("candidate_max_results", 80),
         ),
         fusion=FusionConfig(
             retrieval_temperature=fusion.get("retrieval_temperature", 0.2),
             retrieval_score_norm=fusion.get("retrieval_score_norm", "none"),
             source_prior_retrieval=fusion.get("source_prior_retrieval", 1.0),
+            source_prior_retrieval_by_source=_parse_float_dict(
+                fusion.get("source_prior_retrieval_by_source", {})
+            ),
             source_prior_geoclip=fusion.get("source_prior_geoclip", 1.0),
             source_prior_exif=fusion.get("source_prior_exif", 1.0),
             use_spatial_consensus=fusion.get("use_spatial_consensus", True),
@@ -141,6 +194,21 @@ def load_config(path: str) -> HeimdallConfig:
             use_cross_source_agreement=fusion.get("use_cross_source_agreement", True),
             cross_source_sigma_km=fusion.get("cross_source_sigma_km", 15.0),
             cross_source_weight=fusion.get("cross_source_weight", 1.0),
+            use_plausibility_rerank=fusion.get("use_plausibility_rerank", False),
+            plausibility_radius_km=fusion.get("plausibility_radius_km", 200.0),
+            plausibility_weight=fusion.get("plausibility_weight", 1.0),
+            use_adaptive_outlier_guard=fusion.get("use_adaptive_outlier_guard", False),
+            outlier_guard_strength=fusion.get("outlier_guard_strength", 1.0),
+            outlier_guard_min_scale_km=fusion.get("outlier_guard_min_scale_km", 120.0),
+            outlier_guard_mad_scale=fusion.get("outlier_guard_mad_scale", 3.0),
+            confidence_calibration_logit_scale=fusion.get("confidence_calibration_logit_scale", 1.0),
+            confidence_calibration_logit_bias=fusion.get("confidence_calibration_logit_bias", 0.0),
+            confidence_high_threshold=fusion.get("confidence_high_threshold", 0.70),
+            confidence_medium_threshold=fusion.get("confidence_medium_threshold", 0.45),
+            confidence_high_min_cross_source_support=fusion.get("confidence_high_min_cross_source_support", 0.30),
+            confidence_medium_min_cross_source_support=fusion.get("confidence_medium_min_cross_source_support", 0.10),
+            confidence_high_max_uncertainty_m=fusion.get("confidence_high_max_uncertainty_m", 500_000.0),
+            confidence_medium_max_uncertainty_m=fusion.get("confidence_medium_max_uncertainty_m", 2_000_000.0),
             shadow_sigma_deg=fusion.get("shadow_sigma_deg", 20.0),
             terrain_sigma=fusion.get("terrain_sigma", 100.0),
             use_shadow=fusion.get("use_shadow", True),
@@ -165,3 +233,76 @@ def load_config(path: str) -> HeimdallConfig:
             use_shadow_heading=ver.get("use_shadow_heading", True),
         ),
     )
+
+
+def _parse_float_tuple(raw) -> Tuple[float, ...]:
+    if not isinstance(raw, (list, tuple)):
+        return (0.0,)
+    out = []
+    for value in raw:
+        if isinstance(value, (int, float)):
+            val = float(value)
+            if val == val and val not in (float("inf"), float("-inf")):
+                out.append(val)
+    if not out:
+        return (0.0,)
+    return tuple(out)
+
+
+def _parse_float_tuple_allow_empty(raw) -> Tuple[float, ...]:
+    if not isinstance(raw, (list, tuple)):
+        return ()
+    out = []
+    for value in raw:
+        if isinstance(value, (int, float)):
+            val = float(value)
+            if val == val and val not in (float("inf"), float("-inf")):
+                out.append(val)
+    return tuple(out)
+
+
+def _parse_str_tuple(raw) -> Tuple[str, ...]:
+    if not isinstance(raw, (list, tuple)):
+        return ()
+    out = []
+    seen = set()
+    for value in raw:
+        text = str(value).strip() if value is not None else ""
+        if not text:
+            continue
+        if text in seen:
+            continue
+        seen.add(text)
+        out.append(text)
+    return tuple(out)
+
+
+def _parse_float_dict(raw) -> Optional[Dict[str, float]]:
+    if not isinstance(raw, dict):
+        return None
+    out: Dict[str, float] = {}
+    for key, value in raw.items():
+        name = str(key).strip() if key is not None else ""
+        if not name:
+            continue
+        if not isinstance(value, (int, float)):
+            continue
+        val = float(value)
+        if val != val or val in (float("inf"), float("-inf")):
+            continue
+        out[name] = val
+    return out or None
+
+
+def _parse_tta_reduce(raw: object) -> str:
+    mode = str(raw).strip().lower()
+    if mode not in {"mean", "max", "rrf"}:
+        return "mean"
+    return mode
+
+
+def _parse_index_score_norm(raw: object) -> str:
+    mode = str(raw).strip().lower()
+    if mode not in {"auto", "none", "minmax", "zscore_sigmoid", "rank_exp"}:
+        return "auto"
+    return mode

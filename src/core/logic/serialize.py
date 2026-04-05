@@ -84,6 +84,8 @@ def _fusion_to_dict(fusion: "FusionResult") -> dict[str, Any]:
         "normalized_entropy": fusion.normalized_entropy,
         "effective_candidate_count": fusion.effective_candidate_count,
         "top1_posterior": fusion.top1_posterior,
+        "calibrated_top1_posterior": fusion.calibrated_top1_posterior,
+        "top1_cross_source_support": fusion.top1_cross_source_support,
         "top2_margin": fusion.top2_margin,
         "confidence_tier": fusion.confidence_tier,
         "ambiguous": fusion.ambiguous,
@@ -104,5 +106,3 @@ def _fusion_to_dict(fusion: "FusionResult") -> dict[str, Any]:
             for item in fusion.candidates
         ],
     }
-
-

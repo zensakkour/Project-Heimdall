@@ -19,7 +19,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
 
-from src.core.logic.config import HeimdallConfig, load_config
+from src.core.logic.config import HeimdallConfig, has_retrieval_index, load_config
 from src.core.logic.serialize import assessment_to_dict
 from src.core.logic.types import (
     Assessment,
@@ -65,9 +65,23 @@ def build_pipeline(cfg: Optional[HeimdallConfig]) -> "HeimdallPipeline":
     )
     retrieval_provider = GeoRetrievalProvider(
         index_path=cfg.geolocator.retrieval_index_path,
+        index_paths=cfg.geolocator.retrieval_index_paths,
+        index_weights=cfg.geolocator.retrieval_index_weights,
+        index_model_ids=cfg.geolocator.retrieval_index_model_ids,
         model_id=cfg.geolocator.retrieval_model_id or "openai/clip-vit-large-patch14",
         top_k=cfg.geolocator.retrieval_top_k,
+        per_index_top_k=cfg.geolocator.retrieval_per_index_top_k,
+        index_score_norm=cfg.geolocator.retrieval_index_score_norm,
+        source_balance_beta=cfg.geolocator.retrieval_source_balance_beta,
         min_score=cfg.geolocator.retrieval_min_score,
+        min_keep_topk=cfg.geolocator.retrieval_min_keep_topk,
+        diversity_radius_km=cfg.geolocator.retrieval_diversity_radius_km,
+        diversity_lambda=cfg.geolocator.retrieval_diversity_lambda,
+        diversity_min_keep=cfg.geolocator.retrieval_diversity_min_keep,
+        locality_radius_km=cfg.geolocator.retrieval_locality_radius_km,
+        locality_weight=cfg.geolocator.retrieval_locality_weight,
+        query_tta_degrees=cfg.geolocator.retrieval_query_tta_degrees,
+        query_tta_reduce=cfg.geolocator.retrieval_query_tta_reduce,
     )
     geoclip_provider = GeoCLIPProvider(
         model_path=cfg.geolocator.model_path,
@@ -79,10 +93,11 @@ def build_pipeline(cfg: Optional[HeimdallConfig]) -> "HeimdallPipeline":
         use_exif=cfg.geolocator.use_exif,
         score_scale=cfg.geolocator.geospot_score_scale,
     )
-    if cfg.geolocator.retrieval_index_path:
+    if has_retrieval_index(cfg.geolocator):
         candidate_provider = MultiCandidateProvider(
             [retrieval_provider, geoclip_provider],
             dedupe_radius_m=cfg.geolocator.candidate_dedupe_radius_m,
+            source_balance_beta=cfg.geolocator.candidate_source_balance_beta,
             max_candidates=cfg.geolocator.candidate_max_results,
         )
     else:
@@ -349,6 +364,24 @@ def _check_model_paths() -> dict:
                 "is_dir": path.is_dir(),
                 "configured": True,
             }
+    if cfg.geolocator.retrieval_index_paths:
+        multi = []
+        for raw in cfg.geolocator.retrieval_index_paths:
+            path = _resolve_local_path(raw)
+            if path is None:
+                continue
+            multi.append(
+                {
+                    "path": str(path),
+                    "exists": path.exists(),
+                    "is_dir": path.is_dir(),
+                }
+            )
+        out["retrieval_index_paths"] = {
+            "configured": True,
+            "count": len(multi),
+            "paths": multi,
+        }
     return out
 
 
@@ -399,7 +432,16 @@ def _health_snapshot() -> dict:
         if not check.get("ok"):
             required_failures.append(f"write:{name}")
     for name, check in model_paths.items():
-        if isinstance(check, dict) and check.get("configured") and not check.get("exists"):
+        if not isinstance(check, dict) or not check.get("configured"):
+            continue
+        if name == "retrieval_index_paths":
+            paths = check.get("paths")
+            if isinstance(paths, list):
+                any_exists = any(isinstance(item, dict) and item.get("exists") for item in paths)
+                if not any_exists:
+                    required_failures.append(f"model_path:{name}")
+            continue
+        if not check.get("exists"):
             required_failures.append(f"model_path:{name}")
 
     status = "ok" if not required_failures else "degraded"
