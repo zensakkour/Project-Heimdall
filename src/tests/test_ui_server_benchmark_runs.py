@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import sys
 import tempfile
+import types
 
 from fastapi.testclient import TestClient
 
@@ -167,3 +169,97 @@ def test_compare_benchmark_runs_and_append_progress(monkeypatch) -> None:
         progress_text = progress_path.read_text(encoding="utf-8")
         assert baseline["run_id"] in progress_text
         assert candidate["run_id"] in progress_text
+
+
+def test_start_benchmarks_persists_saved_run(monkeypatch) -> None:
+    class _ImmediateThread:
+        def __init__(self, target=None, args=(), kwargs=None, daemon=None):
+            self._target = target
+            self._args = args
+            self._kwargs = kwargs or {}
+            self.daemon = daemon
+
+        def start(self):
+            if self._target is not None:
+                self._target(*self._args, **self._kwargs)
+
+    def _fake_geo_eval_main(argv: list[str]) -> None:
+        out_path = Path(argv[argv.index("--output") + 1])
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(
+            json.dumps(
+                {
+                    "mean_km": 12.3,
+                    "median_km": 7.6,
+                    "within_5km_pct": 35.0,
+                    "within_10km_pct": 52.0,
+                    "evaluated": 24,
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    def _fake_backbone_main(argv: list[str]) -> None:
+        out_path = Path(argv[argv.index("--output") + 1])
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(
+            json.dumps(
+                {
+                    "best_model": "openai/clip-vit-large-patch14",
+                    "ranked_by_median_km": ["openai/clip-vit-large-patch14"],
+                    "models": [
+                        {
+                            "model_id": "openai/clip-vit-large-patch14",
+                            "mean_km": float("nan"),
+                            "median_km": 7.4,
+                            "within_5km_pct": 40.0,
+                            "within_10km_pct": 54.0,
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        runs_dir = root / "dashboard_runs"
+        history_dir = root / "history"
+        app_root = root / "app_root"
+        runs_dir.mkdir(parents=True, exist_ok=True)
+        history_dir.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setattr(ui_server, "_benchmark_runs_dir", lambda: runs_dir)
+        monkeypatch.setattr(ui_server, "_benchmark_history_root", lambda: history_dir)
+        monkeypatch.setattr(ui_server, "APP_ROOT", app_root)
+
+        fake_geo_mod = types.ModuleType("src.tools.run_geo_eval")
+        fake_geo_mod.main = _fake_geo_eval_main
+        fake_backbone_mod = types.ModuleType("src.tools.benchmark_geo_backbones")
+        fake_backbone_mod.main = _fake_backbone_main
+        monkeypatch.setitem(sys.modules, "src.tools.run_geo_eval", fake_geo_mod)
+        monkeypatch.setitem(sys.modules, "src.tools.benchmark_geo_backbones", fake_backbone_mod)
+
+        import threading
+
+        monkeypatch.setattr(threading, "Thread", _ImmediateThread)
+        client = TestClient(ui_server.app)
+
+        start_res = client.post("/eval/benchmarks/start")
+        assert start_res.status_code == 200
+        assert start_res.json().get("status") == "running"
+
+        status = client.get("/eval/benchmarks/status").json()
+        assert status.get("status") == "done"
+        run_id = status.get("run_id")
+        assert isinstance(run_id, str) and run_id
+
+        listed = client.get("/eval/benchmarks/runs").json().get("runs", [])
+        listed_ids = [row.get("run_id") for row in listed]
+        assert run_id in listed_ids
+
+        saved = client.get(f"/eval/benchmarks/runs/{run_id}")
+        assert saved.status_code == 200
+        assert "NaN" not in saved.text
+        saved_payload = saved.json()
+        model_row = saved_payload["backbone_benchmark"]["models"][0]
+        assert model_row["mean_km"] is None

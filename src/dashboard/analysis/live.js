@@ -1287,9 +1287,20 @@ async function pollBenchmarks() {
   const progressWrap = byId("bench-progress");
   const progressBar = byId("bench-progress-bar");
   const progressText = byId("bench-progress-text");
-  const res = await fetch("/eval/benchmarks/status");
-  if (!res.ok) return;
-  const data = await res.json();
+  let data;
+  try {
+    const res = await fetch("/eval/benchmarks/status", { cache: "no-store" });
+    if (!res.ok) {
+      if (statusEl) statusEl.textContent = `Status: polling failed (${res.status})`;
+      setTimeout(pollBenchmarks, 2000);
+      return;
+    }
+    data = await res.json();
+  } catch (err) {
+    if (statusEl) statusEl.textContent = `Status: polling failed (${String(err)})`;
+    setTimeout(pollBenchmarks, 2000);
+    return;
+  }
   const status = data.status || "idle";
   const stage = data.stage || "-";
   if (statusEl) statusEl.textContent = `Status: ${status} | Stage: ${stage}`;
@@ -1318,19 +1329,45 @@ async function pollBenchmarks() {
   if (outputEl && data.last_result && !useSavedBenchmarkView()) {
     outputEl.textContent = data.last_result;
   }
-  if (status === "done" && data.last_result) {
+  if (status === "done") {
+    const doneRunId = data.run_id || null;
+    await refreshBenchmarkRuns(doneRunId);
+    if (!data.last_result) {
+      if (!useSavedBenchmarkView()) setBenchmarkOutputMeta("none", null);
+      return;
+    }
     try {
       const parsed = JSON.parse(data.last_result);
       currentBenchmarkRun = parsed;
-      await refreshBenchmarkRuns(data.run_id || parsed.run_id || null);
       if (!useSavedBenchmarkView()) {
         renderBenchmarkSummary(parsed);
         setBenchmarkOutputMeta("current", parsed);
         if (outputEl) outputEl.textContent = JSON.stringify(parsed, null, 2);
       }
     } catch {
-      // Keep raw output visible.
+      // Fallback: load the persisted run payload directly when status is done.
+      if (doneRunId) {
+        try {
+          const res = await fetch(`/eval/benchmarks/runs/${encodeURIComponent(doneRunId)}`, {
+            cache: "no-store",
+          });
+          if (res.ok) {
+            const persisted = await res.json();
+            currentBenchmarkRun = persisted;
+            if (!useSavedBenchmarkView()) {
+              renderBenchmarkSummary(persisted);
+              setBenchmarkOutputMeta("current", persisted);
+              if (outputEl) outputEl.textContent = JSON.stringify(persisted, null, 2);
+            }
+          }
+        } catch {
+          // Keep raw output visible.
+        }
+      }
     }
+  }
+  if (status === "error") {
+    await refreshBenchmarkRuns(data.run_id || null);
   }
   if (status === "running") {
     setTimeout(pollBenchmarks, 1500);
@@ -1365,7 +1402,19 @@ async function startBenchmarks() {
   if (progressWrap) progressWrap.classList.add("active");
   if (progressBar) progressBar.style.width = "0%";
   if (progressText) progressText.textContent = "0% - Preparing benchmark jobs";
-  await fetch(`/eval/benchmarks/start?${params.toString()}`, { method: "POST" });
+  try {
+    const res = await fetch(`/eval/benchmarks/start?${params.toString()}`, { method: "POST" });
+    if (!res.ok) {
+      const text = await res.text();
+      if (statusEl) statusEl.textContent = `Status: failed to start (${res.status})`;
+      if (outputEl) outputEl.textContent = text || "Failed to start benchmark run.";
+      return;
+    }
+  } catch (err) {
+    if (statusEl) statusEl.textContent = "Status: failed to start";
+    if (outputEl) outputEl.textContent = `Failed to start benchmark run: ${String(err)}`;
+    return;
+  }
   pollBenchmarks();
 }
 
