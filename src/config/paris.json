@@ -12,14 +12,14 @@
     "model_path": null,
     "use_sidecar": true,
     "use_exif": true,
-    "top_n": 20,
-    "geospot_score_scale": 0.35,
+    "top_n": 5,
+    "geospot_score_scale": 0.1,
     "model_id": "sdan/geospot-base",
     "model_cache_dir": "data/models/geospot-base",
     "encoder_name": null,
     "retrieval_index_path": "data/geo_index/spacenet_paris_clip.npz",
     "retrieval_model_id": "openai/clip-vit-large-patch14",
-    "retrieval_top_k": 25,
+    "retrieval_top_k": 50,
     "retrieval_min_score": 0.1
   },
   "score": {
@@ -35,12 +35,12 @@
     "use_shadow_heading": true
   },
   "fusion": {
-    "retrieval_temperature": 0.12,
-    "retrieval_score_norm": "zscore_sigmoid",
+    "retrieval_temperature": 0.08,
+    "retrieval_score_norm": "none",
     "shadow_sigma_deg": 20.0,
     "terrain_sigma": 100.0,
-    "use_shadow": true,
+    "use_shadow": false,
     "use_terrain": false,
-    "top_k": 15
+    "top_k": 25
   }
 }

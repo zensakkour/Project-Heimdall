@@ -34,6 +34,8 @@ class GeoConfig:
     retrieval_model_id: Optional[str] = None
     retrieval_top_k: int = 10
     retrieval_min_score: float = 0.2
+    candidate_dedupe_radius_m: float = 300.0
+    candidate_max_results: int = 80
 
 
 @dataclass(frozen=True)
@@ -102,6 +104,8 @@ def load_config(path: str) -> HeimdallConfig:
             retrieval_model_id=geo.get("retrieval_model_id"),
             retrieval_top_k=geo.get("retrieval_top_k", 10),
             retrieval_min_score=geo.get("retrieval_min_score", 0.2),
+            candidate_dedupe_radius_m=geo.get("candidate_dedupe_radius_m", 300.0),
+            candidate_max_results=geo.get("candidate_max_results", 80),
         ),
         fusion=FusionConfig(
             retrieval_temperature=fusion.get("retrieval_temperature", 0.2),

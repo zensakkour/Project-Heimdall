@@ -44,7 +44,11 @@ def build_pipeline(cfg: Optional[HeimdallConfig]) -> HeimdallPipeline:
         score_scale=cfg.geolocator.geospot_score_scale,
     )
     if cfg.geolocator.retrieval_index_path:
-        candidate_provider = MultiCandidateProvider([retrieval_provider, geoclip_provider])
+        candidate_provider = MultiCandidateProvider(
+            [retrieval_provider, geoclip_provider],
+            dedupe_radius_m=cfg.geolocator.candidate_dedupe_radius_m,
+            max_candidates=cfg.geolocator.candidate_max_results,
+        )
     else:
         candidate_provider = geoclip_provider
     return HeimdallPipeline(
