@@ -37,6 +37,11 @@ Open:
 - `POST /eval/dota/start`
 - `GET /eval/dota/status`
 
+Safe demo mode:
+
+- If runtime dependencies fail, analysis endpoints return mock outputs so the UI remains usable.
+- Force fallback explicitly: `POST /analyze/image?safe_demo=1`
+
 ## Screenshot Assets
 
 README screenshots are stored in `docs/images/` at repo root.
