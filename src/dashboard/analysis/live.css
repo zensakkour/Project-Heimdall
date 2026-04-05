@@ -17,12 +17,12 @@
 }
 
 .hero-copy {
-  gap: 4px;
+  gap: 6px;
 }
 
 .page-header h1 {
   margin: 0;
-  font-size: 34px;
+  font-size: 40px;
 }
 
 .section-card {
@@ -90,9 +90,9 @@
 }
 
 .file-label {
-  font-size: 11px;
+  font-size: 10px;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.11em;
   color: #b7c9bd;
 }
 
@@ -129,7 +129,7 @@
 
 .file-name {
   color: #c7d6cc;
-  font-size: 13px;
+  font-size: 14px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -149,7 +149,8 @@
   border-radius: 12px;
   background: rgba(3, 5, 5, 0.7);
   color: var(--muted);
-  font-size: 14px;
+  font-size: 15px;
+  line-height: 1.45;
 }
 
 .progress {
@@ -202,6 +203,8 @@
 
 .panel-title {
   margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.1em;
 }
 
 .panel-head {
@@ -216,7 +219,7 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .legend-control select {
@@ -250,7 +253,7 @@
   align-items: center;
   gap: 12px;
   margin-top: 14px;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .legend-dot {
@@ -298,7 +301,7 @@
 .geo-ranking {
   display: flex;
   flex-direction: column;
-  font-size: 13px;
+  font-size: 14px;
   border: 1px solid rgba(127, 184, 138, 0.12);
   border-radius: 12px;
   background: rgba(4, 6, 6, 0.72);
@@ -322,23 +325,23 @@
 .geo-rank-header {
   cursor: default;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-size: 11px;
+  letter-spacing: 0.1em;
+  font-size: 10px;
   color: var(--muted);
   background: rgba(8, 12, 11, 0.82);
 }
 
 .geo-rank-item .rank-badge {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--muted);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
 }
 
 .geo-rank-item .rank-conf {
   color: #dff5e4;
   font-weight: 600;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .geo-rank-item.active {
@@ -412,7 +415,7 @@
 }
 
 .confidence {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--muted);
   min-width: 44px;
   text-align: right;
@@ -441,7 +444,7 @@
   padding: 14px 16px;
   color: var(--text);
   font-size: 12px;
-  line-height: 1.45;
+  line-height: 1.55;
   white-space: pre-wrap;
   font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
@@ -451,7 +454,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .score-form {
@@ -477,9 +480,9 @@
 
 .score-toggle {
   gap: 10px;
-  font-size: 11px;
+  font-size: 10px;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
 }
 
 .score-toggle input[type="checkbox"] {
