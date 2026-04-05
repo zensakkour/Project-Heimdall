@@ -36,6 +36,8 @@ Open:
 - `GET /eval/geo/status`
 - `POST /eval/dota/start`
 - `GET /eval/dota/status`
+- `GET /health`
+- `GET /health/deps`
 
 Safe demo mode:
 
