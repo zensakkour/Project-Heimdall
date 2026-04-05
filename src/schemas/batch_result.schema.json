@@ -98,6 +98,15 @@
               "required": ["major_axis_m", "minor_axis_m", "orientation_deg"]
             },
             "uncertainty_radius_m": { "type": "number" },
+            "normalized_entropy": { "type": "number" },
+            "effective_candidate_count": { "type": "number" },
+            "top1_posterior": { "type": "number" },
+            "top2_margin": { "type": "number" },
+            "confidence_tier": {
+              "type": "string",
+              "enum": ["low", "medium", "high"]
+            },
+            "ambiguous": { "type": "boolean" },
             "candidates": {
               "type": "array",
               "items": {
