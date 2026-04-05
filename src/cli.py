@@ -52,7 +52,11 @@ def build_pipeline(
             use_exif=geo_cfg.use_exif,
         )
         if geo_cfg.retrieval_index_path:
-            candidate_provider = MultiCandidateProvider([retrieval_provider, geoclip_provider])
+            candidate_provider = MultiCandidateProvider(
+                [retrieval_provider, geoclip_provider],
+                dedupe_radius_m=geo_cfg.candidate_dedupe_radius_m,
+                max_candidates=geo_cfg.candidate_max_results,
+            )
         else:
             candidate_provider = geoclip_provider
     return HeimdallPipeline(
