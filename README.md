@@ -6,6 +6,12 @@
 
 Geospatial perception and analysis platform that combines object detection, geo-candidate retrieval, probabilistic fusion, and operator-facing explainability.
 
+## Project Status Tracking
+
+- Engineering progress log: [PROGRESS.md](PROGRESS.md)
+- What it is: append-only record of shipped changes, validation runs, and technical milestones.
+- How to use it: check the top snapshot for current status, then review dated entries for full history.
+
 ## What The Platform Does
 
 Project Heimdall processes image or video inputs and produces:
@@ -197,6 +203,12 @@ For reproducible installs, use the lockfile:
 pip install -r requirements.lock.txt
 ```
 
+If `torch` is missing, install CPU build quickly:
+
+```powershell
+.\.venv\Scripts\python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+```
+
 Environment verification:
 
 ```powershell
@@ -256,6 +268,15 @@ If filesystem watcher issues occur, run without reload:
 1. Interact with 3D globe: drag to rotate/pan.
 1. Scroll wheel to zoom in and zoom out.
 1. Use `Zoom In`, `Zoom Out`, and `Reset` buttons.
+1. Open the `Scoring` tab for benchmark/eval tools (separate from upload/live analysis).
+
+Benchmark comparison in UI:
+
+1. Go to `Scoring` tab.
+1. In `Benchmark Comparison`, click `Run Benchmark Comparison`.
+1. Review:
+   - scenario table (`leaky_reference`, `realistic_single`, `candidate_multi`)
+   - backbone table (model-vs-model metrics and best model).
 
 Runtime diagnostics:
 
@@ -465,8 +486,6 @@ Useful fusion knobs:
 ## Engineering and Contribution
 
 - Contribution guide: [CONTRIBUTING.md](CONTRIBUTING.md)
-- Code of conduct: []()
-- Security policy: []()
 - Support: [SUPPORT.md](SUPPORT.md)
 - Changelog: [CHANGELOG.md](CHANGELOG.md)
 - Progress tracking: [PROGRESS.md](PROGRESS.md)
