@@ -12,6 +12,10 @@ This is the current technical state of the geo stack in the development branch:
   - Invalid coordinate/score filtering
   - Near-duplicate clustering/merging across providers
   - Capped merged candidate list before fusion
+  - Retrieval candidate diversification (radius/lambda/min_keep)
+  - Retrieval minimum-candidate keep policy to preserve top-k recall when min-score thresholds are strict
+  - Retrieval locality reranking for isolated outlier suppression
+  - Retrieval query TTA (multi-rotation embedding ensemble with configurable score reduction: mean/max/rrf)
 - Detection quality controls are configurable:
   - Minimum OBB area filter (`detector.min_area_px`)
   - NMS mode (`detector.nms_mode`: `obb` or `aabb`)
@@ -20,17 +24,31 @@ This is the current technical state of the geo stack in the development branch:
 - Fusion is robust and configurable:
   - Retrieval score normalization modes (`none`, `zscore_sigmoid`, `minmax`, `rank_exp`)
   - Source priors (`source_prior_retrieval`, `source_prior_geoclip`, `source_prior_exif`)
+  - Dataset-aware retrieval priors (`source_prior_retrieval_by_source`) for multi-index retrieval source IDs
   - Spatial consensus likelihood (`use_spatial_consensus`, `spatial_sigma_km`, `spatial_consensus_weight`)
   - Cross-source agreement likelihood (`use_cross_source_agreement`, `cross_source_sigma_km`, `cross_source_weight`)
+  - Optional plausibility reranking (`use_plausibility_rerank`, `plausibility_radius_km`, `plausibility_weight`)
+  - Adaptive robust outlier guard likelihood (`use_adaptive_outlier_guard`, `outlier_guard_strength`, `outlier_guard_min_scale_km`, `outlier_guard_mad_scale`)
   - Dateline-safe longitude averaging and covariance
   - Posterior uncertainty radius + ellipse
-  - Confidence diagnostics (`normalized_entropy`, `effective_candidate_count`, `top1_posterior`, `top2_margin`, `confidence_tier`, `ambiguous`)
+  - Confidence diagnostics (`normalized_entropy`, `effective_candidate_count`, `top1_posterior`, `calibrated_top1_posterior`, `top1_cross_source_support`, `top2_margin`, `confidence_tier`, `ambiguous`)
+  - Confidence calibration controls (`confidence_calibration_logit_scale`, `confidence_calibration_logit_bias`, tier thresholds)
+  - Cross-source support tier caps (`confidence_high_min_cross_source_support`, `confidence_medium_min_cross_source_support`)
+  - Uncertainty-aware tier caps (`confidence_high_max_uncertainty_m`, `confidence_medium_max_uncertainty_m`)
   - Credible-set fusion stats (`credible_mass`, `min_credible_candidates`)
   - Optional top-cluster stats mode to avoid multimodal midpoint bias (`use_top_cluster_for_stats`, `credible_cluster_radius_km`, `min_credible_cluster_weight`)
+  - Top-cluster stats now select the densest credible cluster by posterior mass (not only top-1 anchor), reducing outlier-anchor bias in ambiguous scenes
+  - Temporal posterior filtering now reweights current candidates by prior geodesic support and adaptively shrinks uncertainty when consecutive frames agree
+  - Sequence tracking association is geodesic and uncertainty-aware (dateline-safe distance + adaptive gating)
 - Evaluation tooling is operational:
   - Geo regression gate baseline checks
-  - Fusion sweep/tuning script
+  - Fusion sweep/tuning script (retrieval diversity + consensus + plausibility)
+  - Hard-negative benchmark report tooling (distance buckets + per-group metrics)
+  - Auto-fit source priors (including retrieval source-specific priors via `source_prior_retrieval_by_source`) and confidence calibration tooling; priors/calibration can be applied directly to config via `fit_fusion_priors --apply-config` and `fit_confidence_calibration --apply-config`
   - Calibration/error metrics: `ece`, `brier`, `nll`
+  - Confidence reliability metrics: `avg_top1_cross_source_support`, `high_confidence_top1`, `medium_or_higher_top1`
+  - End-to-end auto tuning orchestrator (`src/tools/auto_tune_geo_stack.py`) for retrieval tuning + fusion prior fit + confidence calibration patching
+  - Auto-tune orchestration now writes both JSON and markdown summaries and restores config automatically on step failure
 
 Current focus is benchmark-driven tuning (retrieval coverage + fusion calibration), not new UI scope.
 
@@ -93,9 +111,23 @@ python -m src.tools.build_geo_index --images-dir data/samples/with_sidecars
 
 Configure retrieval in `src/config/defaults.json`:
 - `geolocator.retrieval_index_path`
+- `geolocator.retrieval_index_paths` (optional multi-index extension list)
+- `geolocator.retrieval_index_weights` (optional per-index weights)
 - `geolocator.retrieval_model_id` (default `openai/clip-vit-large-patch14`)
 - `geolocator.retrieval_top_k`
+- `geolocator.retrieval_per_index_top_k`
+- `geolocator.retrieval_index_score_norm` (`auto`, `none`, `minmax`, `zscore_sigmoid`, `rank_exp`; `auto` = multi-index robust normalization)
+- `geolocator.retrieval_source_balance_beta` (multi-index source balancing strength, `0` disables)
 - `geolocator.retrieval_min_score`
+- `geolocator.retrieval_min_keep_topk`
+- `geolocator.retrieval_diversity_radius_km`
+- `geolocator.retrieval_diversity_lambda`
+- `geolocator.retrieval_diversity_min_keep`
+- `geolocator.retrieval_locality_radius_km`
+- `geolocator.retrieval_locality_weight`
+- `geolocator.retrieval_query_tta_degrees`
+- `geolocator.retrieval_query_tta_reduce` (`mean`, `max`, or `rrf`)
+- `geolocator.candidate_source_balance_beta` (source balancing across merged retrieval/GeoCLIP/EXIF candidates)
 
 ### UI Geo Profiles
 The analysis UI can switch between geo profiles (tabs in the Inputs section):
@@ -105,7 +137,7 @@ The analysis UI can switch between geo profiles (tabs in the Inputs section):
 ### Open Geo Demo (Wikimedia Commons)
 You can bootstrap retrieval with open geotagged images from Wikimedia Commons:
 ```powershell
-python -m src.tools.download_open_geo --limit 100 --output data/open_geo
+python -m src.tools.download_open_geo --mode api --limit 300 --per-anchor 25 --output data/open_geo
 python -m src.tools.build_geo_index --images-dir data/open_geo/images --metadata data/open_geo/metadata.csv --output data/geo_index/open_geo_clip.npz
 ```
 
@@ -217,6 +249,16 @@ Key settings in config:
 - `fusion.use_spatial_consensus` / `fusion.use_cross_source_agreement`
 - `fusion.spatial_sigma_km` / `fusion.cross_source_sigma_km`
 - `fusion.spatial_consensus_weight` / `fusion.cross_source_weight`
+- `fusion.use_plausibility_rerank`
+- `fusion.plausibility_radius_km` / `fusion.plausibility_weight`
+- `fusion.use_adaptive_outlier_guard`
+- `fusion.outlier_guard_strength`
+- `fusion.outlier_guard_min_scale_km`
+- `fusion.outlier_guard_mad_scale`
+- `fusion.confidence_calibration_logit_scale` / `fusion.confidence_calibration_logit_bias`
+- `fusion.confidence_high_threshold` / `fusion.confidence_medium_threshold`
+- `fusion.confidence_high_min_cross_source_support` / `fusion.confidence_medium_min_cross_source_support`
+- `fusion.confidence_high_max_uncertainty_m` / `fusion.confidence_medium_max_uncertainty_m`
 - `fusion.use_shadow` / `fusion.use_terrain`
 - `fusion.shadow_sigma_deg` / `fusion.terrain_sigma`
 
@@ -258,5 +300,3 @@ python -c "import torch; print(torch.cuda.is_available()); print(torch.cuda.get_
 - CLI: `python -m src.cli <image>`
 - Full UI: `python -m uvicorn src.tools.ui_server:app --reload --port 8000`
 - Analysis page: `http://127.0.0.1:8000/analysis/`
-
-

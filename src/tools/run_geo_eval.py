@@ -8,17 +8,19 @@ import json
 import math
 import random
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
-import pandas as pd
-
-from src.core.detection.factory import create_detector
 from src.core.geo import GeoCLIPProvider, GeoLocator, GeoRetrievalProvider, MultiCandidateProvider
-from src.core.logic.config import HeimdallConfig, load_config
-from src.core.logic.pipeline import HeimdallPipeline
+from src.core.logic.config import HeimdallConfig, has_retrieval_index, load_config
+
+if TYPE_CHECKING:
+    from src.core.logic.pipeline import HeimdallPipeline
 
 
-def build_pipeline(cfg: Optional[HeimdallConfig]) -> HeimdallPipeline:
+def build_pipeline(cfg: Optional[HeimdallConfig]) -> "HeimdallPipeline":
+    from src.core.detection.factory import create_detector
+    from src.core.logic.pipeline import HeimdallPipeline
+
     if cfg is None:
         return HeimdallPipeline()
     detector = create_detector(cfg.detector)
@@ -29,9 +31,23 @@ def build_pipeline(cfg: Optional[HeimdallConfig]) -> HeimdallPipeline:
     )
     retrieval_provider = GeoRetrievalProvider(
         index_path=cfg.geolocator.retrieval_index_path,
+        index_paths=cfg.geolocator.retrieval_index_paths,
+        index_weights=cfg.geolocator.retrieval_index_weights,
+        index_model_ids=cfg.geolocator.retrieval_index_model_ids,
         model_id=cfg.geolocator.retrieval_model_id or "openai/clip-vit-large-patch14",
         top_k=cfg.geolocator.retrieval_top_k,
+        per_index_top_k=cfg.geolocator.retrieval_per_index_top_k,
+        index_score_norm=cfg.geolocator.retrieval_index_score_norm,
+        source_balance_beta=cfg.geolocator.retrieval_source_balance_beta,
         min_score=cfg.geolocator.retrieval_min_score,
+        min_keep_topk=cfg.geolocator.retrieval_min_keep_topk,
+        diversity_radius_km=cfg.geolocator.retrieval_diversity_radius_km,
+        diversity_lambda=cfg.geolocator.retrieval_diversity_lambda,
+        diversity_min_keep=cfg.geolocator.retrieval_diversity_min_keep,
+        locality_radius_km=cfg.geolocator.retrieval_locality_radius_km,
+        locality_weight=cfg.geolocator.retrieval_locality_weight,
+        query_tta_degrees=cfg.geolocator.retrieval_query_tta_degrees,
+        query_tta_reduce=cfg.geolocator.retrieval_query_tta_reduce,
     )
     geoclip_provider = GeoCLIPProvider(
         model_path=cfg.geolocator.model_path,
@@ -43,10 +59,11 @@ def build_pipeline(cfg: Optional[HeimdallConfig]) -> HeimdallPipeline:
         use_exif=cfg.geolocator.use_exif,
         score_scale=cfg.geolocator.geospot_score_scale,
     )
-    if cfg.geolocator.retrieval_index_path:
+    if has_retrieval_index(cfg.geolocator):
         candidate_provider = MultiCandidateProvider(
             [retrieval_provider, geoclip_provider],
             dedupe_radius_m=cfg.geolocator.candidate_dedupe_radius_m,
+            source_balance_beta=cfg.geolocator.candidate_source_balance_beta,
             max_candidates=cfg.geolocator.candidate_max_results,
         )
     else:
@@ -84,21 +101,40 @@ def predict_latlon(result) -> Optional[tuple[float, float]]:
 
 
 def predict_latlon_retrieval(
-    image_path: str, cfg: Optional[HeimdallConfig]
+    image_path: str, provider: Optional[GeoRetrievalProvider]
 ) -> tuple[Optional[tuple[float, float]], Optional[float], Optional[str]]:
-    if cfg is None or not cfg.geolocator.retrieval_index_path:
+    if provider is None:
         return None, None, "index_not_configured"
-    provider = GeoRetrievalProvider(
-        index_path=cfg.geolocator.retrieval_index_path,
-        model_id=cfg.geolocator.retrieval_model_id or "openai/clip-vit-large-patch14",
-        top_k=cfg.geolocator.retrieval_top_k,
-        min_score=cfg.geolocator.retrieval_min_score,
-    )
     candidates = provider.candidates(image_path)
     if not candidates:
         return None, None, provider.last_error or "no_candidates"
     top = candidates[0]
     return (top.latitude, top.longitude), top.retrieval_score, provider.last_error
+
+
+def build_retrieval_provider(cfg: Optional[HeimdallConfig]) -> Optional[GeoRetrievalProvider]:
+    if cfg is None or not has_retrieval_index(cfg.geolocator):
+        return None
+    return GeoRetrievalProvider(
+        index_path=cfg.geolocator.retrieval_index_path,
+        index_paths=cfg.geolocator.retrieval_index_paths,
+        index_weights=cfg.geolocator.retrieval_index_weights,
+        index_model_ids=cfg.geolocator.retrieval_index_model_ids,
+        model_id=cfg.geolocator.retrieval_model_id or "openai/clip-vit-large-patch14",
+        top_k=cfg.geolocator.retrieval_top_k,
+        per_index_top_k=cfg.geolocator.retrieval_per_index_top_k,
+        index_score_norm=cfg.geolocator.retrieval_index_score_norm,
+        source_balance_beta=cfg.geolocator.retrieval_source_balance_beta,
+        min_score=cfg.geolocator.retrieval_min_score,
+        min_keep_topk=cfg.geolocator.retrieval_min_keep_topk,
+        diversity_radius_km=cfg.geolocator.retrieval_diversity_radius_km,
+        diversity_lambda=cfg.geolocator.retrieval_diversity_lambda,
+        diversity_min_keep=cfg.geolocator.retrieval_diversity_min_keep,
+        locality_radius_km=cfg.geolocator.retrieval_locality_radius_km,
+        locality_weight=cfg.geolocator.retrieval_locality_weight,
+        query_tta_degrees=cfg.geolocator.retrieval_query_tta_degrees,
+        query_tta_reduce=cfg.geolocator.retrieval_query_tta_reduce,
+    )
 
 
 def resolve_image_path(images_dir: Path, rel_path: str) -> Path:
@@ -118,6 +154,8 @@ def resolve_image_path(images_dir: Path, rel_path: str) -> Path:
 
 
 def main(argv: Optional[list[str]] = None) -> None:
+    import pandas as pd
+
     parser = argparse.ArgumentParser(description="Geo evaluation against metadata CSV.")
     parser.add_argument("--images-dir", required=True, help="Directory containing images.")
     parser.add_argument("--metadata", required=True, help="CSV with path, latitude, longitude.")
@@ -132,8 +170,11 @@ def main(argv: Optional[list[str]] = None) -> None:
 
     cfg = load_config(args.config) if args.config else None
     pipeline = None
+    retrieval_provider = None
     if not args.retrieval_only:
         pipeline = build_pipeline(cfg)
+    else:
+        retrieval_provider = build_retrieval_provider(cfg)
 
     metadata_path = Path(args.metadata)
     images_dir = Path(args.images_dir)
@@ -167,7 +208,7 @@ def main(argv: Optional[list[str]] = None) -> None:
         top_score = None
         provider_error = None
         if args.retrieval_only:
-            pred, top_score, provider_error = predict_latlon_retrieval(str(image_path), cfg)
+            pred, top_score, provider_error = predict_latlon_retrieval(str(image_path), retrieval_provider)
             if top_score is not None:
                 retrieval_scores.append(float(top_score))
         else:
@@ -227,6 +268,20 @@ def main(argv: Optional[list[str]] = None) -> None:
         "images_dir": str(images_dir),
         "metadata": str(metadata_path),
         "index_path": cfg.geolocator.retrieval_index_path if cfg else None,
+        "index_paths": list(cfg.geolocator.retrieval_index_paths) if cfg else None,
+        "index_weights": list(cfg.geolocator.retrieval_index_weights) if cfg else None,
+        "index_model_ids": list(cfg.geolocator.retrieval_index_model_ids) if cfg else None,
+        "retrieval_per_index_top_k": cfg.geolocator.retrieval_per_index_top_k if cfg else None,
+        "retrieval_index_score_norm": cfg.geolocator.retrieval_index_score_norm if cfg else None,
+        "retrieval_source_balance_beta": cfg.geolocator.retrieval_source_balance_beta if cfg else None,
+        "candidate_source_balance_beta": cfg.geolocator.candidate_source_balance_beta if cfg else None,
+        "retrieval_query_tta_degrees": list(cfg.geolocator.retrieval_query_tta_degrees) if cfg else None,
+        "retrieval_query_tta_reduce": cfg.geolocator.retrieval_query_tta_reduce if cfg else None,
+        "retrieval_min_keep_topk": cfg.geolocator.retrieval_min_keep_topk if cfg else None,
+        "use_adaptive_outlier_guard": cfg.fusion.use_adaptive_outlier_guard if cfg else None,
+        "outlier_guard_strength": cfg.fusion.outlier_guard_strength if cfg else None,
+        "outlier_guard_min_scale_km": cfg.fusion.outlier_guard_min_scale_km if cfg else None,
+        "outlier_guard_mad_scale": cfg.fusion.outlier_guard_mad_scale if cfg else None,
         "total": total,
         "evaluated": evaluated,
         "missing_files": missing,

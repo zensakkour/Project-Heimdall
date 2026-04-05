@@ -72,6 +72,8 @@ class FusionResult:
     normalized_entropy: float = 1.0
     effective_candidate_count: float = 0.0
     top1_posterior: float = 0.0
+    calibrated_top1_posterior: float = 0.0
+    top1_cross_source_support: float = 1.0
     top2_margin: float = 0.0
     confidence_tier: str = "low"
     ambiguous: bool = True
@@ -93,5 +95,3 @@ class Assessment:
     score: float
     candidates: List[GeoCandidate] = field(default_factory=list)
     fusion: Optional["FusionResult"] = None
-
-
