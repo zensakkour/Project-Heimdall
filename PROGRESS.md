@@ -239,3 +239,5 @@ Do not delete or edit past entries. Append new work at the end.
 - Extended fusion serialization/schema with ambiguity and posterior concentration metrics.
 - Added configurable detection quality controls (min area filter, class-aware/agnostic NMS, optional TTA) and applied them in Ultralytics + sidecar pipelines.
 - Added robust fusion credible-set statistics and exposed credible_set_size in serialized outputs/schema.
+- Added top-cluster robust fusion stats mode to avoid multimodal midpoint bias in ambiguous geolocation outputs.
+- Replaced deprecated datetime.utcnow() usage in UI server health/analysis payload timestamps.

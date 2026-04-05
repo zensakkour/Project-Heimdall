@@ -64,6 +64,9 @@ class FusionConfig:
     use_terrain: bool = False
     credible_mass: float = 0.9
     min_credible_candidates: int = 2
+    use_top_cluster_for_stats: bool = True
+    credible_cluster_radius_km: float = 500.0
+    min_credible_cluster_weight: float = 0.35
     top_k: int = 5
 
 
@@ -136,6 +139,9 @@ def load_config(path: str) -> HeimdallConfig:
             use_terrain=fusion.get("use_terrain", False),
             credible_mass=fusion.get("credible_mass", 0.9),
             min_credible_candidates=fusion.get("min_credible_candidates", 2),
+            use_top_cluster_for_stats=fusion.get("use_top_cluster_for_stats", True),
+            credible_cluster_radius_km=fusion.get("credible_cluster_radius_km", 500.0),
+            min_credible_cluster_weight=fusion.get("min_credible_cluster_weight", 0.35),
             top_k=fusion.get("top_k", 5),
         ),
         score=ScoreConfig(

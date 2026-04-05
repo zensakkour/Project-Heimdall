@@ -110,11 +110,7 @@ def fuse_candidates(
     limit = cfg.top_k if cfg.top_k > 0 else len(fused)
     fused = fused[:limit]
 
-    stats_candidates = _credible_set_for_stats(
-        fused,
-        credible_mass=cfg.credible_mass,
-        min_candidates=cfg.min_credible_candidates,
-    )
+    stats_candidates = _select_stats_candidates(fused, cfg, ambiguous=ambiguous)
     mean_lat, mean_lon, cov = _weighted_mean_cov(stats_candidates)
     ellipse = _covariance_to_ellipse(cov)
     uncertainty_radius = max(ellipse.major_axis_m, ellipse.minor_axis_m)
@@ -346,6 +342,38 @@ def _credible_set_for_stats(
     while len(selected) < min(required, len(fused)):
         selected.append(fused[len(selected)])
     return selected
+
+
+def _select_stats_candidates(
+    fused: Sequence[FusionCandidate],
+    cfg: FusionConfig,
+    ambiguous: bool,
+) -> List[FusionCandidate]:
+    base = _credible_set_for_stats(
+        fused,
+        credible_mass=cfg.credible_mass,
+        min_candidates=cfg.min_credible_candidates,
+    )
+    if not base or not ambiguous or not cfg.use_top_cluster_for_stats:
+        return base
+
+    anchor = base[0]
+    radius_km = max(1.0, float(cfg.credible_cluster_radius_km))
+    min_cluster_weight = max(0.0, min(1.0, float(cfg.min_credible_cluster_weight)))
+    required = min(max(1, int(cfg.min_credible_candidates)), len(base))
+
+    cluster = [
+        item
+        for item in base
+        if _haversine_km(anchor.candidate, item.candidate) <= radius_km
+    ]
+    if not cluster:
+        return base
+
+    cluster_weight = sum(max(0.0, item.posterior_weight) for item in cluster)
+    if len(cluster) >= required and cluster_weight >= min_cluster_weight:
+        return cluster
+    return base
 
 
 def _expected_shadow_azimuth(captured, latitude: float, longitude: float) -> float:

@@ -29,6 +29,9 @@ def test_load_config_spatial_consensus_defaults() -> None:
         assert cfg.fusion.source_prior_exif == 1.0
         assert cfg.fusion.credible_mass == 0.9
         assert cfg.fusion.min_credible_candidates == 2
+        assert cfg.fusion.use_top_cluster_for_stats is True
+        assert cfg.fusion.credible_cluster_radius_km == 500.0
+        assert cfg.fusion.min_credible_cluster_weight == 0.35
         assert cfg.detector.min_area_px == 16.0
         assert cfg.detector.class_agnostic_nms is False
         assert cfg.detector.use_tta is False
@@ -48,6 +51,9 @@ def test_load_config_spatial_consensus_overrides() -> None:
                     "source_prior_exif": 0.8,
                     "credible_mass": 0.8,
                     "min_credible_candidates": 3,
+                    "use_top_cluster_for_stats": False,
+                    "credible_cluster_radius_km": 220.0,
+                    "min_credible_cluster_weight": 0.5,
                 },
                 "detector": {
                     "min_area_px": 20.0,
@@ -66,6 +72,9 @@ def test_load_config_spatial_consensus_overrides() -> None:
         assert cfg.fusion.source_prior_exif == 0.8
         assert cfg.fusion.credible_mass == 0.8
         assert cfg.fusion.min_credible_candidates == 3
+        assert cfg.fusion.use_top_cluster_for_stats is False
+        assert cfg.fusion.credible_cluster_radius_km == 220.0
+        assert cfg.fusion.min_credible_cluster_weight == 0.5
         assert cfg.detector.min_area_px == 20.0
         assert cfg.detector.class_agnostic_nms is True
         assert cfg.detector.use_tta is True
