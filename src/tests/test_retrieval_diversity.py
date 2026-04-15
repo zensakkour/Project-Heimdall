@@ -3,7 +3,9 @@ from __future__ import annotations
 from src.core.geo.retrieval_provider import (
     _apply_consensus_refinement,
     _apply_locality_rerank,
+    _haversine_km,
     _select_diverse_geo_candidates,
+    _weighted_geo_median_latlon,
 )
 from src.core.logic.types import GeoCandidate
 
@@ -86,3 +88,15 @@ def test_consensus_refinement_noop_when_disabled() -> None:
     ]
     refined = _apply_consensus_refinement(ranked, top_n=0, radius_km=3.0, score_power=1.0)
     assert [item.match_id for item in refined] == ["a", "b", "c"]
+
+
+def test_weighted_geo_median_is_robust_to_local_outlier() -> None:
+    center_lat, center_lon = _weighted_geo_median_latlon(
+        [48.8566, 48.8567, 48.8568, 48.8666],
+        [2.3522, 2.3524, 2.3525, 2.4522],
+        [1.0, 1.0, 1.0, 0.25],
+    )
+    inlier_dist = _haversine_km(center_lat, center_lon, 48.8567, 2.3524)
+    outlier_dist = _haversine_km(center_lat, center_lon, 48.8666, 2.4522)
+    assert inlier_dist < 1.0
+    assert outlier_dist > 6.0

@@ -748,6 +748,97 @@ def _circular_weighted_mean_longitude(values: Sequence[float], weights: Sequence
     return _normalize_longitude(math.degrees(math.atan2(sin_sum, cos_sum)))
 
 
+def _latlon_to_local_xy_km(
+    lat: float,
+    lon: float,
+    *,
+    ref_lat: float,
+    ref_lon: float,
+) -> tuple[float, float]:
+    lat_scale = 110.574
+    cos_lat = max(1e-6, math.cos(math.radians(ref_lat)))
+    lon_scale = 111.320 * cos_lat
+    delta_lon = _normalize_longitude(float(lon) - float(ref_lon))
+    x_km = delta_lon * lon_scale
+    y_km = (float(lat) - float(ref_lat)) * lat_scale
+    return x_km, y_km
+
+
+def _local_xy_km_to_latlon(
+    x_km: float,
+    y_km: float,
+    *,
+    ref_lat: float,
+    ref_lon: float,
+) -> tuple[float, float]:
+    lat_scale = 110.574
+    cos_lat = max(1e-6, math.cos(math.radians(ref_lat)))
+    lon_scale = 111.320 * cos_lat
+    lat = float(ref_lat) + (float(y_km) / lat_scale)
+    lon = _normalize_longitude(float(ref_lon) + (float(x_km) / lon_scale))
+    return lat, lon
+
+
+def _weighted_geo_median_latlon(
+    lats: Sequence[float],
+    lons: Sequence[float],
+    weights: Sequence[float],
+    *,
+    max_iters: int = 24,
+    tol_km: float = 1e-3,
+) -> tuple[float, float]:
+    if not lats or not lons or not weights:
+        return 0.0, 0.0
+    n = min(len(lats), len(lons), len(weights))
+    if n == 1:
+        return float(lats[0]), _normalize_longitude(float(lons[0]))
+
+    safe_weights = [max(1e-9, float(weights[idx])) for idx in range(n)]
+    total_w = sum(safe_weights)
+    if total_w <= 0.0:
+        return float(lats[0]), _normalize_longitude(float(lons[0]))
+
+    ref_lat = sum(float(lats[idx]) * safe_weights[idx] for idx in range(n)) / total_w
+    ref_lon = _circular_weighted_mean_longitude([float(lons[idx]) for idx in range(n)], safe_weights)
+    points_xy = [
+        _latlon_to_local_xy_km(float(lats[idx]), float(lons[idx]), ref_lat=ref_lat, ref_lon=ref_lon)
+        for idx in range(n)
+    ]
+
+    x = sum(px * w for (px, _), w in zip(points_xy, safe_weights)) / total_w
+    y = sum(py * w for (_, py), w in zip(points_xy, safe_weights)) / total_w
+
+    for _ in range(max(1, int(max_iters))):
+        num_x = 0.0
+        num_y = 0.0
+        denom = 0.0
+        snapped = None
+        for (px, py), w in zip(points_xy, safe_weights):
+            dist = math.hypot(x - px, y - py)
+            if dist < 1e-9:
+                snapped = (px, py)
+                break
+            factor = w / dist
+            num_x += factor * px
+            num_y += factor * py
+            denom += factor
+
+        if snapped is not None:
+            x_new, y_new = snapped
+        elif denom <= 0.0:
+            break
+        else:
+            x_new = num_x / denom
+            y_new = num_y / denom
+
+        step = math.hypot(x_new - x, y_new - y)
+        x, y = x_new, y_new
+        if step <= max(1e-6, float(tol_km)):
+            break
+
+    return _local_xy_km_to_latlon(x, y, ref_lat=ref_lat, ref_lon=ref_lon)
+
+
 def _apply_consensus_refinement(
     ranked: Sequence[GeoCandidate],
     *,
@@ -794,11 +885,14 @@ def _apply_consensus_refinement(
     if total_weight <= 0.0:
         return ordered
 
-    mean_lat = sum(cand.latitude * weight for cand, weight in zip(cluster, cluster_weights)) / total_weight
-    mean_lon = _circular_weighted_mean_longitude([cand.longitude for cand in cluster], cluster_weights)
+    center_lat, center_lon = _weighted_geo_median_latlon(
+        [cand.latitude for cand in cluster],
+        [cand.longitude for cand in cluster],
+        cluster_weights,
+    )
     refined = GeoCandidate(
-        latitude=float(mean_lat),
-        longitude=float(mean_lon),
+        latitude=float(center_lat),
+        longitude=float(center_lon),
         retrieval_score=float(ordered[0].retrieval_score),
         match_id="retrieval:consensus",
     )
