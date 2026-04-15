@@ -613,3 +613,34 @@ Do not delete or edit past entries. Append new work at the end.
 - Decision:
   - Keep `retrieval_source_fusion_mode` support as an experimental option, but do not switch default profile behavior from `weighted_score` at this stage.
   - Next highest-priority direction from the research review: benchmark remote-sensing-native backbones (RemoteCLIP/SatCLIP family) on the same realistic split.
+
+## 2026-04-15
+- Hypothesis:
+  - A dedicated aerial-backbone upgrade workflow should improve close-range retrieval quality iteration speed by replacing manual model/index/config switching with one reproducible command path.
+- Change:
+  - Upgraded `src/tools/benchmark_geo_backbones.py` with:
+    - aerial model presets (`legacy_clip_siglip`, `aerial_rtx5060_fast`, `aerial_rtx5060_precise`, `aerial_research`),
+    - objective-driven ranking (`within_1km_pct`, `within_2km_pct`, `within_5km_pct`, `within_10km_pct`, etc.),
+    - per-model failure isolation so one model failure does not abort full benchmark sweep.
+  - Added new automation utility `src/tools/upgrade_retrieval_backbone.py`:
+    - runs backbone benchmark,
+    - selects best model by objective,
+    - rebuilds final retrieval index with that model,
+    - patches target config (`retrieval_model_id`, `retrieval_index_path`) with optional multi-index reset.
+  - Added targeted regression tests for both benchmark and upgrade flows.
+  - Updated docs (`README.md`, `src/docs/RESEARCH_PAPER.md`) with the new aerial-backbone workflow and commands.
+- Files touched:
+  - `src/tools/benchmark_geo_backbones.py`
+  - `src/tools/upgrade_retrieval_backbone.py`
+  - `src/tests/test_benchmark_geo_backbones.py`
+  - `src/tests/test_upgrade_retrieval_backbone.py`
+  - `README.md`
+  - `src/docs/RESEARCH_PAPER.md`
+- Validation command(s):
+  - `./.venv/Scripts/python -m pytest -q src/tests/test_benchmark_geo_backbones.py src/tests/test_upgrade_retrieval_backbone.py`
+- Metrics (before -> after):
+  - No new geo benchmark metric claim in this prompt cycle (tooling/workflow upgrade only).
+- Artifacts:
+  - No benchmark artifact generated in this prompt cycle.
+- Decision:
+  - Keep and use `upgrade_retrieval_backbone` as the standard path for aerial retrieval backbone upgrades on single-GPU runs.
