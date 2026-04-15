@@ -210,3 +210,17 @@ def test_load_config_invalid_retrieval_index_score_norm_falls_back_to_auto() -> 
         )
         cfg = load_config(str(path))
         assert cfg.geolocator.retrieval_index_score_norm == "auto"
+
+
+def test_load_config_accepts_median_tta_reduce() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = _write_config(
+            tmpdir,
+            {
+                "geolocator": {
+                    "retrieval_query_tta_reduce": "median",
+                }
+            },
+        )
+        cfg = load_config(str(path))
+        assert cfg.geolocator.retrieval_query_tta_reduce == "median"
