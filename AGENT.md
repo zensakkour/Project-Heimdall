@@ -17,6 +17,16 @@ Use it to keep algorithm history, experiment intent, and evaluation standards co
 3. Prefer realistic split evaluation over leakage-prone setups when making quality claims.
 4. Keep config changes explicit and traceable; mention exact knobs changed.
 5. If a change touches scoring/fusion/retrieval logic, add or update regression tests.
+6. After each user prompt that changes code, config, metrics, experiments, or workflow, update documentation before finalizing work.
+
+## Per-Prompt Documentation Sync (Required)
+At the end of each user request cycle, verify and update docs as needed:
+- `PROGRESS.md`: append meaningful engineering/research updates and validation results.
+- `src/docs/RESEARCH_PAPER.md`: keep methods tried, experiment outcomes, and conclusions current.
+- `README.md`: keep user-facing commands/links/config references accurate when behavior changes.
+- `docs/eval/*`: refresh benchmark outputs when running benchmark flows.
+
+If no documentation changes are needed for the prompt, explicitly confirm that docs were reviewed and already up to date.
 
 ## Experiment Logging Protocol
 For every meaningful modeling change, record these fields in `PROGRESS.md`:
