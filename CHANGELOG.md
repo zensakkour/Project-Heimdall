@@ -12,6 +12,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Open-source governance and contribution scaffolding
 - Retrieval tuning rank objectives for close-range optimization (`within_1km_pct`, `within_5km_pct`, `within_10km_pct`)
 - Retrieval tuning support for explicit `within_2km_pct` optimization target.
+- Multi-index retrieval source-fusion mode (`retrieval_source_fusion_mode`) with `weighted_score` (default) and `rrf` options.
 - Retrieval consensus top-1 refinement controls (`retrieval_consensus_top_n`, `retrieval_consensus_radius_km`, `retrieval_consensus_score_power`) across runtime config and retrieval provider.
 - Lab random-sample geo evaluation flow (`Run Random Samples`) with random seed runs, per-sample distance diagnostics, and accuracy summary bands.
 - UI/server endpoints for random sample scoring: `POST /eval/geo/random/start`, `GET /eval/geo/random/status`.
