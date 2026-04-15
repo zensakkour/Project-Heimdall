@@ -1,7 +1,17 @@
 from __future__ import annotations
 
+import json
+import tempfile
+from pathlib import Path
+
 from src.core.logic.types import GeoCandidate
-from src.tools.tune_retrieval_geo import _evaluate_samples, _postprocess_candidates, RetrievalSample
+from src.tools.tune_retrieval_geo import (
+    RetrievalSample,
+    _evaluate_samples,
+    _parse_tta_reduce_list,
+    _postprocess_candidates,
+    _write_best_to_config,
+)
 
 
 def test_postprocess_candidates_respects_min_score() -> None:
@@ -114,3 +124,31 @@ def test_postprocess_candidates_source_balance_can_promote_other_source() -> Non
     ids = {cand.match_id for cand in balanced[:2]}
     assert "retrieval:a_idx:a1" in ids
     assert "retrieval:b_idx:b1" in ids
+
+
+def test_parse_tta_reduce_list_filters_unknown_and_dedupes() -> None:
+    out = _parse_tta_reduce_list("max,median,MAX,unknown,rrf,median,mean")
+    assert out == ["max", "median", "rrf", "mean"]
+
+
+def test_write_best_to_config_updates_tta_reduce() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = Path(tmpdir) / "cfg.json"
+        path.write_text(json.dumps({"geolocator": {}}), encoding="utf-8")
+        _write_best_to_config(
+            path,
+            {
+                "retrieval_top_k": 25,
+                "retrieval_min_score": 0.1,
+                "retrieval_min_keep_topk": 2,
+                "retrieval_diversity_radius_km": 1.0,
+                "retrieval_diversity_lambda": 0.9,
+                "retrieval_diversity_min_keep": 1,
+                "retrieval_locality_radius_km": 25.0,
+                "retrieval_locality_weight": 0.8,
+                "retrieval_source_balance_beta": 0.35,
+                "retrieval_query_tta_reduce": "median",
+            },
+        )
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        assert payload["geolocator"]["retrieval_query_tta_reduce"] == "median"
