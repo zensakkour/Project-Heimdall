@@ -17,7 +17,7 @@ This is the current technical state of the geo stack in the development branch:
   - Retrieval candidate diversification (radius/lambda/min_keep)
   - Retrieval minimum-candidate keep policy to preserve top-k recall when min-score thresholds are strict
   - Retrieval locality reranking for isolated outlier suppression
-  - Retrieval consensus top-1 refinement (top-N local cluster centroid) for close-range precision gains
+  - Retrieval consensus top-1 refinement now uses a robust weighted geo-median center (top-N local cluster) for close-range precision gains under local outliers
   - Retrieval query TTA (multi-rotation embedding ensemble with configurable score reduction: mean/median/max/rrf)
 - Detection quality controls are configurable:
   - Minimum OBB area filter (`detector.min_area_px`)

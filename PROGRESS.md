@@ -494,3 +494,31 @@ Do not delete or edit past entries. Append new work at the end.
 - Validation commands:
   - `python -m pytest src/tests/test_ui_server_runtime.py src/tests/test_ui_server_integration.py src/tests/test_ui_server_benchmark_runs.py src/tests/test_config_loading.py src/tests/test_retrieval_diversity.py src/tests/test_tune_retrieval_geo.py`
 - Validation result: `30 passed`.
+
+## 2026-04-15
+- Hypothesis:
+  - Retrieval consensus top-1 refinement should be more stable at close range when the center estimate is robust to local outliers, and retrieval tuning should support direct optimization for 1-2 km targets.
+- Change:
+  - Replaced consensus center estimation in `GeoRetrievalProvider` with a weighted geo-median solver in local geodesic coordinates (Weiszfeld-style iterative update).
+  - Extended eval/tuning metrics with explicit `within_2km_pct` support:
+    - `run_geo_eval` now emits `within_2km_pct`.
+    - `tune_retrieval_geo` now computes `within_2km_pct` and supports `--rank-objective within_2km_pct`.
+  - Added regression tests for robust geo-median behavior and new `within_2km_pct` objective handling.
+- Files touched:
+  - `src/core/geo/retrieval_provider.py`
+  - `src/tools/run_geo_eval.py`
+  - `src/tools/tune_retrieval_geo.py`
+  - `src/tests/test_retrieval_diversity.py`
+  - `src/tests/test_tune_retrieval_geo.py`
+  - `CHANGELOG.md`
+  - `README.md`
+  - `src/docs/GEO_TECH.md`
+  - `src/docs/RESEARCH_PAPER.md`
+- Validation command:
+  - `./.venv/Scripts/python -m pytest src/tests/test_retrieval_diversity.py src/tests/test_tune_retrieval_geo.py src/tests/test_ui_server_runtime.py src/tests/test_config_loading.py`
+- Metrics (before -> after):
+  - No full benchmark run executed in this prompt cycle; no accuracy claim recorded.
+- Artifacts:
+  - None generated (code + test + doc update cycle only).
+- Decision:
+  - Keep the robustness + metric-targeting changes; run a full realistic benchmark next to quantify `within_1km_pct`/`within_2km_pct` impact.
