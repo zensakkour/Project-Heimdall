@@ -17,6 +17,7 @@ This is the current technical state of the geo stack in the development branch:
   - Retrieval candidate diversification (radius/lambda/min_keep)
   - Retrieval minimum-candidate keep policy to preserve top-k recall when min-score thresholds are strict
   - Retrieval locality reranking for isolated outlier suppression
+  - Retrieval source-fusion mode control (`weighted_score` or `rrf`) for multi-index aggregation strategy
   - Retrieval consensus top-1 refinement now performs adaptive center selection (cluster centroid vs weighted geo-median) using local support gating for close-range precision and local outlier robustness
   - Retrieval query TTA (multi-rotation embedding ensemble with configurable score reduction: mean/median/max/rrf)
 - Detection quality controls are configurable:
@@ -121,6 +122,7 @@ Configure retrieval in `src/config/defaults.json`:
 - `geolocator.retrieval_top_k`
 - `geolocator.retrieval_per_index_top_k`
 - `geolocator.retrieval_index_score_norm` (`auto`, `none`, `minmax`, `zscore_sigmoid`, `rank_exp`; `auto` = multi-index robust normalization)
+- `geolocator.retrieval_source_fusion_mode` (`weighted_score`, `rrf`)
 - `geolocator.retrieval_source_balance_beta` (multi-index source balancing strength, `0` disables)
 - `geolocator.retrieval_min_score`
 - `geolocator.retrieval_min_keep_topk`
