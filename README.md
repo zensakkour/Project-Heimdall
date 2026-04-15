@@ -430,6 +430,23 @@ If any tuning/calibration step fails, the command now restores the original conf
 .\.venv\Scripts\python -m src.tools.benchmark_geo_backbones --train-images-dir data/spacenet_paris/chips --train-metadata data/spacenet_paris/metadata.csv --eval-images-dir data/spacenet_paris_test/chips --eval-metadata data/spacenet_paris_test/metadata.csv --model-ids "openai/clip-vit-large-patch14,google/siglip-base-patch16-224" --train-limit 600 --eval-limit 200 --output runs/backbone_bench/backbone_benchmark.json
 ```
 
+Aerial preset example (RTX 5060 single-GPU focused objective):
+```powershell
+.\.venv\Scripts\python -m src.tools.benchmark_geo_backbones --train-images-dir data/spacenet_paris/chips --train-metadata data/spacenet_paris/metadata.csv --eval-images-dir data/spacenet_paris_test/chips --eval-metadata data/spacenet_paris_test/metadata.csv --model-preset aerial_rtx5060_precise --rank-objective within_2km_pct --train-limit 600 --eval-limit 200 --output runs/backbone_bench/backbone_benchmark_aerial.json
+```
+
+### Auto-upgrade retrieval backbone (benchmark -> rebuild index -> patch config)
+
+```powershell
+.\.venv\Scripts\python -m src.tools.upgrade_retrieval_backbone --train-images-dir data/spacenet_paris/chips --train-metadata data/spacenet_paris/metadata.csv --eval-images-dir data/spacenet_paris_test/chips --eval-metadata data/spacenet_paris_test/metadata.csv --config src/config/paris.json --model-preset aerial_rtx5060_precise --rank-objective within_2km_pct --output-dir runs/backbone_upgrade
+```
+
+Model presets currently available in `benchmark_geo_backbones`:
+- `legacy_clip_siglip`
+- `aerial_rtx5060_fast`
+- `aerial_rtx5060_precise`
+- `aerial_research`
+
 ### Generate impact report (baseline vs candidate)
 
 ```powershell
