@@ -885,11 +885,34 @@ def _apply_consensus_refinement(
     if total_weight <= 0.0:
         return ordered
 
-    center_lat, center_lon = _weighted_geo_median_latlon(
+    mean_lat = sum(cand.latitude * weight for cand, weight in zip(cluster, cluster_weights)) / total_weight
+    mean_lon = _circular_weighted_mean_longitude([cand.longitude for cand in cluster], cluster_weights)
+    median_lat, median_lon = _weighted_geo_median_latlon(
         [cand.latitude for cand in cluster],
         [cand.longitude for cand in cluster],
         cluster_weights,
     )
+
+    sigma = max(0.5, radius * 0.5)
+
+    def _cluster_support(lat: float, lon: float) -> float:
+        support = 0.0
+        for cand, weight in zip(cluster, cluster_weights):
+            dist = _haversine_km(lat, lon, cand.latitude, cand.longitude)
+            support += weight * math.exp(-0.5 * (dist / sigma) ** 2)
+        return support
+
+    mean_support = _cluster_support(float(mean_lat), float(mean_lon))
+    median_support = _cluster_support(float(median_lat), float(median_lon))
+    center_gap_km = _haversine_km(float(mean_lat), float(mean_lon), float(median_lat), float(median_lon))
+    use_median = (
+        median_support > (mean_support * 1.05)
+        and center_gap_km >= max(0.15, radius * 0.05)
+    )
+    if use_median:
+        center_lat, center_lon = float(median_lat), float(median_lon)
+    else:
+        center_lat, center_lon = float(mean_lat), float(mean_lon)
     refined = GeoCandidate(
         latitude=float(center_lat),
         longitude=float(center_lon),

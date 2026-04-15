@@ -20,7 +20,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Retuned realistic single-index retrieval profile (`runs/bench_cfg/cfg_realistic_single.json`) to improve close-range accuracy on the realistic `n=180` benchmark split.
 - Updated Paris retrieval profile to enable consensus refinement, improving realistic split metrics (`within_1km_pct`: `5.00` -> `10.00`, `median_km`: `11.50` -> `9.77` on `n=180`).
-- Upgraded retrieval consensus center estimation to a weighted geo-median for stronger local outlier robustness in top-1 refinement.
+- Upgraded retrieval consensus center estimation to adaptive centroid/weighted-geo-median selection for stronger local outlier robustness in top-1 refinement.
 - Improved operator globe visual presentation with stronger atmosphere/fog styling, candidate link lines, and glow/halo layers for geolocation readability.
 - Replaced MIT terms with a non-commercial license requiring a separate commercial agreement for paid/company use.
 
