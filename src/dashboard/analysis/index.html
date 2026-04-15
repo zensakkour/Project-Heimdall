@@ -12,7 +12,7 @@
     />
     <link rel="stylesheet" href="../theme.css?v=7" />
     <link rel="stylesheet" href="../styles.css?v=6" />
-    <link rel="stylesheet" href="operator.css?v=1" />
+    <link rel="stylesheet" href="operator.css?v=2" />
   </head>
   <body>
     <div class="layout">
@@ -135,9 +135,12 @@
             <article class="hero-panel photo-stage">
               <div class="panel-head">
                 <h3 class="panel-title">Source Photo</h3>
-                <span class="muted">Scroll to zoom, drag to pan</span>
+                <span class="panel-hint muted">Scroll to zoom, drag to pan</span>
               </div>
               <canvas id="canvas" width="960" height="640"></canvas>
+              <div class="image-legend muted">
+                <span class="legend-dot detection"></span> Detection overlay on source image
+              </div>
               <div class="image-toolbar">
                 <button id="zoom-in">Zoom In</button>
                 <button id="zoom-out">Zoom Out</button>
