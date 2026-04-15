@@ -1,7 +1,7 @@
 ﻿# Project Heimdall: Full Research Paper Draft
 
 Version: v1.0  
-Date: April 15, 2026
+Date: April 16, 2026
 
 ## Title
 Project Heimdall: Benchmark-Governed Geolocation from Imagery via Multi-Provider Retrieval, Robust Probabilistic Fusion, and Uncertainty-Aware Analysis
@@ -243,6 +243,33 @@ Observation:
 - Top-K candidates already contained near-ground-truth hypotheses in many failures; consensus refinement improved top-1 selection quality.
 - On this split, consensus refinement yielded a large close-range gain while preserving zero null predictions.
 
+### 7.7 Backbone Upgrade Cycle and Post-Tune Verification (n=180)
+Artifacts:
+- `runs/backbone_upgrade_rtx5060_v1/backbone_benchmark.json`
+- `runs/geo_eval_paris_profile_180_pre_backbone_upgrade_v1.json`
+- `runs/tune_retrieval_geo_within2km_v1.json`
+- `runs/geo_eval_paris_profile_180_post_tune_v1.json`
+
+Backbone benchmark summary (`model_preset=aerial_rtx5060_precise`, objective=`within_2km_pct`):
+
+| Model | mean_km | median_km | within_1km_pct | within_2km_pct | within_5km_pct |
+|---|---:|---:|---:|---:|---:|
+| `openai/clip-vit-large-patch14` | 20.5010 | 8.5180 | 2.22 | 10.00 | 36.67 |
+| `google/siglip-base-patch16-224` | 24.5362 | 15.6908 | 0.56 | 4.44 | 19.44 |
+| `google/siglip-so400m-patch14-384` | 26.8980 | 17.7574 | 0.56 | 3.33 | 13.89 |
+
+End-to-end realistic profile verification (`src/config/paris.json`, retrieval-only):
+
+| Variant | mean_km | median_km | within_1km_pct | within_2km_pct | within_5km_pct | within_10km_pct |
+|---|---:|---:|---:|---:|---:|---:|
+| Pre-cycle baseline | 15.5569 | 9.7717 | 10.56 | 19.44 | 36.67 | 50.56 |
+| Post-tune run | 15.5569 | 9.7717 | 10.56 | 19.44 | 36.67 | 50.56 |
+
+Observation:
+- On this realistic split, tested SigLIP aerial candidates did not outperform CLIP.
+- Focused retrieval post-processing sweep (`within_2km_pct` objective) produced no measurable end-to-end uplift in the canonical evaluation run.
+- Practical implication: further gain likely requires method-level upgrades (domain-adapted representations, reranking head, or stronger hard-negative data), not additional local knob sweeps on current index/profile.
+
 ## 8. Methods Tried and Practical Outcome
 ### 8.1 Changes with Clear Practical Value
 - Multi-provider candidate generation and merge controls.
@@ -257,6 +284,7 @@ Observation:
 - Query TTA: useful in some regimes, neutral in tested subset.
 - Multi-index expansion: helps coverage potential but can degrade precision without score normalization and balancing.
 - Alternative TTA reducers (`mean`, `rrf`, `median`): not best in latest measured subset.
+- Aerial backbone swap to tested SigLIP candidates: no gain over CLIP on the realistic Paris split used here.
 
 ## 9. Error Analysis
 Observed failure classes:
