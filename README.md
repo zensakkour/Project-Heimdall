@@ -147,6 +147,7 @@ Current implementation status:
   - Multi-index retrieval support with per-index weighting (`retrieval_index_paths`, `retrieval_index_weights`, `retrieval_per_index_top_k`) for scalable dataset expansion.
   - Per-index retrieval model routing (`retrieval_index_model_ids`) so one run can mix indices built by different embedding backbones.
   - Per-index score normalization for multi-index retrieval (`retrieval_index_score_norm`) to reduce cross-dataset score-scale bias.
+  - Retrieval source-fusion mode (`retrieval_source_fusion_mode`: `weighted_score` or `rrf`) for multi-index rank aggregation policy.
   - Source-balanced retrieval selection (`retrieval_source_balance_beta`) to prevent single-index domination in multi-source top-k.
   - Source-balanced multi-provider candidate merge (`candidate_source_balance_beta`) to preserve cross-provider hypotheses before fusion.
 - Fusion and uncertainty:

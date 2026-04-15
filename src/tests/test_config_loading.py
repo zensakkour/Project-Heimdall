@@ -63,6 +63,7 @@ def test_load_config_spatial_consensus_defaults() -> None:
         assert cfg.geolocator.retrieval_index_model_ids == ()
         assert cfg.geolocator.retrieval_per_index_top_k == 0
         assert cfg.geolocator.retrieval_index_score_norm == "auto"
+        assert cfg.geolocator.retrieval_source_fusion_mode == "weighted_score"
         assert cfg.geolocator.retrieval_source_balance_beta == 0.0
         assert cfg.geolocator.retrieval_min_keep_topk == 0
         assert cfg.geolocator.candidate_source_balance_beta == 0.0
@@ -129,6 +130,7 @@ def test_load_config_spatial_consensus_overrides() -> None:
                     "retrieval_index_model_ids": ["openai/clip-vit-large-patch14", "google/siglip-base-patch16-224"],
                     "retrieval_per_index_top_k": 5,
                     "retrieval_index_score_norm": "zscore_sigmoid",
+                    "retrieval_source_fusion_mode": "rrf",
                     "retrieval_source_balance_beta": 0.6,
                     "candidate_source_balance_beta": 0.25,
                     "retrieval_diversity_radius_km": 3.5,
@@ -192,6 +194,7 @@ def test_load_config_spatial_consensus_overrides() -> None:
         )
         assert cfg.geolocator.retrieval_per_index_top_k == 5
         assert cfg.geolocator.retrieval_index_score_norm == "zscore_sigmoid"
+        assert cfg.geolocator.retrieval_source_fusion_mode == "rrf"
         assert cfg.geolocator.retrieval_source_balance_beta == 0.6
         assert cfg.geolocator.candidate_source_balance_beta == 0.25
         assert cfg.geolocator.retrieval_diversity_radius_km == 3.5
@@ -219,6 +222,20 @@ def test_load_config_invalid_retrieval_index_score_norm_falls_back_to_auto() -> 
         )
         cfg = load_config(str(path))
         assert cfg.geolocator.retrieval_index_score_norm == "auto"
+
+
+def test_load_config_invalid_retrieval_source_fusion_mode_falls_back_to_weighted_score() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = _write_config(
+            tmpdir,
+            {
+                "geolocator": {
+                    "retrieval_source_fusion_mode": "not_a_mode",
+                }
+            },
+        )
+        cfg = load_config(str(path))
+        assert cfg.geolocator.retrieval_source_fusion_mode == "weighted_score"
 
 
 def test_load_config_accepts_median_tta_reduce() -> None:
