@@ -296,7 +296,7 @@ def _parse_float_dict(raw) -> Optional[Dict[str, float]]:
 
 def _parse_tta_reduce(raw: object) -> str:
     mode = str(raw).strip().lower()
-    if mode not in {"mean", "max", "rrf"}:
+    if mode not in {"mean", "median", "max", "rrf"}:
         return "mean"
     return mode
 

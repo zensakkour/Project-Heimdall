@@ -544,7 +544,7 @@ Useful geo quality knobs in `geolocator`:
 - `retrieval_locality_radius_km`: distance scale for locality support reranking.
 - `retrieval_locality_weight`: strength of locality reranking (higher penalizes isolated candidates more).
 - `retrieval_query_tta_degrees`: query-time rotation ensemble angles in degrees.
-- `retrieval_query_tta_reduce`: how augmented similarity scores are merged (`mean`, `max`, or `rrf`).
+- `retrieval_query_tta_reduce`: how augmented similarity scores are merged (`mean`, `median`, `max`, or `rrf`).
 - `retrieval_index_paths`: optional list of extra retrieval indices to query alongside `retrieval_index_path`.
 - `retrieval_index_weights`: optional per-index score multipliers (same order as `retrieval_index_paths`).
 - `retrieval_index_model_ids`: optional per-index embedding model IDs (same order as `retrieval_index_path` + `retrieval_index_paths`) to mix different backbones in one retrieval pass.
