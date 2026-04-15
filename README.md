@@ -12,6 +12,8 @@ Geospatial perception and analysis platform that combines object detection, geo-
 - What it is: append-only record of shipped changes, validation runs, and technical milestones.
 - How to use it: check the top snapshot for current status, then review dated entries for full history.
 - Benchmark governance: [docs/eval/latest_report.md](docs/eval/latest_report.md), [docs/eval/history.jsonl](docs/eval/history.jsonl), [docs/eval/baseline.json](docs/eval/baseline.json)
+- Full research-style write-up: [src/docs/RESEARCH_PAPER.md](src/docs/RESEARCH_PAPER.md)
+- Optional publication formatting: the research draft can be converted to submission style (IMRaD with numbered equations and references).
 
 ## What The Platform Does
 
