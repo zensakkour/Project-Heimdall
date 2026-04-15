@@ -319,10 +319,18 @@ This system can increase location inference capability from images; misuse could
 Project Heimdall demonstrates a practical path from prototype geolocation to a benchmark-governed retrieval+fusion platform. The most important technical lesson is methodological: robust evaluation protocol and governance are as important as algorithmic sophistication. The highest-impact near-term improvements remain data curation quality, leakage-safe benchmark design, and calibration-driven tuning.
 
 ## 15. Future Work
-1. Expand realistic, leakage-safe global evaluation sets with hard negatives.
-2. Add stronger local geometric verification for top retrieval candidates.
-3. Improve per-domain calibration and confidence reliability reporting.
-4. Integrate data quality scoring into retrieval-index curation.
+1. Prioritize remote-sensing-native embedding backbones (RemoteCLIP/SatCLIP-style) and benchmark them against current CLIP/SigLIP retrieval on leakage-safe splits.
+2. Add a localizability/selective-prediction gate to reduce catastrophic confident errors on non-localizable scenes.
+3. Extend uncertainty outputs with conformal credible regions over candidate clusters.
+4. Expand realistic, leakage-safe global and cross-view evaluation sets with hard negatives and strict anti-duplicate checks.
+5. Integrate data quality scoring into retrieval-index curation.
+
+### 15.1 Possible Approaches Under Consideration (From `deep-research-report.md`)
+- `Domain-adapted embeddings` (highest priority): evaluate Remote Sensing foundation encoders as primary retrieval backbones.
+- `Selective abstention`: add a localizability head/policy to decide predict vs abstain before final confidence tiering.
+- `Spatially guaranteed uncertainty`: conformal prediction for region-level coverage guarantees on top of probabilistic fusion.
+- `Rank-based multi-index fusion`: RRF was implemented as an optional mode (`retrieval_source_fusion_mode=rrf`) and benchmarked.
+: On current realistic Paris split (`n=180`), it underperformed `weighted_score` (`within_1km_pct`: `7.78` vs `10.56`), so it remains experimental for future multi-index/global settings.
 
 ## Appendix A: Major Algorithmic Knobs (Geo)
 - Retrieval:
@@ -332,7 +340,7 @@ Project Heimdall demonstrates a practical path from prototype geolocation to a b
   - `retrieval_consensus_top_n`, `retrieval_consensus_radius_km`, `retrieval_consensus_score_power`
   - `retrieval_query_tta_degrees`, `retrieval_query_tta_reduce`
   - `retrieval_index_paths`, `retrieval_index_weights`, `retrieval_per_index_top_k`
-  - `retrieval_index_model_ids`, `retrieval_index_score_norm`, `retrieval_source_balance_beta`
+  - `retrieval_index_model_ids`, `retrieval_index_score_norm`, `retrieval_source_fusion_mode`, `retrieval_source_balance_beta`
 - Candidate merge:
   - `candidate_source_balance_beta`
 - Fusion:
@@ -354,6 +362,8 @@ Project Heimdall demonstrates a practical path from prototype geolocation to a b
 - `runs/bench_realistic_single_180_precision_v2.json`
 - `runs/geo_eval_paris_profile_180_v2.json`
 - `runs/geo_eval_paris_profile_180_consensus_v1.json`
+- `runs/geo_eval_paris_profile_180_sourcefusion_weighted_v1.json`
+- `runs/geo_eval_paris_profile_180_sourcefusion_rrf_v1.json`
 - `runs/geo_eval_paris_no_tta_120.json`
 - `runs/geo_eval_paris_tta_120.json`
 - `runs/geo_eval_paris_strict_keep0_40.json`

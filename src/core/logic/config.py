@@ -42,6 +42,7 @@ class GeoConfig:
     retrieval_top_k: int = 10
     retrieval_per_index_top_k: int = 0
     retrieval_index_score_norm: str = "auto"
+    retrieval_source_fusion_mode: str = "weighted_score"
     retrieval_source_balance_beta: float = 0.0
     retrieval_min_score: float = 0.2
     retrieval_min_keep_topk: int = 0
@@ -168,6 +169,9 @@ def load_config(path: str) -> HeimdallConfig:
             retrieval_top_k=geo.get("retrieval_top_k", 10),
             retrieval_per_index_top_k=geo.get("retrieval_per_index_top_k", 0),
             retrieval_index_score_norm=_parse_index_score_norm(geo.get("retrieval_index_score_norm", "auto")),
+            retrieval_source_fusion_mode=_parse_source_fusion_mode(
+                geo.get("retrieval_source_fusion_mode", "weighted_score")
+            ),
             retrieval_source_balance_beta=geo.get("retrieval_source_balance_beta", 0.0),
             retrieval_min_score=geo.get("retrieval_min_score", 0.2),
             retrieval_min_keep_topk=geo.get("retrieval_min_keep_topk", 0),
@@ -311,4 +315,11 @@ def _parse_index_score_norm(raw: object) -> str:
     mode = str(raw).strip().lower()
     if mode not in {"auto", "none", "minmax", "zscore_sigmoid", "rank_exp"}:
         return "auto"
+    return mode
+
+
+def _parse_source_fusion_mode(raw: object) -> str:
+    mode = str(raw).strip().lower()
+    if mode not in {"weighted_score", "rrf"}:
+        return "weighted_score"
     return mode
