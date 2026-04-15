@@ -89,9 +89,136 @@ async function pollGeoEval() {
   }
 }
 
+function _fmtMetricValue(value, digits = 2) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return "-";
+  return Number(value).toFixed(digits);
+}
+
+function _shortImageName(pathValue) {
+  const raw = String(pathValue || "").trim();
+  if (!raw) return "-";
+  const parts = raw.split(/[\\/]/);
+  return parts.length ? parts[parts.length - 1] : raw;
+}
+
+function _formatGeoRandomOutput(raw) {
+  let payload = null;
+  try {
+    payload = typeof raw === "string" ? JSON.parse(raw) : raw;
+  } catch {
+    return String(raw || "No random sample results yet.");
+  }
+  if (!payload || typeof payload !== "object") return "No random sample results yet.";
+
+  const lines = [];
+  lines.push(
+    `Seed: ${payload.seed ?? "-"} | Requested: ${payload.requested_samples ?? "-"} | ` +
+      `Evaluated: ${payload.evaluated ?? "-"}`
+  );
+  lines.push(
+    `Distance: mean ${_fmtMetricValue(payload.mean_km, 3)} km | ` +
+      `median ${_fmtMetricValue(payload.median_km, 3)} km | ` +
+      `p90 ${_fmtMetricValue(payload.p90_km, 3)} km`
+  );
+  lines.push(
+    `Accuracy: <=1km ${_fmtMetricValue(payload.within_1km_pct, 2)}% | ` +
+      `<=2km ${_fmtMetricValue(payload.within_2km_pct, 2)}% | ` +
+      `<=5km ${_fmtMetricValue(payload.within_5km_pct, 2)}% | ` +
+      `<=10km ${_fmtMetricValue(payload.within_10km_pct, 2)}%`
+  );
+
+  const samples = Array.isArray(payload.samples) ? payload.samples : [];
+  if (!samples.length) return lines.join("\n");
+
+  const rows = samples
+    .map((item) => {
+      const dist = Number(item?.dist_km);
+      return {
+        image: _shortImageName(item?.image),
+        distKm: Number.isFinite(dist) ? dist : Number.POSITIVE_INFINITY,
+      };
+    })
+    .sort((a, b) => b.distKm - a.distKm);
+
+  lines.push("");
+  lines.push("Worst sample distances:");
+  rows.slice(0, Math.min(12, rows.length)).forEach((row, idx) => {
+    lines.push(`${String(idx + 1).padStart(2, " ")}. ${_fmtMetricValue(row.distKm, 3)} km | ${row.image}`);
+  });
+  return lines.join("\n");
+}
+
+async function startGeoRandomEval() {
+  const imagesDir = byId("geo-eval-images")?.value?.trim() || "";
+  const metadata = byId("geo-eval-metadata")?.value?.trim() || "";
+  const sampleSize = Number(byId("geo-random-size")?.value || "16");
+  const retrievalToggle = byId("geo-eval-retrieval-only");
+  const retrievalOnly = retrievalToggle ? Boolean(retrievalToggle.checked) : true;
+  const strategySelect = byId("geo-eval-strategy");
+  const selectedProfile = strategySelect?.value || activeProfile || "";
+  const status = byId("geo-random-status");
+  const output = byId("geo-random-output");
+
+  if (!imagesDir || !metadata) {
+    if (status) status.textContent = "Missing images dir or metadata path.";
+    return;
+  }
+
+  const params = new URLSearchParams({
+    images_dir: imagesDir,
+    metadata,
+    sample_size: String(Number.isFinite(sampleSize) ? Math.max(1, Math.floor(sampleSize)) : 16),
+    profile: selectedProfile,
+    retrieval_only: retrievalOnly ? "1" : "0",
+  });
+
+  if (status) status.textContent = "Starting random sample run...";
+  if (output) output.textContent = "Running random samples...";
+  await fetch(`/eval/geo/random/start?${params.toString()}`, { method: "POST" });
+  pollGeoRandomEval();
+}
+
+async function pollGeoRandomEval() {
+  const status = byId("geo-random-status");
+  const output = byId("geo-random-output");
+  const bar = byId("geo-random-progress-bar");
+  const text = byId("geo-random-progress-text");
+  const wrap = byId("geo-random-progress");
+  const res = await fetch("/eval/geo/random/status");
+  if (!res.ok) return;
+
+  const data = await res.json();
+  if (status) {
+    const seed = data.seed ? ` (seed ${data.seed})` : "";
+    status.textContent = `${data.status || "idle"}${seed}`;
+  }
+  if (wrap) wrap.classList.toggle("active", data.status === "running");
+
+  if (data.progress && bar && text) {
+    const total = Number(data.progress.total || 0);
+    const done = Number(data.progress.processed || 0);
+    const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
+    bar.style.width = `${pct}%`;
+    text.textContent = `${pct}%`;
+  }
+
+  if (data.last_result && output) {
+    output.textContent = _formatGeoRandomOutput(data.last_result);
+  }
+
+  if (data.status === "running") {
+    setTimeout(pollGeoRandomEval, 1200);
+  }
+}
+
 const geoEvalBtn = byId("geo-eval-run");
 if (geoEvalBtn) {
   geoEvalBtn.addEventListener("click", startGeoEval);
+}
+
+const geoRandomBtn = byId("geo-random-run");
+if (geoRandomBtn) {
+  geoRandomBtn.addEventListener("click", startGeoRandomEval);
 }
 
 async function pickPath(endpoint, targetId) {

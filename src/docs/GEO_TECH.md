@@ -1,6 +1,6 @@
 ﻿# Geolocation + Object Localization Tech (Current)
 
-## Status Snapshot (As of April 5, 2026)
+## Status Snapshot (As of April 15, 2026)
 
 This is the current technical state of the geo stack in the development branch:
 
@@ -12,9 +12,12 @@ This is the current technical state of the geo stack in the development branch:
   - Invalid coordinate/score filtering
   - Near-duplicate clustering/merging across providers
   - Capped merged candidate list before fusion
+  - Realistic-profile retrieval retune (full split `n=180`) now uses a simplified ranking path (`diversity/locality/source-balance` disabled in `runs/bench_cfg/cfg_realistic_single.json`) after measured gains in close-range accuracy (`within_1km_pct`: `1.67` -> `5.00`)
+  - Paris profile now applies retrieval consensus refinement (`retrieval_consensus_top_n=20`, `retrieval_consensus_radius_km=3.0`) with additional realistic split gains (`within_1km_pct`: `5.00` -> `10.00`, `median_km`: `11.50` -> `9.77`)
   - Retrieval candidate diversification (radius/lambda/min_keep)
   - Retrieval minimum-candidate keep policy to preserve top-k recall when min-score thresholds are strict
   - Retrieval locality reranking for isolated outlier suppression
+  - Retrieval consensus top-1 refinement (top-N local cluster centroid) for close-range precision gains
   - Retrieval query TTA (multi-rotation embedding ensemble with configurable score reduction: mean/median/max/rrf)
 - Detection quality controls are configurable:
   - Minimum OBB area filter (`detector.min_area_px`)
@@ -43,6 +46,7 @@ This is the current technical state of the geo stack in the development branch:
 - Evaluation tooling is operational:
   - Geo regression gate baseline checks
   - Fusion sweep/tuning script (retrieval diversity + consensus + plausibility)
+  - Lab random-sample evaluation mode (`/analysis/lab/` -> `Run Random Samples`) for quick distance sanity checks with randomized subset + per-sample diagnostics
   - Hard-negative benchmark report tooling (distance buckets + per-group metrics)
   - Auto-fit source priors (including retrieval source-specific priors via `source_prior_retrieval_by_source`) and confidence calibration tooling; priors/calibration can be applied directly to config via `fit_fusion_priors --apply-config` and `fit_confidence_calibration --apply-config`
   - Calibration/error metrics: `ece`, `brier`, `nll`
@@ -125,6 +129,9 @@ Configure retrieval in `src/config/defaults.json`:
 - `geolocator.retrieval_diversity_min_keep`
 - `geolocator.retrieval_locality_radius_km`
 - `geolocator.retrieval_locality_weight`
+- `geolocator.retrieval_consensus_top_n`
+- `geolocator.retrieval_consensus_radius_km`
+- `geolocator.retrieval_consensus_score_power`
 - `geolocator.retrieval_query_tta_degrees`
 - `geolocator.retrieval_query_tta_reduce` (`mean`, `median`, `max`, or `rrf`)
 - `geolocator.candidate_source_balance_beta` (source balancing across merged retrieval/GeoCLIP/EXIF candidates)

@@ -449,6 +449,9 @@ class GeoRetrievalProvider:
         diversity_min_keep: int = 1,
         locality_radius_km: float = 0.0,
         locality_weight: float = 0.0,
+        consensus_top_n: int = 0,
+        consensus_radius_km: float = 0.0,
+        consensus_score_power: float = 1.0,
         query_tta_degrees: Optional[Sequence[float]] = None,
         query_tta_reduce: str = "mean",
     ) -> None:
@@ -471,6 +474,9 @@ class GeoRetrievalProvider:
         self.diversity_min_keep = max(0, int(diversity_min_keep))
         self.locality_radius_km = max(0.0, float(locality_radius_km))
         self.locality_weight = max(0.0, float(locality_weight))
+        self.consensus_top_n = max(0, int(consensus_top_n))
+        self.consensus_radius_km = max(0.0, float(consensus_radius_km))
+        self.consensus_score_power = max(0.0, float(consensus_score_power))
         self.query_tta_degrees = _normalize_tta_degrees(query_tta_degrees)
         reduce_mode = str(query_tta_reduce).lower()
         if reduce_mode not in {"mean", "median", "max", "rrf"}:
@@ -553,6 +559,12 @@ class GeoRetrievalProvider:
                 radius_km=self.diversity_radius_km,
                 diversity_lambda=self.diversity_lambda,
                 min_keep=self.diversity_min_keep,
+            )
+            results = _apply_consensus_refinement(
+                results,
+                top_n=self.consensus_top_n,
+                radius_km=self.consensus_radius_km,
+                score_power=self.consensus_score_power,
             )
             self.last_error = None
             return results
@@ -709,6 +721,93 @@ def _apply_locality_rerank(
         )
     rescored.sort(key=lambda item: item.retrieval_score, reverse=True)
     return rescored
+
+
+def _normalize_longitude(lon: float) -> float:
+    wrapped = ((float(lon) + 180.0) % 360.0) - 180.0
+    if wrapped == -180.0 and lon > 0.0:
+        return 180.0
+    return wrapped
+
+
+def _circular_weighted_mean_longitude(values: Sequence[float], weights: Sequence[float]) -> float:
+    sin_sum = 0.0
+    cos_sum = 0.0
+    for lon, weight in zip(values, weights):
+        radians = math.radians(float(lon))
+        w = float(weight)
+        sin_sum += w * math.sin(radians)
+        cos_sum += w * math.cos(radians)
+    if abs(sin_sum) < 1e-12 and abs(cos_sum) < 1e-12:
+        total = sum(float(w) for w in weights)
+        if total <= 0.0:
+            return _normalize_longitude(float(values[0]) if values else 0.0)
+        return _normalize_longitude(
+            sum(float(v) * float(w) for v, w in zip(values, weights)) / total
+        )
+    return _normalize_longitude(math.degrees(math.atan2(sin_sum, cos_sum)))
+
+
+def _apply_consensus_refinement(
+    ranked: Sequence[GeoCandidate],
+    *,
+    top_n: int,
+    radius_km: float,
+    score_power: float,
+) -> List[GeoCandidate]:
+    if not ranked:
+        return []
+    ordered = sorted(ranked, key=lambda item: item.retrieval_score, reverse=True)
+    if len(ordered) < 2:
+        return ordered
+    n = min(len(ordered), max(0, int(top_n)))
+    radius = float(radius_km)
+    if n < 2 or radius <= 0.0:
+        return ordered
+
+    subset = list(ordered[:n])
+    base_weights = [max(1e-9, _score_to_unit_interval(item.retrieval_score)) for item in subset]
+    sigma = max(0.5, radius)
+    anchor_idx = 0
+    best_support = float("-inf")
+    for idx_i, cand_i in enumerate(subset):
+        support = 0.0
+        for cand_j, weight_j in zip(subset, base_weights):
+            dist = _haversine_km(cand_i.latitude, cand_i.longitude, cand_j.latitude, cand_j.longitude)
+            support += weight_j * math.exp(-0.5 * (dist / sigma) ** 2)
+        if support > best_support:
+            best_support = support
+            anchor_idx = idx_i
+
+    anchor = subset[anchor_idx]
+    cluster: List[GeoCandidate] = []
+    for cand in subset:
+        dist = _haversine_km(anchor.latitude, anchor.longitude, cand.latitude, cand.longitude)
+        if dist <= radius:
+            cluster.append(cand)
+    if len(cluster) < 2:
+        return ordered
+
+    power = max(0.0, float(score_power))
+    cluster_weights = [max(1e-9, _score_to_unit_interval(cand.retrieval_score) ** power) for cand in cluster]
+    total_weight = sum(cluster_weights)
+    if total_weight <= 0.0:
+        return ordered
+
+    mean_lat = sum(cand.latitude * weight for cand, weight in zip(cluster, cluster_weights)) / total_weight
+    mean_lon = _circular_weighted_mean_longitude([cand.longitude for cand in cluster], cluster_weights)
+    refined = GeoCandidate(
+        latitude=float(mean_lat),
+        longitude=float(mean_lon),
+        retrieval_score=float(ordered[0].retrieval_score),
+        match_id="retrieval:consensus",
+    )
+    if (
+        abs(refined.latitude - ordered[0].latitude) < 1e-9
+        and abs(refined.longitude - ordered[0].longitude) < 1e-9
+    ):
+        return ordered
+    return [refined, *ordered[1:]]
 
 
 def _normalize_tta_degrees(values: Optional[Sequence[float]]) -> List[float]:
