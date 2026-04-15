@@ -57,6 +57,9 @@ def main() -> int:
             diversity_min_keep=cfg.geolocator.retrieval_diversity_min_keep,
             locality_radius_km=cfg.geolocator.retrieval_locality_radius_km,
             locality_weight=cfg.geolocator.retrieval_locality_weight,
+            consensus_top_n=cfg.geolocator.retrieval_consensus_top_n,
+            consensus_radius_km=cfg.geolocator.retrieval_consensus_radius_km,
+            consensus_score_power=cfg.geolocator.retrieval_consensus_score_power,
             query_tta_degrees=cfg.geolocator.retrieval_query_tta_degrees,
             query_tta_reduce=cfg.geolocator.retrieval_query_tta_reduce,
         )

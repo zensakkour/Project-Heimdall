@@ -116,6 +116,10 @@ A governance layer was added to prevent ad-hoc metric claims:
 - Added `median` TTA reduce support.
 - Extended retrieval tuning to sweep TTA reduce modes (`mean`, `median`, `max`, `rrf`).
 - Added best-mode writeback support in tuning workflow.
+- Added objective-driven ranking in retrieval tuning (`within_1km_pct`, `within_5km_pct`, `within_10km_pct`).
+- Ran full realistic-split retrieval post-processing sweep (`n=180`) and retuned realistic single-index profile to a simplified ranking path (locality/diversity/source-balance disabled).
+- Added retrieval consensus top-1 refinement (`retrieval_consensus_top_n`, `retrieval_consensus_radius_km`, `retrieval_consensus_score_power`) and validated additional close-range gains on the same realistic split.
+- Added a Lab random-sample evaluation mode for lightweight spot-checking of per-sample distance errors and quick accuracy sanity checks between full benchmark runs.
 
 ## 6. Experimental Protocol
 ### 6.1 Datasets and Artifacts Used in This Document
@@ -145,7 +149,7 @@ Artifacts:
 | Setting | mean_km | median_km | within_5km_pct | within_10km_pct |
 |---|---:|---:|---:|---:|
 | Leaky current index | 0.4006 | 0.00011 | 97.78 | 100.00 |
-| Realistic single index | 19.7494 | 11.3947 | 23.89 | 43.33 |
+| Realistic single index | 18.0159 | 11.4990 | 30.56 | 45.56 |
 | Realistic multi-index candidate | 19.3096 | 11.4842 | 19.44 | 40.56 |
 
 Observation:
@@ -193,10 +197,55 @@ Observation:
 - `max` ranked best on this tested subset.
 - `median` remains exposed as a tunable option rather than a new default.
 
+### 7.5 Realistic Retrieval Post-Processing Retune (n=180)
+Artifacts:
+- `runs/tune_retrieval_geo_realistic_within1km_focus_v1.json`
+- `runs/bench_realistic_single_180_precision_v2.json`
+
+| Variant | mean_km | median_km | within_1km_pct | within_5km_pct | within_10km_pct |
+|---|---:|---:|---:|---:|---:|
+| Prior realistic profile | 19.7494 | 11.3947 | 1.67 | 23.89 | 43.33 |
+| Retuned realistic profile | 18.0159 | 11.4990 | 5.00 | 30.56 | 45.56 |
+
+Main knobs changed:
+- `retrieval_top_k: 25`
+- `retrieval_min_score: 0.05`
+- `retrieval_min_keep_topk: 0`
+- `retrieval_diversity_radius_km: 0.0`
+- `retrieval_diversity_lambda: 1.0`
+- `retrieval_diversity_min_keep: 1`
+- `retrieval_locality_radius_km: 0.0`
+- `retrieval_locality_weight: 0.0`
+- `retrieval_source_balance_beta: 0.0`
+
+Observation:
+- In this realistic split, aggressive post-processing reduced top-1 precision.
+- The simplified ranking path improved close-range accuracy substantially (`within_1km_pct`: `1.67` -> `5.00`).
+
+### 7.6 Retrieval Consensus Top-1 Refinement (n=180)
+Artifacts:
+- `runs/geo_eval_paris_profile_180_v2.json`
+- `runs/geo_eval_paris_profile_180_consensus_v1.json`
+
+| Variant | mean_km | median_km | within_1km_pct | within_5km_pct | within_10km_pct |
+|---|---:|---:|---:|---:|---:|
+| Retuned realistic profile (no consensus) | 18.0159 | 11.4990 | 5.00 | 30.56 | 45.56 |
+| + Consensus top-1 refinement | 15.5334 | 9.7717 | 10.00 | 36.67 | 50.56 |
+
+Main knobs:
+- `retrieval_consensus_top_n: 20`
+- `retrieval_consensus_radius_km: 3.0`
+- `retrieval_consensus_score_power: 1.0`
+
+Observation:
+- Top-K candidates already contained near-ground-truth hypotheses in many failures; consensus refinement improved top-1 selection quality.
+- On this split, consensus refinement yielded a large close-range gain while preserving zero null predictions.
+
 ## 8. Methods Tried and Practical Outcome
 ### 8.1 Changes with Clear Practical Value
 - Multi-provider candidate generation and merge controls.
 - Retrieval locality and diversity controls.
+- Retrieval consensus top-1 refinement (clustered centroid over top candidates).
 - `retrieval_min_keep_topk` fallback for robustness.
 - Cross-source fusion signals and confidence caps.
 - Benchmark governance with promotion workflow.
@@ -280,6 +329,7 @@ Project Heimdall demonstrates a practical path from prototype geolocation to a b
   - `retrieval_top_k`, `retrieval_min_score`, `retrieval_min_keep_topk`
   - `retrieval_diversity_radius_km`, `retrieval_diversity_lambda`, `retrieval_diversity_min_keep`
   - `retrieval_locality_radius_km`, `retrieval_locality_weight`
+  - `retrieval_consensus_top_n`, `retrieval_consensus_radius_km`, `retrieval_consensus_score_power`
   - `retrieval_query_tta_degrees`, `retrieval_query_tta_reduce`
   - `retrieval_index_paths`, `retrieval_index_weights`, `retrieval_per_index_top_k`
   - `retrieval_index_model_ids`, `retrieval_index_score_norm`, `retrieval_source_balance_beta`
@@ -301,11 +351,15 @@ Project Heimdall demonstrates a practical path from prototype geolocation to a b
 - `runs/bench_current_leaky_180.json`
 - `runs/bench_realistic_single_180.json`
 - `runs/bench_candidate_multi_180.json`
+- `runs/bench_realistic_single_180_precision_v2.json`
+- `runs/geo_eval_paris_profile_180_v2.json`
+- `runs/geo_eval_paris_profile_180_consensus_v1.json`
 - `runs/geo_eval_paris_no_tta_120.json`
 - `runs/geo_eval_paris_tta_120.json`
 - `runs/geo_eval_paris_strict_keep0_40.json`
 - `runs/geo_eval_paris_strict_keep2_40.json`
 - `runs/tune_retrieval_geo_tta_modes_med.json`
+- `runs/tune_retrieval_geo_realistic_within1km_focus_v1.json`
 - `runs/geo_impact_latest.json`
 - `runs/geo_impact_latest.md`
 

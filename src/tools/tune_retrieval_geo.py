@@ -22,6 +22,15 @@ from src.core.logic.types import GeoCandidate
 from src.tools.run_geo_eval import haversine_km, resolve_image_path
 
 _VALID_TTA_REDUCE = {"mean", "median", "max", "rrf"}
+_VALID_RANK_OBJECTIVE = {
+    "balanced",
+    "median_km",
+    "mean_km",
+    "p90_km",
+    "within_1km_pct",
+    "within_5km_pct",
+    "within_10km_pct",
+}
 
 
 @dataclass(frozen=True)
@@ -50,6 +59,60 @@ def _parse_tta_reduce_list(raw: str) -> List[str]:
         seen.add(mode)
         out.append(mode)
     return out
+
+
+def _parse_rank_objective(raw: str) -> str:
+    mode = str(raw).strip().lower()
+    if mode not in _VALID_RANK_OBJECTIVE:
+        return "balanced"
+    return mode
+
+
+def _safe_inf(value: Optional[float]) -> float:
+    return math.inf if value is None else float(value)
+
+
+def _safe_neg(value: Optional[float]) -> float:
+    return -float(value) if value is not None else 0.0
+
+
+def _result_sort_key(row: dict, objective: str) -> tuple:
+    mode = _parse_rank_objective(objective)
+    # Always prioritize non-null predictions first.
+    nulls = int(row.get("null_predictions", 0) or 0)
+    if mode == "within_1km_pct":
+        return (nulls, _safe_neg(row.get("within_1km_pct")), _safe_inf(row.get("median_km")), _safe_inf(row.get("mean_km")))
+    if mode == "within_5km_pct":
+        return (nulls, _safe_neg(row.get("within_5km_pct")), _safe_inf(row.get("median_km")), _safe_inf(row.get("mean_km")))
+    if mode == "within_10km_pct":
+        return (
+            nulls,
+            _safe_neg(row.get("within_10km_pct")),
+            _safe_neg(row.get("within_5km_pct")),
+            _safe_inf(row.get("median_km")),
+            _safe_inf(row.get("mean_km")),
+        )
+    if mode == "mean_km":
+        return (nulls, _safe_inf(row.get("mean_km")), _safe_inf(row.get("median_km")), _safe_neg(row.get("within_5km_pct")))
+    if mode == "p90_km":
+        return (
+            nulls,
+            _safe_inf(row.get("p90_km")),
+            _safe_inf(row.get("median_km")),
+            _safe_inf(row.get("mean_km")),
+            _safe_neg(row.get("within_5km_pct")),
+        )
+    if mode == "median_km":
+        return (nulls, _safe_inf(row.get("median_km")), _safe_inf(row.get("mean_km")), _safe_neg(row.get("within_5km_pct")))
+    # balanced (default): robust distance first, then coarse recall.
+    return (
+        nulls,
+        _safe_inf(row.get("median_km")),
+        _safe_inf(row.get("mean_km")),
+        _safe_inf(row.get("p90_km")),
+        _safe_neg(row.get("within_1km_pct")),
+        _safe_neg(row.get("within_5km_pct")),
+    )
 
 
 def _percentile(sorted_vals: List[float], p: float) -> Optional[float]:
@@ -235,6 +298,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         default="",
         help="Comma list of TTA reduction modes to evaluate (mean,median,max,rrf). Empty uses config mode.",
     )
+    parser.add_argument(
+        "--rank-objective",
+        default="balanced",
+        help="How to rank tuning results: balanced, median_km, mean_km, p90_km, within_1km_pct, within_5km_pct, within_10km_pct.",
+    )
     parser.add_argument("--apply-best-config", action="store_true")
     args = parser.parse_args(argv)
 
@@ -259,6 +327,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     retrieval_locality_weight = _parse_float_list(args.retrieval_locality_weight)
     retrieval_source_balance = _parse_float_list(args.retrieval_source_balance_beta)
     tta_reduce_modes = _parse_tta_reduce_list(str(args.retrieval_query_tta_reduce))
+    rank_objective = _parse_rank_objective(str(args.rank_objective))
     if not tta_reduce_modes:
         tta_reduce_modes = [str(cfg.geolocator.retrieval_query_tta_reduce).lower()]
 
@@ -321,13 +390,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                                                 }
                                             )
 
-    results.sort(
-        key=lambda row: (
-            math.inf if row["median_km"] is None else float(row["median_km"]),
-            math.inf if row["mean_km"] is None else float(row["mean_km"]),
-            -float(row["within_5km_pct"]),
-        )
-    )
+    results.sort(key=lambda row: _result_sort_key(row, rank_objective))
     best = results[0] if results else None
 
     payload = {
@@ -345,6 +408,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         "retrieval_query_tta_degrees": list(cfg.geolocator.retrieval_query_tta_degrees),
         "retrieval_query_tta_reduce": cfg.geolocator.retrieval_query_tta_reduce,
         "retrieval_query_tta_reduce_search": tta_reduce_modes,
+        "rank_objective": rank_objective,
         "retrieval_min_keep_topk_default": cfg.geolocator.retrieval_min_keep_topk,
         "limit": args.limit,
         "missing_files": missing_files,

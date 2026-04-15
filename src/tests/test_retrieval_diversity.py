@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from src.core.geo.retrieval_provider import _apply_locality_rerank, _select_diverse_geo_candidates
+from src.core.geo.retrieval_provider import (
+    _apply_consensus_refinement,
+    _apply_locality_rerank,
+    _select_diverse_geo_candidates,
+)
 from src.core.logic.types import GeoCandidate
 
 
@@ -54,3 +58,31 @@ def test_locality_rerank_noop_when_disabled() -> None:
     ]
     rescored = _apply_locality_rerank(ranked, radius_km=0.0, weight=1.0)
     assert [item.match_id for item in rescored] == ["a", "b", "c"]
+
+
+def test_consensus_refinement_can_promote_local_cluster_center() -> None:
+    ranked = [
+        GeoCandidate(latitude=34.0522, longitude=-118.2437, retrieval_score=0.95, match_id="outlier"),
+        GeoCandidate(latitude=48.8566, longitude=2.3522, retrieval_score=0.90, match_id="cluster_a"),
+        GeoCandidate(latitude=48.8571, longitude=2.3528, retrieval_score=0.89, match_id="cluster_b"),
+        GeoCandidate(latitude=48.8574, longitude=2.3531, retrieval_score=0.88, match_id="cluster_c"),
+    ]
+    refined = _apply_consensus_refinement(
+        ranked,
+        top_n=4,
+        radius_km=5.0,
+        score_power=1.0,
+    )
+    assert refined[0].match_id == "retrieval:consensus"
+    assert abs(refined[0].latitude - 48.8570) < 0.01
+    assert abs(refined[0].longitude - 2.3527) < 0.01
+
+
+def test_consensus_refinement_noop_when_disabled() -> None:
+    ranked = [
+        GeoCandidate(latitude=10.0, longitude=10.0, retrieval_score=0.90, match_id="a"),
+        GeoCandidate(latitude=10.1, longitude=10.1, retrieval_score=0.89, match_id="b"),
+        GeoCandidate(latitude=10.2, longitude=10.2, retrieval_score=0.88, match_id="c"),
+    ]
+    refined = _apply_consensus_refinement(ranked, top_n=0, radius_km=3.0, score_power=1.0)
+    assert [item.match_id for item in refined] == ["a", "b", "c"]

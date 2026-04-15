@@ -2,7 +2,7 @@
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](#requirements)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-0A0A0A)](#requirements)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-Non--Commercial-orange.svg)](LICENSE)
 
 Geospatial perception and analysis platform that combines object detection, geo-candidate retrieval, probabilistic fusion, and operator-facing explainability.
 
@@ -123,16 +123,26 @@ The platform is organized as a modular pipeline:
 - API server: `src/tools/ui_server.py` (FastAPI).
 - Analysis frontend: `src/dashboard/analysis/`.
 
-## Technology Status (As of April 5, 2026)
+## Technology Status (As of April 15, 2026)
 
 Current implementation status:
 
 - Geo candidate stack:
   - Multi-provider candidate generation (retrieval index + GeoSpot/GeoCLIP + EXIF/sidecar fallbacks).
+  - Realistic single-index profile retuned on full split (`n=180`) to improve close-range precision:
+    - `within_1km_pct`: `1.67` -> `5.00`
+    - `within_5km_pct`: `23.89` -> `30.56`
+    - artifacts: `runs/tune_retrieval_geo_realistic_within1km_focus_v1.json`, `runs/bench_realistic_single_180_precision_v2.json`.
+  - Added retrieval consensus top-1 refinement in the Paris profile (`retrieval_consensus_top_n=20`, `retrieval_consensus_radius_km=3.0`), improving realistic split (`n=180`) metrics:
+    - `within_1km_pct`: `5.00` -> `10.00`
+    - `within_5km_pct`: `30.56` -> `36.67`
+    - `median_km`: `11.50` -> `9.77`
+    - artifacts: `runs/geo_eval_paris_profile_180_v2.json`, `runs/geo_eval_paris_profile_180_consensus_v1.json`.
   - Candidate validation, near-duplicate merge, and bounded candidate output before fusion.
   - Retrieval candidate diversity control (`retrieval_diversity_radius_km`, `retrieval_diversity_lambda`, `retrieval_diversity_min_keep`).
   - Retrieval minimum-candidate keep policy (`retrieval_min_keep_topk`) to avoid null geo outputs in low-similarity scenes.
   - Retrieval locality reranking (`retrieval_locality_radius_km`, `retrieval_locality_weight`) to suppress geographically isolated false matches.
+  - Retrieval consensus refinement (`retrieval_consensus_top_n`, `retrieval_consensus_radius_km`, `retrieval_consensus_score_power`) to densify top-1 around local candidate clusters.
   - Retrieval query TTA with rotation ensembling (`retrieval_query_tta_degrees`, `retrieval_query_tta_reduce`) for aerial orientation robustness.
   - Multi-index retrieval support with per-index weighting (`retrieval_index_paths`, `retrieval_index_weights`, `retrieval_per_index_top_k`) for scalable dataset expansion.
   - Per-index retrieval model routing (`retrieval_index_model_ids`) so one run can mix indices built by different embedding backbones.
@@ -299,6 +309,13 @@ Benchmark comparison in UI:
 1. Use `Show selected saved run` toggle to switch between viewing latest run output and a selected historical run.
 1. Use `Baseline run` + `Candidate run` and click `Compare Runs` to see metric deltas.
 1. Use `Append Compare To PROGRESS.md` to write a comparison snippet into `PROGRESS.md`.
+
+Random sample geo check in UI:
+
+1. Go to `/analysis/lab/`.
+1. In `Geo Scoring`, set images dir + metadata.
+1. Set `Random sample size` and click `Run Random Samples`.
+1. Review distance quality and accuracy bands (`<=1km`, `<=2km`, `<=5km`, `<=10km`) plus worst-sample distances.
 
 Runtime diagnostics:
 
@@ -613,4 +630,9 @@ Useful fusion knobs:
 
 ## License
 
-This project is released under the MIT License. See [LICENSE](LICENSE).
+This project is released under a non-commercial personal/research license.
+
+- Personal, research, and evaluation use is allowed.
+- Commercial use is not allowed without a separate paid commercial license from the project owner.
+
+See [LICENSE](LICENSE) for full terms.

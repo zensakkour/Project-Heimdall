@@ -59,6 +59,9 @@ def build_pipeline(
             diversity_min_keep=geo_cfg.retrieval_diversity_min_keep,
             locality_radius_km=geo_cfg.retrieval_locality_radius_km,
             locality_weight=geo_cfg.retrieval_locality_weight,
+            consensus_top_n=geo_cfg.retrieval_consensus_top_n,
+            consensus_radius_km=geo_cfg.retrieval_consensus_radius_km,
+            consensus_score_power=geo_cfg.retrieval_consensus_score_power,
             query_tta_degrees=geo_cfg.retrieval_query_tta_degrees,
             query_tta_reduce=geo_cfg.retrieval_query_tta_reduce,
         )

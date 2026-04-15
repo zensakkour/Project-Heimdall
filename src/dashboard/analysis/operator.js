@@ -237,15 +237,19 @@ function ensureLiveMap() {
 
       if (liveMap.setFog) {
         liveMap.setFog({
-          color: "rgb(7, 13, 16)",
-          "high-color": "rgb(5, 9, 12)",
-          "space-color": "rgb(2, 5, 8)",
-          "horizon-blend": 0.11,
-          "star-intensity": 0.12,
+          color: "rgb(11, 20, 27)",
+          "high-color": "rgb(8, 13, 18)",
+          "space-color": "rgb(2, 5, 9)",
+          "horizon-blend": 0.26,
+          "star-intensity": 0.34,
         });
       }
 
       liveMap.addSource("candidates", {
+        type: "geojson",
+        data: emptyFeatureCollection,
+      });
+      liveMap.addSource("candidate-links", {
         type: "geojson",
         data: emptyFeatureCollection,
       });
@@ -263,9 +267,34 @@ function ensureLiveMap() {
         type: "line",
         source: "ring",
         paint: {
-          "line-color": "rgba(130, 210, 230, 0.58)",
-          "line-width": 1.4,
-          "line-dasharray": [2, 2],
+          "line-color": "rgba(142, 220, 245, 0.62)",
+          "line-width": 1.8,
+          "line-dasharray": [2, 2.2],
+          "line-opacity": 0.85,
+        },
+      });
+
+      liveMap.addLayer({
+        id: "candidate-link-layer",
+        type: "line",
+        source: "candidate-links",
+        paint: {
+          "line-color": ["coalesce", ["get", "color"], "rgba(126, 212, 246, 0.46)"],
+          "line-width": ["interpolate", ["linear"], ["get", "weightNorm"], 0, 0.8, 1, 2.2],
+          "line-opacity": ["interpolate", ["linear"], ["get", "weightNorm"], 0, 0.18, 1, 0.52],
+          "line-blur": 0.45,
+        },
+      });
+
+      liveMap.addLayer({
+        id: "candidate-glow-layer",
+        type: "circle",
+        source: "candidates",
+        paint: {
+          "circle-color": ["get", "color"],
+          "circle-radius": ["interpolate", ["linear"], ["get", "weightNorm"], 0, 8, 1, 18],
+          "circle-opacity": ["interpolate", ["linear"], ["get", "weightNorm"], 0, 0.08, 1, 0.24],
+          "circle-blur": 0.9,
         },
       });
 
@@ -279,6 +308,17 @@ function ensureLiveMap() {
           "circle-opacity": ["case", ["==", ["get", "rank"], 1], 0.95, 0.72],
           "circle-stroke-color": "rgba(218, 244, 255, 0.85)",
           "circle-stroke-width": ["case", ["==", ["get", "rank"], 1], 1.6, 0.8],
+        },
+      });
+
+      liveMap.addLayer({
+        id: "mean-halo-layer",
+        type: "circle",
+        source: "mean",
+        paint: {
+          "circle-color": "rgba(196, 238, 255, 0.24)",
+          "circle-radius": 12,
+          "circle-blur": 0.85,
         },
       });
 
@@ -385,6 +425,7 @@ function renderLiveMap(result) {
   if (!result || !result.result) {
     if (liveMap && liveMap.getSource("candidates")) {
       liveMap.getSource("candidates").setData(emptyFeatureCollection);
+      liveMap.getSource("candidate-links").setData(emptyFeatureCollection);
       liveMap.getSource("mean").setData(emptyFeatureCollection);
       liveMap.getSource("ring").setData(emptyFeatureCollection);
     }
@@ -398,6 +439,7 @@ function renderLiveMap(result) {
   if (!fusion || candidates.length === 0) {
     if (liveMap && liveMap.getSource("candidates")) {
       liveMap.getSource("candidates").setData(emptyFeatureCollection);
+      liveMap.getSource("candidate-links").setData(emptyFeatureCollection);
       liveMap.getSource("mean").setData(emptyFeatureCollection);
       liveMap.getSource("ring").setData(emptyFeatureCollection);
     }
@@ -476,11 +518,43 @@ function renderLiveMap(result) {
         }
       : null;
 
+  const linkFeatures =
+    meanLat !== undefined && meanLon !== undefined
+      ? visible
+          .slice(0, Math.min(visible.length, 14))
+          .map((item, idx) => {
+            const cand = item.candidate || {};
+            if (cand.latitude === undefined || cand.longitude === undefined) return null;
+            const rawWeight = weightFrom(item);
+            const weightNorm = maxWeight > 0 ? rawWeight / maxWeight : 0;
+            return {
+              type: "Feature",
+              geometry: {
+                type: "LineString",
+                coordinates: [
+                  [meanLon, meanLat],
+                  [cand.longitude, cand.latitude],
+                ],
+              },
+              properties: {
+                rank: idx + 1,
+                weightNorm,
+                color: weightColor(weightNorm),
+              },
+            };
+          })
+          .filter(Boolean)
+      : [];
+
   ensureLiveMap();
   liveMapReady.then(() => {
     liveMap.getSource("candidates").setData({
       type: "FeatureCollection",
       features,
+    });
+    liveMap.getSource("candidate-links").setData({
+      type: "FeatureCollection",
+      features: linkFeatures,
     });
     liveMap.getSource("mean").setData({
       type: "FeatureCollection",
@@ -496,8 +570,8 @@ function renderLiveMap(result) {
         center: [meanLon, meanLat],
         zoom: 2.6,
         duration: 700,
-        bearing: 0,
-        pitch: 0,
+        bearing: 14,
+        pitch: 30,
       });
     }
 
@@ -828,6 +902,20 @@ function renderGeoRanking(items) {
 function applyCandidateHighlight() {
   if (!liveMap) return;
   const highlight = selectedRank ?? -1;
+  if (liveMap.getLayer("candidate-glow-layer")) {
+    liveMap.setPaintProperty("candidate-glow-layer", "circle-color", [
+      "case",
+      ["==", ["get", "rank"], highlight],
+      "rgba(255, 130, 130, 0.96)",
+      ["get", "color"],
+    ]);
+    liveMap.setPaintProperty("candidate-glow-layer", "circle-opacity", [
+      "case",
+      ["==", ["get", "rank"], highlight],
+      0.3,
+      ["interpolate", ["linear"], ["get", "weightNorm"], 0, 0.08, 1, 0.24],
+    ]);
+  }
   liveMap.setPaintProperty("candidate-layer", "circle-color", [
     "case",
     ["==", ["get", "rank"], highlight],
@@ -846,6 +934,20 @@ function applyCandidateHighlight() {
     2.4,
     ["case", ["==", ["get", "rank"], 1], 1.6, 0.8],
   ]);
+  if (liveMap.getLayer("candidate-link-layer")) {
+    liveMap.setPaintProperty("candidate-link-layer", "line-color", [
+      "case",
+      ["==", ["get", "rank"], highlight],
+      "rgba(255, 150, 150, 0.86)",
+      ["coalesce", ["get", "color"], "rgba(126, 212, 246, 0.46)"],
+    ]);
+    liveMap.setPaintProperty("candidate-link-layer", "line-opacity", [
+      "case",
+      ["==", ["get", "rank"], highlight],
+      0.85,
+      ["interpolate", ["linear"], ["get", "weightNorm"], 0, 0.18, 1, 0.52],
+    ]);
+  }
 }
 
 function setSelectedRank(rank) {
