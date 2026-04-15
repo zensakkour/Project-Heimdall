@@ -7,7 +7,7 @@
     <link rel="icon" type="image/png" href="../../assets/logo-mark.png?v=1" />
     <link rel="stylesheet" href="../../theme.css?v=7" />
     <link rel="stylesheet" href="../../styles.css?v=6" />
-    <link rel="stylesheet" href="lab.css?v=1" />
+    <link rel="stylesheet" href="lab.css?v=2" />
   </head>
   <body>
     <div class="layout">
@@ -74,6 +74,27 @@
           </div>
           <div id="geo-eval-status" class="muted">Idle</div>
           <pre id="geo-eval-output" class="details">No results yet.</pre>
+
+          <div class="subsection-divider"></div>
+          <h3>Random Sample Check</h3>
+          <p class="muted">
+            Runs a random subset each time so you can quickly verify correctness and distance quality.
+          </p>
+          <div class="random-form">
+            <label>
+              Random sample size
+              <input id="geo-random-size" type="number" min="1" max="1000" value="16" />
+            </label>
+            <button id="geo-random-run">Run Random Samples</button>
+          </div>
+          <div class="progress score-progress" id="geo-random-progress">
+            <div class="progress-track">
+              <div id="geo-random-progress-bar" class="progress-bar determinate"></div>
+            </div>
+            <span id="geo-random-progress-text" class="muted">0%</span>
+          </div>
+          <div id="geo-random-status" class="muted">Idle</div>
+          <pre id="geo-random-output" class="details">No random sample results yet.</pre>
         </section>
 
         <section class="card section-card">
@@ -205,6 +226,6 @@
       </div>
     </div>
 
-    <script type="module" src="lab.js?v=1"></script>
+    <script type="module" src="lab.js?v=2"></script>
   </body>
 </html>

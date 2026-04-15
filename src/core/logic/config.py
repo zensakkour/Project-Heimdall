@@ -50,6 +50,9 @@ class GeoConfig:
     retrieval_diversity_min_keep: int = 1
     retrieval_locality_radius_km: float = 0.0
     retrieval_locality_weight: float = 0.0
+    retrieval_consensus_top_n: int = 0
+    retrieval_consensus_radius_km: float = 0.0
+    retrieval_consensus_score_power: float = 1.0
     retrieval_query_tta_degrees: Tuple[float, ...] = (0.0,)
     retrieval_query_tta_reduce: str = "mean"
     candidate_dedupe_radius_m: float = 300.0
@@ -173,6 +176,9 @@ def load_config(path: str) -> HeimdallConfig:
             retrieval_diversity_min_keep=geo.get("retrieval_diversity_min_keep", 1),
             retrieval_locality_radius_km=geo.get("retrieval_locality_radius_km", 0.0),
             retrieval_locality_weight=geo.get("retrieval_locality_weight", 0.0),
+            retrieval_consensus_top_n=geo.get("retrieval_consensus_top_n", 0),
+            retrieval_consensus_radius_km=geo.get("retrieval_consensus_radius_km", 0.0),
+            retrieval_consensus_score_power=geo.get("retrieval_consensus_score_power", 1.0),
             retrieval_query_tta_degrees=_parse_float_tuple(geo.get("retrieval_query_tta_degrees", [0.0])),
             retrieval_query_tta_reduce=_parse_tta_reduce(geo.get("retrieval_query_tta_reduce", "mean")),
             candidate_dedupe_radius_m=geo.get("candidate_dedupe_radius_m", 300.0),

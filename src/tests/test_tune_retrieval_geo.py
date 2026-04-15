@@ -8,8 +8,10 @@ from src.core.logic.types import GeoCandidate
 from src.tools.tune_retrieval_geo import (
     RetrievalSample,
     _evaluate_samples,
+    _parse_rank_objective,
     _parse_tta_reduce_list,
     _postprocess_candidates,
+    _result_sort_key,
     _write_best_to_config,
 )
 
@@ -152,3 +154,31 @@ def test_write_best_to_config_updates_tta_reduce() -> None:
         )
         payload = json.loads(path.read_text(encoding="utf-8"))
         assert payload["geolocator"]["retrieval_query_tta_reduce"] == "median"
+
+
+def test_parse_rank_objective_unknown_falls_back_to_balanced() -> None:
+    assert _parse_rank_objective("within_1km_pct") == "within_1km_pct"
+    assert _parse_rank_objective("not_a_mode") == "balanced"
+
+
+def test_result_sort_key_within_1km_prefers_higher_recall() -> None:
+    rows = [
+        {
+            "null_predictions": 0,
+            "within_1km_pct": 65.0,
+            "within_5km_pct": 95.0,
+            "median_km": 1.0,
+            "mean_km": 2.0,
+            "p90_km": 8.0,
+        },
+        {
+            "null_predictions": 0,
+            "within_1km_pct": 70.0,
+            "within_5km_pct": 90.0,
+            "median_km": 1.5,
+            "mean_km": 3.0,
+            "p90_km": 9.0,
+        },
+    ]
+    ranked = sorted(rows, key=lambda item: _result_sort_key(item, "within_1km_pct"))
+    assert ranked[0]["within_1km_pct"] == 70.0
