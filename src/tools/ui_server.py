@@ -15,6 +15,7 @@ import logging
 import math
 import multiprocessing as mp
 import os
+import random
 from queue import Empty as QueueEmpty
 import tempfile
 import time
@@ -52,6 +53,13 @@ app = FastAPI()
 
 _EVAL_STATE = {"status": "idle", "last_result": None}
 _GEO_EVAL_STATE = {"status": "idle", "last_result": None, "progress": None, "progress_path": None}
+_GEO_RANDOM_STATE = {
+    "status": "idle",
+    "last_result": None,
+    "progress": None,
+    "progress_path": None,
+    "seed": None,
+}
 _BENCHMARK_STATE = {"status": "idle", "stage": None, "last_result": None, "progress": None, "run_id": None}
 
 
@@ -363,6 +371,9 @@ def build_pipeline(cfg: Optional[HeimdallConfig]) -> "HeimdallPipeline":
         diversity_min_keep=cfg.geolocator.retrieval_diversity_min_keep,
         locality_radius_km=cfg.geolocator.retrieval_locality_radius_km,
         locality_weight=cfg.geolocator.retrieval_locality_weight,
+        consensus_top_n=cfg.geolocator.retrieval_consensus_top_n,
+        consensus_radius_km=cfg.geolocator.retrieval_consensus_radius_km,
+        consensus_score_power=cfg.geolocator.retrieval_consensus_score_power,
         query_tta_degrees=cfg.geolocator.retrieval_query_tta_degrees,
         query_tta_reduce=cfg.geolocator.retrieval_query_tta_reduce,
     )
@@ -1434,7 +1445,7 @@ def start_geo_eval(
     profile: Optional[str] = None,
     retrieval_only: Optional[str] = None,
 ) -> JSONResponse:
-    if _GEO_EVAL_STATE["status"] == "running":
+    if _GEO_EVAL_STATE["status"] == "running" or _GEO_RANDOM_STATE["status"] == "running":
         return JSONResponse({"status": "running"})
 
     def _run() -> None:
@@ -1488,6 +1499,133 @@ def geo_eval_status() -> JSONResponse:
             except Exception:
                 pass
     return JSONResponse(_GEO_EVAL_STATE)
+
+
+def _build_random_geo_eval_summary(
+    payload: dict,
+    *,
+    sample_size: int,
+    seed: int,
+    profile: Optional[str],
+    retrieval_only: bool,
+) -> dict:
+    diagnostics = payload.get("samples")
+    samples = diagnostics if isinstance(diagnostics, list) else []
+    dists = []
+    for row in samples:
+        if not isinstance(row, dict):
+            continue
+        dist = _to_float(row.get("dist_km"))
+        if dist is None:
+            continue
+        dists.append(dist)
+
+    within_2km = None
+    if dists:
+        within_2km = 100.0 * sum(1 for value in dists if value <= 2.0) / len(dists)
+
+    return {
+        "generated_at": _utc_now_iso(),
+        "mode": "random_samples",
+        "profile": (profile or "").strip().lower() or "default",
+        "retrieval_only": bool(retrieval_only),
+        "requested_samples": int(sample_size),
+        "seed": int(seed),
+        "total": payload.get("total"),
+        "evaluated": payload.get("evaluated"),
+        "missing_files": payload.get("missing_files"),
+        "null_predictions": payload.get("null_predictions"),
+        "mean_km": payload.get("mean_km"),
+        "median_km": payload.get("median_km"),
+        "p90_km": payload.get("p90_km"),
+        "within_1km_pct": payload.get("within_1km_pct"),
+        "within_2km_pct": within_2km,
+        "within_5km_pct": payload.get("within_5km_pct"),
+        "within_10km_pct": payload.get("within_10km_pct"),
+        "within_50km_pct": payload.get("within_50km_pct"),
+        "samples": samples,
+    }
+
+
+@app.post("/eval/geo/random/start")
+def start_geo_random_eval(
+    images_dir: str,
+    metadata: str,
+    sample_size: int = 12,
+    profile: Optional[str] = None,
+    retrieval_only: Optional[str] = None,
+) -> JSONResponse:
+    if _GEO_EVAL_STATE["status"] == "running" or _GEO_RANDOM_STATE["status"] == "running":
+        return JSONResponse({"status": "running"})
+
+    def _run() -> None:
+        _GEO_RANDOM_STATE["status"] = "running"
+        _GEO_RANDOM_STATE["last_result"] = None
+        try:
+            output_path = Path("src/dashboard/data/geo_eval_random.json")
+            progress_path = Path("src/dashboard/data/geo_eval_random.progress.json")
+            _GEO_RANDOM_STATE["progress_path"] = str(progress_path)
+            from src.tools.run_geo_eval import main as run_geo_eval
+
+            random_seed = random.randint(1, 2_147_483_647)
+            _GEO_RANDOM_STATE["seed"] = int(random_seed)
+            safe_sample_size = max(1, min(int(sample_size), 1000))
+            args = [
+                "--images-dir",
+                images_dir,
+                "--metadata",
+                metadata,
+                "--output",
+                str(output_path),
+                "--progress",
+                str(progress_path),
+                "--limit",
+                str(safe_sample_size),
+                "--diag-samples",
+                str(safe_sample_size),
+                "--seed",
+                str(random_seed),
+                "--config",
+                str(_config_path_for_profile(profile)),
+            ]
+            retrieval_enabled = True
+            if retrieval_only is not None and str(retrieval_only).lower() in {"0", "false", "no"}:
+                retrieval_enabled = False
+            if retrieval_enabled:
+                args.append("--retrieval-only")
+            run_geo_eval(args)
+            if output_path.exists():
+                report = json.loads(output_path.read_text(encoding="utf-8"))
+                summary = _build_random_geo_eval_summary(
+                    report,
+                    sample_size=safe_sample_size,
+                    seed=random_seed,
+                    profile=profile,
+                    retrieval_only=retrieval_enabled,
+                )
+                _GEO_RANDOM_STATE["last_result"] = json.dumps(summary, indent=2, ensure_ascii=False)
+            _GEO_RANDOM_STATE["status"] = "done"
+        except Exception as exc:
+            _GEO_RANDOM_STATE["status"] = "error"
+            _GEO_RANDOM_STATE["last_result"] = str(exc)
+
+    import threading
+
+    threading.Thread(target=_run, daemon=True).start()
+    return JSONResponse({"status": "running"})
+
+
+@app.get("/eval/geo/random/status")
+def geo_random_eval_status() -> JSONResponse:
+    progress_path = _GEO_RANDOM_STATE.get("progress_path")
+    if progress_path:
+        path = Path(progress_path)
+        if path.exists():
+            try:
+                _GEO_RANDOM_STATE["progress"] = json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+    return JSONResponse(_GEO_RANDOM_STATE)
 
 
 def _extract_eval_summary(path: Path) -> dict:
