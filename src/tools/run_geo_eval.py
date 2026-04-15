@@ -308,6 +308,7 @@ def main(argv: Optional[list[str]] = None) -> None:
         "p75_km": percentile(75),
         "p95_km": percentile(95),
         "within_1km_pct": pct_within(1.0),
+        "within_2km_pct": pct_within(2.0),
         "within_5km_pct": pct_within(5.0),
         "within_10km_pct": pct_within(10.0),
         "within_50km_pct": pct_within(50.0),
