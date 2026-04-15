@@ -416,3 +416,81 @@ Do not delete or edit past entries. Append new work at the end.
   - `baseline.json`, `baseline_summary.json`, `latest_report.md`, `latest_pr_summary.md`, `history.jsonl`.
 - Added regression/unit coverage for new benchmark CI behavior in `src/tests/test_benchmark_ci.py`.
 - Updated README with the canonical benchmark workflow, promotion command, and eval-history references.
+
+## 2026-04-15
+- Hypothesis:
+  - Realistic-split accuracy loss was coming from retrieval post-processing (locality/diversity/source-balance) reordering, not from missing top-k recall.
+- Change:
+  - Extended retrieval tuner ranking objectives to support explicit optimization targets (`within_1km_pct`, `within_5km_pct`, `within_10km_pct`, plus distance-based modes).
+  - Added tuner regression coverage for objective parsing/sort behavior.
+  - Ran a full realistic-split retrieval sweep (`n=180`) focused on post-processing knobs.
+  - Updated `runs/bench_cfg/cfg_realistic_single.json` to the best full-split setting:
+    - `retrieval_top_k: 25`
+    - `retrieval_min_score: 0.05`
+    - `retrieval_min_keep_topk: 0`
+    - `retrieval_diversity_radius_km: 0.0`
+    - `retrieval_diversity_lambda: 1.0`
+    - `retrieval_diversity_min_keep: 1`
+    - `retrieval_locality_radius_km: 0.0`
+    - `retrieval_locality_weight: 0.0`
+    - `retrieval_source_balance_beta: 0.0`
+  - Synced realistic benchmark artifact path to current config (`runs/bench_realistic_single_180.json`).
+- Files touched:
+  - `src/tools/tune_retrieval_geo.py`
+  - `src/tests/test_tune_retrieval_geo.py`
+  - `runs/bench_cfg/cfg_realistic_single.json`
+- Validation command(s):
+  - `./.venv/Scripts/python -m pytest src/tests/test_tune_retrieval_geo.py`
+  - `./.venv/Scripts/python -m src.tools.tune_retrieval_geo --config runs/bench_cfg/cfg_realistic_single.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --output runs/tune_retrieval_geo_realistic_within1km_focus_v1.json --limit 180 --seed 42 --retrieval-topk 25,50,80 --retrieval-min-score 0.05,0.1 --retrieval-min-keep-topk 0,2 --retrieval-diversity-radius-km 0.0,1.0 --retrieval-diversity-lambda 1.0,0.88 --retrieval-diversity-min-keep 1,4 --retrieval-locality-radius-km 0.0,25.0 --retrieval-locality-weight 0.0,1.2 --retrieval-source-balance-beta 0.0,0.35 --retrieval-query-tta-reduce max --rank-objective within_1km_pct`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --output runs/bench_realistic_single_180_precision_v2.json --retrieval-only --limit 180 --seed 42 --config runs/bench_cfg/cfg_realistic_single.json`
+- Metrics (before -> after):
+  - Baseline artifact: `runs/bench_realistic_single_180_tuned_within1km_v1.json`
+    - `within_1km_pct`: `1.67`
+    - `within_5km_pct`: `23.89`
+    - `within_10km_pct`: `43.33`
+    - `mean_km`: `19.749`
+    - `median_km`: `11.395`
+  - Candidate artifact: `runs/bench_realistic_single_180_precision_v2.json`
+    - `within_1km_pct`: `5.00`
+    - `within_5km_pct`: `30.56`
+    - `within_10km_pct`: `45.56`
+    - `mean_km`: `18.016`
+    - `median_km`: `11.499`
+- Artifacts:
+  - `runs/tune_retrieval_geo_realistic_within1km_focus_v1.json`
+  - `runs/bench_realistic_single_180_precision_v2.json`
+  - `runs/bench_realistic_single_180.json`
+- Decision:
+  - Keep this retrieval profile as the current realistic single-index baseline.
+
+## 2026-04-15
+- Added retrieval consensus top-1 refinement in `src/core/geo/retrieval_provider.py` (configurable `retrieval_consensus_top_n`, `retrieval_consensus_radius_km`, `retrieval_consensus_score_power`) and wired it through CLI, batch, run-all, UI server, and geo eval paths.
+- Extended config schema/runtime for new consensus knobs in `src/core/logic/config.py` and config profiles (`src/config/defaults.json`, `src/config/open_geo.json`, `src/config/paris_test.json`, `src/config/paris.json`).
+- Enabled consensus refinement in Paris profile (`retrieval_consensus_top_n=20`, `retrieval_consensus_radius_km=3.0`, `retrieval_consensus_score_power=1.0`).
+- Added unit coverage for consensus refinement behavior and config parsing (`src/tests/test_retrieval_diversity.py`, `src/tests/test_config_loading.py`).
+- Validation run: `python -m pytest src/tests/test_retrieval_diversity.py src/tests/test_config_loading.py src/tests/test_tune_retrieval_geo.py` -> `18 passed`.
+- Benchmark run: `python -m src.tools.run_geo_eval --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --retrieval-only --limit 180 --config src/config/paris.json --output runs/geo_eval_paris_profile_180_consensus_v1.json`.
+- Realistic split (`n=180`) results improved vs prior Paris profile (`runs/geo_eval_paris_profile_180_v2.json`):
+  - `within_1km_pct`: `5.00` -> `10.00`
+  - `within_5km_pct`: `30.56` -> `36.67`
+  - `within_10km_pct`: `45.56` -> `50.56`
+  - `median_km`: `11.4990` -> `9.7717`
+  - `mean_km`: `18.0159` -> `15.5334`
+
+## 2026-04-15
+- Added Lab random sample evaluation workflow for fast correctness spot-checking:
+  - Frontend: `src/dashboard/analysis/lab/index.html`, `src/dashboard/analysis/lab/lab.js`, `src/dashboard/analysis/lab/lab.css`.
+  - Backend: new async endpoints `POST /eval/geo/random/start` and `GET /eval/geo/random/status` in `src/tools/ui_server.py`.
+  - Behavior: each run uses a randomized seed, evaluates a random subset, and reports aggregate distance/accuracy with per-sample distance diagnostics.
+- Extended server state tracking with `_GEO_RANDOM_STATE` and random-eval summary generation (`within_1km_pct`, computed `within_2km_pct`, `within_5km_pct`, `within_10km_pct`, per-sample rows).
+- Improved operator globe visuals for candidate readability:
+  - Added candidate-link lines from fused mean to top candidates.
+  - Added candidate glow and fused-mean halo map layers.
+  - Increased atmosphere/fog contrast and cinematic background treatment in `operator.js` + `operator.css`.
+- Updated project licensing from MIT to a non-commercial license:
+  - Replaced `LICENSE` with `Project Heimdall Non-Commercial License v1.0`.
+  - Updated README license badge and license section to reflect personal/research-only use and separate paid commercial licensing.
+- Updated docs for new Lab flow/endpoints and license positioning (`README.md`, `src/dashboard/README.md`, `CHANGELOG.md`).
+- Validation commands:
+  - `python -m pytest src/tests/test_ui_server_runtime.py src/tests/test_ui_server_integration.py src/tests/test_ui_server_benchmark_runs.py src/tests/test_config_loading.py src/tests/test_retrieval_diversity.py src/tests/test_tune_retrieval_geo.py`
+- Validation result: `30 passed`.

@@ -68,6 +68,9 @@ def test_load_config_spatial_consensus_defaults() -> None:
         assert cfg.geolocator.candidate_source_balance_beta == 0.0
         assert cfg.geolocator.retrieval_locality_radius_km == 0.0
         assert cfg.geolocator.retrieval_locality_weight == 0.0
+        assert cfg.geolocator.retrieval_consensus_top_n == 0
+        assert cfg.geolocator.retrieval_consensus_radius_km == 0.0
+        assert cfg.geolocator.retrieval_consensus_score_power == 1.0
         assert cfg.geolocator.retrieval_query_tta_degrees == (0.0,)
         assert cfg.geolocator.retrieval_query_tta_reduce == "mean"
 
@@ -134,6 +137,9 @@ def test_load_config_spatial_consensus_overrides() -> None:
                     "retrieval_min_keep_topk": 2,
                     "retrieval_locality_radius_km": 80.0,
                     "retrieval_locality_weight": 1.4,
+                    "retrieval_consensus_top_n": 18,
+                    "retrieval_consensus_radius_km": 3.2,
+                    "retrieval_consensus_score_power": 1.3,
                     "retrieval_query_tta_degrees": [0.0, 90.0, 180.0],
                     "retrieval_query_tta_reduce": "rrf",
                 },
@@ -194,6 +200,9 @@ def test_load_config_spatial_consensus_overrides() -> None:
         assert cfg.geolocator.retrieval_min_keep_topk == 2
         assert cfg.geolocator.retrieval_locality_radius_km == 80.0
         assert cfg.geolocator.retrieval_locality_weight == 1.4
+        assert cfg.geolocator.retrieval_consensus_top_n == 18
+        assert cfg.geolocator.retrieval_consensus_radius_km == 3.2
+        assert cfg.geolocator.retrieval_consensus_score_power == 1.3
         assert cfg.geolocator.retrieval_query_tta_degrees == (0.0, 90.0, 180.0)
         assert cfg.geolocator.retrieval_query_tta_reduce == "rrf"
 
