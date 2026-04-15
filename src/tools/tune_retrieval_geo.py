@@ -28,6 +28,7 @@ _VALID_RANK_OBJECTIVE = {
     "mean_km",
     "p90_km",
     "within_1km_pct",
+    "within_2km_pct",
     "within_5km_pct",
     "within_10km_pct",
 }
@@ -82,6 +83,14 @@ def _result_sort_key(row: dict, objective: str) -> tuple:
     nulls = int(row.get("null_predictions", 0) or 0)
     if mode == "within_1km_pct":
         return (nulls, _safe_neg(row.get("within_1km_pct")), _safe_inf(row.get("median_km")), _safe_inf(row.get("mean_km")))
+    if mode == "within_2km_pct":
+        return (
+            nulls,
+            _safe_neg(row.get("within_2km_pct")),
+            _safe_neg(row.get("within_1km_pct")),
+            _safe_inf(row.get("median_km")),
+            _safe_inf(row.get("mean_km")),
+        )
     if mode == "within_5km_pct":
         return (nulls, _safe_neg(row.get("within_5km_pct")), _safe_inf(row.get("median_km")), _safe_inf(row.get("mean_km")))
     if mode == "within_10km_pct":
@@ -197,6 +206,7 @@ def _evaluate_samples(samples: Iterable[RetrievalSample], **kwargs) -> dict:
         "median_km": (distances[evaluated // 2]) if evaluated else None,
         "p90_km": _percentile(distances, 90),
         "within_1km_pct": _pct_within(distances, 1.0),
+        "within_2km_pct": _pct_within(distances, 2.0),
         "within_5km_pct": _pct_within(distances, 5.0),
         "within_10km_pct": _pct_within(distances, 10.0),
         "within_50km_pct": _pct_within(distances, 50.0),
@@ -301,7 +311,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument(
         "--rank-objective",
         default="balanced",
-        help="How to rank tuning results: balanced, median_km, mean_km, p90_km, within_1km_pct, within_5km_pct, within_10km_pct.",
+        help="How to rank tuning results: balanced, median_km, mean_km, p90_km, within_1km_pct, within_2km_pct, within_5km_pct, within_10km_pct.",
     )
     parser.add_argument("--apply-best-config", action="store_true")
     args = parser.parse_args(argv)

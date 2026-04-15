@@ -69,6 +69,7 @@ def test_evaluate_samples_uses_top_candidate_distance() -> None:
     assert metrics["evaluated"] == 1
     assert metrics["null_predictions"] == 1
     assert metrics["within_1km_pct"] == 100.0
+    assert metrics["within_2km_pct"] == 100.0
 
 
 def test_postprocess_candidates_min_keep_topk_can_override_threshold() -> None:
@@ -158,6 +159,7 @@ def test_write_best_to_config_updates_tta_reduce() -> None:
 
 def test_parse_rank_objective_unknown_falls_back_to_balanced() -> None:
     assert _parse_rank_objective("within_1km_pct") == "within_1km_pct"
+    assert _parse_rank_objective("within_2km_pct") == "within_2km_pct"
     assert _parse_rank_objective("not_a_mode") == "balanced"
 
 
@@ -182,3 +184,24 @@ def test_result_sort_key_within_1km_prefers_higher_recall() -> None:
     ]
     ranked = sorted(rows, key=lambda item: _result_sort_key(item, "within_1km_pct"))
     assert ranked[0]["within_1km_pct"] == 70.0
+
+
+def test_result_sort_key_within_2km_prefers_higher_recall() -> None:
+    rows = [
+        {
+            "null_predictions": 0,
+            "within_2km_pct": 72.0,
+            "within_1km_pct": 50.0,
+            "median_km": 1.2,
+            "mean_km": 2.8,
+        },
+        {
+            "null_predictions": 0,
+            "within_2km_pct": 78.0,
+            "within_1km_pct": 48.0,
+            "median_km": 1.5,
+            "mean_km": 3.0,
+        },
+    ]
+    ranked = sorted(rows, key=lambda item: _result_sort_key(item, "within_2km_pct"))
+    assert ranked[0]["within_2km_pct"] == 78.0

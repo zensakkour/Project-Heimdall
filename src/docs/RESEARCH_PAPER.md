@@ -116,9 +116,9 @@ A governance layer was added to prevent ad-hoc metric claims:
 - Added `median` TTA reduce support.
 - Extended retrieval tuning to sweep TTA reduce modes (`mean`, `median`, `max`, `rrf`).
 - Added best-mode writeback support in tuning workflow.
-- Added objective-driven ranking in retrieval tuning (`within_1km_pct`, `within_5km_pct`, `within_10km_pct`).
+- Added objective-driven ranking in retrieval tuning (`within_1km_pct`, `within_2km_pct`, `within_5km_pct`, `within_10km_pct`).
 - Ran full realistic-split retrieval post-processing sweep (`n=180`) and retuned realistic single-index profile to a simplified ranking path (locality/diversity/source-balance disabled).
-- Added retrieval consensus top-1 refinement (`retrieval_consensus_top_n`, `retrieval_consensus_radius_km`, `retrieval_consensus_score_power`) and validated additional close-range gains on the same realistic split.
+- Added retrieval consensus top-1 refinement (`retrieval_consensus_top_n`, `retrieval_consensus_radius_km`, `retrieval_consensus_score_power`) and upgraded center estimation to adaptive centroid/weighted-geo-median selection for local outlier robustness.
 - Added a Lab random-sample evaluation mode for lightweight spot-checking of per-sample distance errors and quick accuracy sanity checks between full benchmark runs.
 
 ## 6. Experimental Protocol
@@ -129,7 +129,7 @@ A governance layer was added to prevent ad-hoc metric claims:
 
 ### 6.2 Core Metrics
 - Distance metrics: `mean_km`, `median_km`, `p90_km`, `p95_km`.
-- Radius accuracy: `within_1km_pct`, `within_5km_pct`, `within_10km_pct`, `within_50km_pct`.
+- Radius accuracy: `within_1km_pct`, `within_2km_pct`, `within_5km_pct`, `within_10km_pct`, `within_50km_pct`.
 - Coverage diagnostics: `evaluated`, `null_predictions`.
 
 ### 6.3 Reliability Metrics (available in tooling)
