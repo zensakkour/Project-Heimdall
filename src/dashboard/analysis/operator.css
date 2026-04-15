@@ -200,9 +200,9 @@
 }
 
 .hero-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  row-gap: 12px;
   padding: 14px;
   border: 1px solid rgba(96, 124, 140, 0.24);
   background:
@@ -257,12 +257,14 @@
 }
 
 #canvas {
-  min-height: 460px;
+  min-height: 540px;
+  height: 540px;
   cursor: grab;
 }
 
 .globe-canvas {
-  height: 620px;
+  min-height: 540px;
+  height: 540px;
   overflow: hidden;
   position: relative;
 }
@@ -295,10 +297,12 @@
 .map-legend {
   display: flex;
   min-height: 22px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 10px;
   font-size: 11px;
+  white-space: nowrap;
+  overflow-x: hidden;
 }
 
 .image-legend {
@@ -307,6 +311,8 @@
   align-items: center;
   gap: 10px;
   font-size: 11px;
+  white-space: nowrap;
+  overflow-x: hidden;
 }
 
 .legend-dot {
