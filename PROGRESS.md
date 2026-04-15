@@ -564,3 +564,52 @@ Do not delete or edit past entries. Append new work at the end.
   - `runs/geo_eval_paris_profile_180_consensus_v4_adaptive_guarded.json`
 - Decision:
   - Keep guarded adaptive-center consensus as current candidate behavior; it improves close-range hit rate (`within_1km_pct`) with flat median/radius metrics and adds first-class `within_2km_pct` tracking for the 1-2 km target.
+
+## 2026-04-15
+- Hypothesis:
+  - The external deep research review suggests rank-based multi-index source fusion (RRF) could improve robustness to inter-source score-scale mismatch.
+- Change:
+  - Merged `tech/accuracy-rtx5060-sprint` into `master`, then synced and pushed all active branches (`feature/film-ui-operator-lab`, `tech/eval-regression-lab`, `tech/geo-retrieval-v3`, `tech/model-hardening`, `tech/accuracy-rtx5060-sprint`).
+  - Implemented retrieval source-fusion mode control in runtime/config:
+    - new knob `geolocator.retrieval_source_fusion_mode` with `weighted_score` (default) and `rrf`.
+    - wired through config loader + retrieval provider + runtime tool paths (`run_geo_eval`, `run_all`, `ui_server`, `tune_retrieval_geo`).
+  - Added regression tests for:
+    - config parsing/default/fallback for source-fusion mode,
+    - retrieval multi-index RRF aggregation behavior.
+  - Added benchmark trial config `runs/bench_cfg/cfg_paris_sourcefusion_rrf.json` and executed weighted-vs-rrf comparison on realistic split.
+  - Updated docs (`README.md`, `src/docs/GEO_TECH.md`, `src/docs/RESEARCH_PAPER.md`, `CHANGELOG.md`) and added a research-paper section with prioritized approaches from `deep-research-report.md`.
+- Files touched:
+  - `src/core/geo/retrieval_provider.py`
+  - `src/core/logic/config.py`
+  - `src/tools/run_geo_eval.py`
+  - `src/tools/run_all.py`
+  - `src/tools/ui_server.py`
+  - `src/tools/tune_retrieval_geo.py`
+  - `src/config/defaults.json`
+  - `src/config/open_geo.json`
+  - `src/config/paris.json`
+  - `src/config/paris_test.json`
+  - `src/tests/test_config_loading.py`
+  - `src/tests/test_retrieval_provider_multi_index.py`
+  - `README.md`
+  - `src/docs/GEO_TECH.md`
+  - `src/docs/RESEARCH_PAPER.md`
+  - `CHANGELOG.md`
+- Validation command(s):
+  - `./.venv/Scripts/python -m pytest src/tests/test_config_loading.py src/tests/test_retrieval_provider_multi_index.py src/tests/test_retrieval_tta.py src/tests/test_tune_retrieval_geo.py src/tests/test_ui_server_runtime.py`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --retrieval-only --limit 180 --seed 42 --config src/config/paris.json --output runs/geo_eval_paris_profile_180_sourcefusion_weighted_v1.json`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --retrieval-only --limit 180 --seed 42 --config runs/bench_cfg/cfg_paris_sourcefusion_rrf.json --output runs/geo_eval_paris_profile_180_sourcefusion_rrf_v1.json`
+- Metrics (weighted_score -> rrf):
+  - `mean_km`: `15.5569` -> `16.7288`
+  - `median_km`: `9.7717` -> `11.0527`
+  - `within_1km_pct`: `10.56` -> `7.78`
+  - `within_2km_pct`: `19.44` -> `17.78`
+  - `within_5km_pct`: `36.67` -> `34.44`
+  - `within_10km_pct`: `50.56` -> `44.44`
+- Artifacts:
+  - `runs/geo_eval_paris_profile_180_sourcefusion_weighted_v1.json`
+  - `runs/geo_eval_paris_profile_180_sourcefusion_rrf_v1.json`
+  - `runs/bench_cfg/cfg_paris_sourcefusion_rrf.json`
+- Decision:
+  - Keep `retrieval_source_fusion_mode` support as an experimental option, but do not switch default profile behavior from `weighted_score` at this stage.
+  - Next highest-priority direction from the research review: benchmark remote-sensing-native backbones (RemoteCLIP/SatCLIP family) on the same realistic split.

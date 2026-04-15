@@ -49,6 +49,7 @@ def main() -> int:
             top_k=cfg.geolocator.retrieval_top_k,
             per_index_top_k=cfg.geolocator.retrieval_per_index_top_k,
             index_score_norm=cfg.geolocator.retrieval_index_score_norm,
+            source_fusion_mode=cfg.geolocator.retrieval_source_fusion_mode,
             source_balance_beta=cfg.geolocator.retrieval_source_balance_beta,
             min_score=cfg.geolocator.retrieval_min_score,
             min_keep_topk=cfg.geolocator.retrieval_min_keep_topk,

@@ -256,6 +256,13 @@ def _normalize_index_score_norm(mode: object) -> str:
     return text
 
 
+def _normalize_source_fusion_mode(mode: object) -> str:
+    text = str(mode).strip().lower()
+    if text not in {"weighted_score", "rrf"}:
+        return "weighted_score"
+    return text
+
+
 def _normalize_scores_for_source(scores: np.ndarray, mode: str) -> np.ndarray:
     reduce_mode = _normalize_index_score_norm(mode)
     if reduce_mode == "none":
@@ -326,11 +333,38 @@ def _collect_weighted_ranked_candidates(
     reduce_mode: str,
     index_score_norm: str,
 ) -> Tuple[List[GeoCandidate], int]:
+    return _collect_ranked_candidates(
+        loaded_indices=loaded_indices,
+        index_weights=index_weights,
+        query_mats_by_model=query_mats_by_model,
+        global_top_k=global_top_k,
+        per_index_top_k=per_index_top_k,
+        reduce_mode=reduce_mode,
+        index_score_norm=index_score_norm,
+        source_fusion_mode="weighted_score",
+    )
+
+
+def _collect_ranked_candidates(
+    *,
+    loaded_indices: Sequence[LoadedRetrievalIndex],
+    index_weights: Sequence[float],
+    query_mats_by_model: dict[str, np.ndarray],
+    global_top_k: int,
+    per_index_top_k: int,
+    reduce_mode: str,
+    index_score_norm: str,
+    source_fusion_mode: str,
+) -> Tuple[List[GeoCandidate], int]:
     merged: List[GeoCandidate] = []
     fallback_model_id = next(iter(query_mats_by_model.keys()), "")
+    fusion_mode = _normalize_source_fusion_mode(source_fusion_mode)
     effective_norm = _normalize_index_score_norm(index_score_norm)
     if effective_norm == "auto":
         effective_norm = "zscore_sigmoid" if len(loaded_indices) > 1 else "none"
+    # Rank-fusion mode aggregates per-source ranks and is intentionally score-scale agnostic.
+    rrf_k = 60.0
+    rrf_accum: dict[tuple[float, float], dict[str, object]] = {}
     for idx, loaded in enumerate(loaded_indices):
         index = loaded.index
         model_id = getattr(loaded, "model_id", "") or fallback_model_id
@@ -349,19 +383,59 @@ def _collect_weighted_ranked_candidates(
             int(scores.size),
         )
         weight = float(index_weights[idx]) if idx < len(index_weights) else 1.0
-        for item_idx in _top_indices(scores, per_source_top):
+        top_order = list(_top_indices(scores, per_source_top))
+        for rank, item_idx in enumerate(top_order, start=1):
             lat = float(index.latitudes[item_idx])
             lon = float(index.longitudes[item_idx])
             if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
                 continue
             raw_score = max(-1.0, min(1.0, float(scores[item_idx])))
+            match_id = _format_retrieval_match_id(loaded.source, index.ids[item_idx])
+            if fusion_mode == "rrf":
+                key = (round(lat, 5), round(lon, 5))
+                state = rrf_accum.get(key)
+                contrib = max(0.0, weight) / (rrf_k + float(rank))
+                if state is None:
+                    rrf_accum[key] = {
+                        "latitude": lat,
+                        "longitude": lon,
+                        "score": float(contrib),
+                        "match_id": match_id,
+                        "best_raw": raw_score,
+                    }
+                else:
+                    state["score"] = float(state["score"]) + float(contrib)
+                    if raw_score > float(state.get("best_raw", -1.0)):
+                        state["best_raw"] = raw_score
+                        state["match_id"] = match_id
+                continue
             weighted = max(-1.0, min(1.0, raw_score * weight))
             merged.append(
                 GeoCandidate(
                     latitude=lat,
                     longitude=lon,
                     retrieval_score=weighted,
-                    match_id=_format_retrieval_match_id(loaded.source, index.ids[item_idx]),
+                    match_id=match_id,
+                )
+            )
+
+    if fusion_mode == "rrf" and rrf_accum:
+        totals = np.asarray([float(item["score"]) for item in rrf_accum.values()], dtype=np.float32)
+        lo = float(np.min(totals))
+        hi = float(np.max(totals))
+        span = hi - lo
+        for item in rrf_accum.values():
+            total = float(item["score"])
+            if span < 1e-9:
+                fused = 0.5
+            else:
+                fused = (total - lo) / span
+            merged.append(
+                GeoCandidate(
+                    latitude=float(item["latitude"]),
+                    longitude=float(item["longitude"]),
+                    retrieval_score=max(1e-6, min(1.0, float(fused))),
+                    match_id=str(item["match_id"]),
                 )
             )
 
@@ -454,6 +528,7 @@ class GeoRetrievalProvider:
         consensus_score_power: float = 1.0,
         query_tta_degrees: Optional[Sequence[float]] = None,
         query_tta_reduce: str = "mean",
+        source_fusion_mode: str = "weighted_score",
     ) -> None:
         self.index_paths = _normalize_index_paths(index_path=index_path, index_paths=index_paths)
         self.index_weights = _normalize_index_weights(index_weights, len(self.index_paths))
@@ -466,6 +541,7 @@ class GeoRetrievalProvider:
         self.top_k = top_k
         self.per_index_top_k = max(0, int(per_index_top_k))
         self.index_score_norm = _normalize_index_score_norm(index_score_norm)
+        self.source_fusion_mode = _normalize_source_fusion_mode(source_fusion_mode)
         self.source_balance_beta = max(0.0, float(source_balance_beta))
         self.min_score = min_score
         self.min_keep_topk = max(0, int(min_keep_topk))
@@ -515,7 +591,7 @@ class GeoRetrievalProvider:
                     continue
                 other = self._ensure_embedder_for_model(model_id)
                 query_mats_by_model[model_id] = _query_embeddings(other, image, self.query_tta_degrees)
-            ranked, top_k = _collect_weighted_ranked_candidates(
+            ranked, top_k = _collect_ranked_candidates(
                 loaded_indices=loaded_indices,
                 index_weights=self.index_weights,
                 query_mats_by_model=query_mats_by_model,
@@ -523,6 +599,7 @@ class GeoRetrievalProvider:
                 per_index_top_k=self.per_index_top_k,
                 reduce_mode=self.query_tta_reduce,
                 index_score_norm=self.index_score_norm,
+                source_fusion_mode=self.source_fusion_mode,
             )
             if not ranked:
                 self.last_error = "index_empty"
