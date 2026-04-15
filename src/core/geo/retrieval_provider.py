@@ -473,7 +473,7 @@ class GeoRetrievalProvider:
         self.locality_weight = max(0.0, float(locality_weight))
         self.query_tta_degrees = _normalize_tta_degrees(query_tta_degrees)
         reduce_mode = str(query_tta_reduce).lower()
-        if reduce_mode not in {"mean", "max", "rrf"}:
+        if reduce_mode not in {"mean", "median", "max", "rrf"}:
             reduce_mode = "mean"
         self.query_tta_reduce = reduce_mode
         self._indices: Optional[List[LoadedRetrievalIndex]] = None
@@ -770,6 +770,8 @@ def _aggregate_tta_scores(scores_aug: np.ndarray, mode: str = "mean") -> np.ndar
     reduce_mode = str(mode).lower()
     if reduce_mode == "max":
         out = np.max(scores_aug, axis=1)
+    elif reduce_mode == "median":
+        out = np.median(scores_aug, axis=1)
     elif reduce_mode == "rrf":
         out = _rrf_aggregate(scores_aug)
     else:
