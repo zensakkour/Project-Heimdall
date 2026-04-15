@@ -3,6 +3,8 @@
 Version: v1.0  
 Date: April 15, 2026
 
+Companion external landscape review: `src/docs/MARKET_RESEARCH.md`.
+
 ## Title
 Project Heimdall: Benchmark-Governed Geolocation from Imagery via Multi-Provider Retrieval, Robust Probabilistic Fusion, and Uncertainty-Aware Analysis
 
