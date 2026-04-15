@@ -102,22 +102,9 @@
           </div>
 
           <div class="hero-grid">
-            <article class="hero-panel photo-stage">
-              <div class="panel-head">
-                <h3 class="panel-title">Source Photo</h3>
-                <span class="muted">Scroll to zoom, drag to pan</span>
-              </div>
-              <canvas id="canvas" width="960" height="640"></canvas>
-              <div class="image-toolbar">
-                <button id="zoom-in">Zoom In</button>
-                <button id="zoom-out">Zoom Out</button>
-                <button id="zoom-reset">Reset</button>
-              </div>
-            </article>
-
             <article class="hero-panel map-stage">
               <div class="panel-head">
-                <h3 class="panel-title">Fused Location</h3>
+                <h3 class="panel-title">Fused Location (Primary)</h3>
                 <label class="legend-control muted">
                   Show top
                   <select id="live-topn">
@@ -142,6 +129,19 @@
                 <button id="map-zoom-in">Zoom In</button>
                 <button id="map-zoom-out">Zoom Out</button>
                 <button id="map-zoom-reset">Reset</button>
+              </div>
+            </article>
+
+            <article class="hero-panel photo-stage">
+              <div class="panel-head">
+                <h3 class="panel-title">Source Photo</h3>
+                <span class="muted">Scroll to zoom, drag to pan</span>
+              </div>
+              <canvas id="canvas" width="960" height="640"></canvas>
+              <div class="image-toolbar">
+                <button id="zoom-in">Zoom In</button>
+                <button id="zoom-out">Zoom Out</button>
+                <button id="zoom-reset">Reset</button>
               </div>
             </article>
           </div>
