@@ -644,3 +644,39 @@ Do not delete or edit past entries. Append new work at the end.
   - No benchmark artifact generated in this prompt cycle.
 - Decision:
   - Keep and use `upgrade_retrieval_backbone` as the standard path for aerial retrieval backbone upgrades on single-GPU runs.
+
+## 2026-04-16
+- Hypothesis:
+  - Running the new backbone-upgrade flow and a focused `within_2km_pct` retrieval sweep on the realistic split should produce measurable close-range uplift.
+- Change:
+  - Executed baseline realistic retrieval-only eval (`n=180`) before changes.
+  - Ran aerial backbone benchmark preset (`aerial_rtx5060_precise`) with objective `within_2km_pct`:
+    - compared `google/siglip-so400m-patch14-384`, `google/siglip-base-patch16-224`, and `openai/clip-vit-large-patch14`.
+  - Ran focused retrieval tuning sweep on Paris profile (`3456` combinations, objective `within_2km_pct`) and applied best-config output.
+  - Executed post-tune realistic retrieval-only eval (`n=180`) and compared pre/post metrics.
+  - Reverted non-improving config changes in `src/config/paris.json` (`retrieval_top_k` back to `25`, `retrieval_min_score` back to `0.05`) because end-to-end metrics were unchanged.
+- Files touched:
+  - `src/config/paris.json`
+  - `PROGRESS.md`
+  - `src/docs/RESEARCH_PAPER.md`
+- Validation command(s):
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --retrieval-only --limit 180 --seed 42 --config src/config/paris.json --output runs/geo_eval_paris_profile_180_pre_backbone_upgrade_v1.json`
+  - `./.venv/Scripts/python -m src.tools.upgrade_retrieval_backbone --train-images-dir data/spacenet_paris/chips --train-metadata data/spacenet_paris/metadata.csv --eval-images-dir data/spacenet_paris_test/chips --eval-metadata data/spacenet_paris_test/metadata.csv --config src/config/paris.json --model-preset aerial_rtx5060_precise --rank-objective within_2km_pct --benchmark-train-limit 600 --benchmark-eval-limit 180 --seed 42 --output-dir runs/backbone_upgrade_rtx5060_v1 --reuse-indices`
+  - `./.venv/Scripts/python -m src.tools.tune_retrieval_geo --config src/config/paris.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 180 --seed 42 --output runs/tune_retrieval_geo_within2km_v1.json --retrieval-topk "20,25,30" --retrieval-min-score "0.03,0.05,0.08" --retrieval-min-keep-topk "0,1" --retrieval-diversity-radius-km "0.0,1.0" --retrieval-diversity-lambda "1.0,0.9" --retrieval-diversity-min-keep "1,3" --retrieval-locality-radius-km "0.0,25.0" --retrieval-locality-weight "0.0,0.8,1.2" --retrieval-source-balance-beta "0.0,0.35" --retrieval-query-tta-reduce "max,mean" --rank-objective within_2km_pct --apply-best-config`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --retrieval-only --limit 180 --seed 42 --config src/config/paris.json --output runs/geo_eval_paris_profile_180_post_tune_v1.json`
+- Metrics (pre -> post):
+  - `mean_km`: `15.5569` -> `15.5569` (`delta=0.0000`)
+  - `median_km`: `9.7717` -> `9.7717` (`delta=0.0000`)
+  - `within_1km_pct`: `10.56` -> `10.56` (`delta=0.00`)
+  - `within_2km_pct`: `19.44` -> `19.44` (`delta=0.00`)
+  - `within_5km_pct`: `36.67` -> `36.67` (`delta=0.00`)
+  - `within_10km_pct`: `50.56` -> `50.56` (`delta=0.00`)
+- Artifacts:
+  - `runs/geo_eval_paris_profile_180_pre_backbone_upgrade_v1.json`
+  - `runs/backbone_upgrade_rtx5060_v1/backbone_benchmark.json`
+  - `runs/tune_retrieval_geo_within2km_v1.json`
+  - `runs/geo_eval_paris_profile_180_post_tune_v1.json`
+- Decision:
+  - Do not switch retrieval backbone from CLIP on this split: benchmark showed CLIP remains best among tested candidates.
+  - Do not keep the tuned config changes from this sweep: no end-to-end metric uplift on the canonical realistic eval.
+  - Next step should be non-trivial method upgrades (domain-adapted retrieval features, re-ranking head, or hard-negative data curation) rather than more local knob sweeps.
