@@ -120,6 +120,8 @@ A governance layer was added to prevent ad-hoc metric claims:
 - Ran full realistic-split retrieval post-processing sweep (`n=180`) and retuned realistic single-index profile to a simplified ranking path (locality/diversity/source-balance disabled).
 - Added retrieval consensus top-1 refinement (`retrieval_consensus_top_n`, `retrieval_consensus_radius_km`, `retrieval_consensus_score_power`) and upgraded center estimation to adaptive centroid/weighted-geo-median selection for local outlier robustness.
 - Added a Lab random-sample evaluation mode for lightweight spot-checking of per-sample distance errors and quick accuracy sanity checks between full benchmark runs.
+- Added aerial retrieval backbone benchmark presets (`aerial_rtx5060_fast`, `aerial_rtx5060_precise`, `aerial_research`) with objective-driven model selection (`within_1km_pct`, `within_2km_pct`, etc.).
+- Added one-command retrieval backbone upgrade workflow (`src.tools.upgrade_retrieval_backbone`) that benchmarks candidate backbones, rebuilds the final index with the selected model, and patches config for reproducible rollout.
 
 ## 6. Experimental Protocol
 ### 6.1 Datasets and Artifacts Used in This Document
@@ -249,6 +251,7 @@ Observation:
 - `retrieval_min_keep_topk` fallback for robustness.
 - Cross-source fusion signals and confidence caps.
 - Benchmark governance with promotion workflow.
+- Automated aerial-backbone upgrade workflow (objective-based backbone benchmark + final-index rebuild + config patch).
 
 ### 8.2 Changes with Conditional Value
 - Query TTA: useful in some regimes, neutral in tested subset.
@@ -288,6 +291,27 @@ Mitigations implemented:
   --images-dir data/spacenet_paris_test/chips `
   --metadata data/spacenet_paris_test/metadata.csv `
   --retrieval-query-tta-reduce max,median,mean,rrf
+
+# Aerial retrieval backbone benchmark (RTX 5060-focused preset)
+.\.venv\Scripts\python -m src.tools.benchmark_geo_backbones `
+  --train-images-dir data/spacenet_paris/chips `
+  --train-metadata data/spacenet_paris/metadata.csv `
+  --eval-images-dir data/spacenet_paris_test/chips `
+  --eval-metadata data/spacenet_paris_test/metadata.csv `
+  --model-preset aerial_rtx5060_precise `
+  --rank-objective within_2km_pct `
+  --output runs/backbone_bench/backbone_benchmark_aerial.json
+
+# One-command backbone upgrade (benchmark -> index rebuild -> config patch)
+.\.venv\Scripts\python -m src.tools.upgrade_retrieval_backbone `
+  --train-images-dir data/spacenet_paris/chips `
+  --train-metadata data/spacenet_paris/metadata.csv `
+  --eval-images-dir data/spacenet_paris_test/chips `
+  --eval-metadata data/spacenet_paris_test/metadata.csv `
+  --config src/config/paris.json `
+  --model-preset aerial_rtx5060_precise `
+  --rank-objective within_2km_pct `
+  --output-dir runs/backbone_upgrade
 ```
 
 ### 10.3 Validation Coverage Recorded in Project Log
