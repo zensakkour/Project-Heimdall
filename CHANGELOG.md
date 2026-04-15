@@ -11,3 +11,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Open-source governance and contribution scaffolding
 
+## Notes
+
+- `CHANGELOG.md` is for release-oriented summaries.
+- Detailed engineering chronology lives in `PROGRESS.md` (append-only).
+- Research-method details live in `src/docs/RESEARCH_PAPER.md`.
