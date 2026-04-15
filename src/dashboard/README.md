@@ -2,10 +2,10 @@
 
 Operator-facing web interface for Project Heimdall.
 
-## What This UI Provides
+## Workspace Layout
 
-- `Analysis` tab: upload and analyze image inputs, inspect detections, review geo ranking, and view fused map output.
-- `Scoring` tab: run geo evaluation against a metadata CSV and monitor progress/results.
+- `/analysis/`: operator mode for photo localization (upload, fused location map, detection evidence).
+- `/analysis/lab/`: model evaluation and benchmark tooling.
 
 ## Run Locally
 
@@ -19,14 +19,19 @@ From repository root:
 
 Open:
 
-- Open the URL printed in your terminal (example: `http://127.0.0.1:8000/analysis/`).
+- Operator UI: URL printed in terminal (example: `http://127.0.0.1:8000/analysis/`).
+- Lab UI: append `/analysis/lab/`.
 
-## Frontend Layout
+## Frontend Files
 
 - `index.html`: root redirect shell
-- `analysis/index.html`: primary analysis interface
-- `analysis/live.js`: UI logic and API calls
-- `analysis/live.css`: analysis-specific styles
+- `analysis/index.html`: operator localization interface
+- `analysis/operator.js`: operator mode logic
+- `analysis/operator.css`: operator mode styling
+- `analysis/lab/index.html`: evaluation and benchmark interface
+- `analysis/lab/lab.js`: lab mode logic
+- `analysis/lab/lab.css`: lab mode styling
+- `analysis/shared.js`: shared frontend utilities
 - `theme.css` and `styles.css`: shared styling system
 
 ## Backend Endpoints Used By UI
@@ -35,8 +40,13 @@ Open:
 - `POST /analyze/video`
 - `POST /eval/geo/start`
 - `GET /eval/geo/status`
-- `POST /eval/dota/start`
-- `GET /eval/dota/status`
+- `POST /eval/benchmarks/start`
+- `GET /eval/benchmarks/status`
+- `GET /eval/benchmarks/runs`
+- `GET /eval/benchmarks/runs/{run_id}`
+- `POST /eval/benchmarks/compare`
+- `POST /fs/pick_dir`
+- `POST /fs/pick_file`
 - `GET /health`
 - `GET /health/deps`
 

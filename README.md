@@ -265,6 +265,7 @@ If filesystem watcher issues occur, run without reload:
 ### 3. Open the app
 
 - Open the URL printed in your terminal (example: `http://127.0.0.1:8000/analysis/`).
+- Open `http://127.0.0.1:8000/analysis/lab/` for scoring and benchmark workflows.
 
 ## How To Use The App
 
@@ -274,18 +275,18 @@ If filesystem watcher issues occur, run without reload:
 .\.venv\Scripts\python -m src.tools.dev_app
 ```
 
-1. Open the `/analysis/` URL printed in terminal.
+1. Open the `/analysis/` URL printed in terminal (operator mode).
 1. Select strategy profile.
 1. Upload image and click `Analyze Image`.
 1. Review detections, geo ranking, and fusion map.
 1. Interact with 3D globe: drag to rotate/pan.
 1. Scroll wheel to zoom in and zoom out.
 1. Use `Zoom In`, `Zoom Out`, and `Reset` buttons.
-1. Open the `Scoring` tab for benchmark/eval tools (separate from upload/live analysis).
+1. Open `/analysis/lab/` for benchmark/eval tools (separate from upload/live analysis).
 
 Benchmark comparison in UI:
 
-1. Go to `Scoring` tab.
+1. Go to `/analysis/lab/`.
 1. In `Benchmark Comparison`, click `Run Benchmark Comparison`.
 1. Review:
    - scenario table (`leaky_reference`, `realistic_single`, `candidate_multi`)
