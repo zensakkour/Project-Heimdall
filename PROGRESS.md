@@ -613,3 +613,18 @@ Do not delete or edit past entries. Append new work at the end.
 - Decision:
   - Keep `retrieval_source_fusion_mode` support as an experimental option, but do not switch default profile behavior from `weighted_score` at this stage.
   - Next highest-priority direction from the research review: benchmark remote-sensing-native backbones (RemoteCLIP/SatCLIP family) on the same realistic split.
+
+## 2026-04-15
+- Added a dedicated external market/SOTA research companion document at `src/docs/MARKET_RESEARCH.md` based on the provided report (`C:\Users\zen\Downloads\deep-research-report.md`).
+- Document scope:
+  - external landscape summary,
+  - datasets/tooling ecosystem,
+  - prioritized roadmap,
+  - explicit "approaches we will consider" list,
+  - current-cycle decision snapshot for retrieval source-fusion mode.
+- Linked the new research companion in:
+  - `README.md` (Project Status Tracking)
+  - `docs/DOCS_MAP.md` (Core Entry Points)
+  - `src/docs/RESEARCH_PAPER.md` (companion reference).
+- Validation:
+  - Documentation-only update; no runtime code path changed.
