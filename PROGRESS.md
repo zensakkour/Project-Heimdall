@@ -522,3 +522,45 @@ Do not delete or edit past entries. Append new work at the end.
   - None generated (code + test + doc update cycle only).
 - Decision:
   - Keep the robustness + metric-targeting changes; run a full realistic benchmark next to quantify `within_1km_pct`/`within_2km_pct` impact.
+
+## 2026-04-15
+- Hypothesis:
+  - A guarded adaptive consensus center (choose centroid by default, switch to weighted geo-median only when local support and center separation justify it) can improve close-range hits without regressing broader metrics.
+- Change:
+  - Updated consensus refinement center selection in `src/core/geo/retrieval_provider.py`:
+    - compute both centroid and weighted geo-median on the consensus cluster,
+    - switch to geo-median only when support is materially higher (`>5%`) and center gap is non-trivial,
+    - otherwise keep centroid.
+  - Added/kept explicit `within_2km_pct` reporting in eval/tuning paths.
+- Files touched:
+  - `src/core/geo/retrieval_provider.py`
+  - `src/tools/run_geo_eval.py`
+  - `src/tools/tune_retrieval_geo.py`
+  - `src/tests/test_retrieval_diversity.py`
+  - `src/tests/test_tune_retrieval_geo.py`
+  - `README.md`
+  - `src/docs/GEO_TECH.md`
+  - `src/docs/RESEARCH_PAPER.md`
+- Validation command(s):
+  - `./.venv/Scripts/python -m pytest src/tests/test_retrieval_diversity.py src/tests/test_tune_retrieval_geo.py`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --retrieval-only --limit 180 --seed 42 --config src/config/paris.json --output runs/geo_eval_paris_profile_180_consensus_v4_adaptive_guarded.json`
+- Metrics (before -> after):
+  - Baseline artifact: `runs/geo_eval_paris_profile_180_consensus_v1.json`
+    - `mean_km`: `15.5334`
+    - `median_km`: `9.7717`
+    - `within_1km_pct`: `10.00`
+    - `within_5km_pct`: `36.67`
+    - `within_10km_pct`: `50.56`
+  - Candidate artifact: `runs/geo_eval_paris_profile_180_consensus_v4_adaptive_guarded.json`
+    - `mean_km`: `15.5569`
+    - `median_km`: `9.7717`
+    - `within_1km_pct`: `10.56`
+    - `within_2km_pct`: `19.44`
+    - `within_5km_pct`: `36.67`
+    - `within_10km_pct`: `50.56`
+- Artifacts:
+  - `runs/geo_eval_paris_profile_180_consensus_v2_geomedian.json`
+  - `runs/geo_eval_paris_profile_180_consensus_v3_adaptive_center.json`
+  - `runs/geo_eval_paris_profile_180_consensus_v4_adaptive_guarded.json`
+- Decision:
+  - Keep guarded adaptive-center consensus as current candidate behavior; it improves close-range hit rate (`within_1km_pct`) with flat median/radius metrics and adds first-class `within_2km_pct` tracking for the 1-2 km target.
