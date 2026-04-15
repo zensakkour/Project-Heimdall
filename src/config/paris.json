@@ -29,6 +29,7 @@
     "retrieval_top_k": 25,
     "retrieval_per_index_top_k": 0,
     "retrieval_index_score_norm": "auto",
+    "retrieval_source_fusion_mode": "weighted_score",
     "retrieval_source_balance_beta": 0.0,
     "retrieval_min_score": 0.05,
     "retrieval_min_keep_topk": 0,

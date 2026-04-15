@@ -31,6 +31,23 @@ def _loaded(path: Path, source: str, idx: RetrievalIndex, model_id: str = "opena
     return LoadedRetrievalIndex(source=source, path=path, model_id=model_id, index=idx)
 
 
+def _index_with_coords(
+    rows: list[list[float]],
+    ids: list[str],
+    lats: list[float],
+    lons: list[float],
+) -> RetrievalIndex:
+    emb = np.asarray(rows, dtype=np.float32)
+    emb = emb / np.clip(np.linalg.norm(emb, axis=1, keepdims=True), 1e-12, None)
+    return RetrievalIndex(
+        embeddings=emb,
+        latitudes=np.asarray(lats, dtype=np.float64),
+        longitudes=np.asarray(lons, dtype=np.float64),
+        ids=np.asarray(ids, dtype=np.str_),
+        paths=np.asarray([f"{item}.jpg" for item in ids], dtype=np.str_),
+    )
+
+
 def test_multi_index_weights_influence_top_candidate() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)
@@ -311,3 +328,61 @@ def test_multi_index_supports_per_index_model_embeddings() -> None:
         ids = {cand.match_id for cand in out}
         assert "retrieval:clip_idx:a1" in ids
         assert "retrieval:siglip_idx:b1" in ids
+
+
+def test_source_fusion_mode_rrf_aggregates_cross_source_support() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        image_path = root / "q.jpg"
+        Image.new("RGB", (16, 16), color=(32, 32, 32)).save(image_path)
+        first = root / "a.npz"
+        second = root / "b.npz"
+        first.write_bytes(b"ok")
+        second.write_bytes(b"ok")
+
+        idx_a = _index_with_coords(
+            rows=[[1.0, 0.0], [0.95, 0.3122499]],
+            ids=["a_unique", "shared_a"],
+            lats=[10.0, 20.0],
+            lons=[10.0, 20.0],
+        )
+        idx_b = _index_with_coords(
+            rows=[[0.96, 0.28], [0.94, 0.3411744]],
+            ids=["shared_b", "b_unique"],
+            lats=[20.0, 30.0],
+            lons=[20.0, 30.0],
+        )
+
+        weighted = GeoRetrievalProvider(
+            index_path=str(first),
+            index_paths=[str(second)],
+            top_k=1,
+            per_index_top_k=2,
+            index_score_norm="none",
+            source_fusion_mode="weighted_score",
+            min_score=-1.0,
+        )
+        weighted._ensure_indices = lambda: [  # type: ignore[method-assign]
+            _loaded(first, "a_idx", idx_a),
+            _loaded(second, "b_idx", idx_b),
+        ]
+        weighted._ensure_embedder = lambda: _StubEmbedder()  # type: ignore[method-assign]
+        out_weighted = weighted.candidates(str(image_path))
+        assert out_weighted
+        assert out_weighted[0].match_id == "retrieval:a_idx:a_unique"
+
+        rrf = GeoRetrievalProvider(
+            index_path=str(first),
+            index_paths=[str(second)],
+            top_k=1,
+            per_index_top_k=2,
+            index_score_norm="none",
+            source_fusion_mode="rrf",
+            min_score=-1.0,
+        )
+        rrf._ensure_indices = weighted._ensure_indices  # type: ignore[method-assign]
+        rrf._ensure_embedder = weighted._ensure_embedder  # type: ignore[method-assign]
+        out_rrf = rrf.candidates(str(image_path))
+        assert out_rrf
+        assert abs(out_rrf[0].latitude - 20.0) < 1e-6
+        assert abs(out_rrf[0].longitude - 20.0) < 1e-6

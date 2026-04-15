@@ -234,6 +234,7 @@ def _collect_raw_samples(
         top_k=max(1, int(max_top_k)),
         per_index_top_k=cfg.geolocator.retrieval_per_index_top_k,
         index_score_norm=cfg.geolocator.retrieval_index_score_norm,
+        source_fusion_mode=cfg.geolocator.retrieval_source_fusion_mode,
         min_score=max(0.0, float(min_score_floor)),
         min_keep_topk=cfg.geolocator.retrieval_min_keep_topk,
         # Keep raw sampling unbiased; sweep source balancing in post-processing.
@@ -413,6 +414,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         "index_model_ids": list(cfg.geolocator.retrieval_index_model_ids),
         "retrieval_per_index_top_k": cfg.geolocator.retrieval_per_index_top_k,
         "retrieval_index_score_norm": cfg.geolocator.retrieval_index_score_norm,
+        "retrieval_source_fusion_mode": cfg.geolocator.retrieval_source_fusion_mode,
         "retrieval_source_balance_beta": cfg.geolocator.retrieval_source_balance_beta,
         "candidate_source_balance_beta": cfg.geolocator.candidate_source_balance_beta,
         "retrieval_query_tta_degrees": list(cfg.geolocator.retrieval_query_tta_degrees),
