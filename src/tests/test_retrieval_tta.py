@@ -16,7 +16,7 @@ def test_normalize_tta_degrees_dedupes_and_wraps() -> None:
     assert vals == [0.0, 90.0, -180.0]
 
 
-def test_aggregate_tta_scores_mean_and_max() -> None:
+def test_aggregate_tta_scores_mean_median_and_max() -> None:
     scores = np.asarray(
         [
             [0.10, 0.50, 0.20],
@@ -25,8 +25,10 @@ def test_aggregate_tta_scores_mean_and_max() -> None:
         dtype=np.float32,
     )
     mean_out = _aggregate_tta_scores(scores, mode="mean")
+    median_out = _aggregate_tta_scores(scores, mode="median")
     max_out = _aggregate_tta_scores(scores, mode="max")
     assert np.allclose(mean_out, np.asarray([0.26666668, 0.6333333], dtype=np.float32))
+    assert np.allclose(median_out, np.asarray([0.2, 0.6], dtype=np.float32))
     assert np.allclose(max_out, np.asarray([0.5, 0.9], dtype=np.float32))
 
 
@@ -68,3 +70,8 @@ def test_query_embeddings_runs_all_tta_variants_and_normalizes() -> None:
 def test_provider_accepts_rrf_tta_reduce_mode() -> None:
     provider = GeoRetrievalProvider(index_path=None, query_tta_reduce="rrf")
     assert provider.query_tta_reduce == "rrf"
+
+
+def test_provider_accepts_median_tta_reduce_mode() -> None:
+    provider = GeoRetrievalProvider(index_path=None, query_tta_reduce="median")
+    assert provider.query_tta_reduce == "median"

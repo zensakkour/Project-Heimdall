@@ -15,7 +15,7 @@ This is the current technical state of the geo stack in the development branch:
   - Retrieval candidate diversification (radius/lambda/min_keep)
   - Retrieval minimum-candidate keep policy to preserve top-k recall when min-score thresholds are strict
   - Retrieval locality reranking for isolated outlier suppression
-  - Retrieval query TTA (multi-rotation embedding ensemble with configurable score reduction: mean/max/rrf)
+  - Retrieval query TTA (multi-rotation embedding ensemble with configurable score reduction: mean/median/max/rrf)
 - Detection quality controls are configurable:
   - Minimum OBB area filter (`detector.min_area_px`)
   - NMS mode (`detector.nms_mode`: `obb` or `aabb`)
@@ -126,7 +126,7 @@ Configure retrieval in `src/config/defaults.json`:
 - `geolocator.retrieval_locality_radius_km`
 - `geolocator.retrieval_locality_weight`
 - `geolocator.retrieval_query_tta_degrees`
-- `geolocator.retrieval_query_tta_reduce` (`mean`, `max`, or `rrf`)
+- `geolocator.retrieval_query_tta_reduce` (`mean`, `median`, `max`, or `rrf`)
 - `geolocator.candidate_source_balance_beta` (source balancing across merged retrieval/GeoCLIP/EXIF candidates)
 
 ### UI Geo Profiles
