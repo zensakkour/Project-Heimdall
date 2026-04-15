@@ -10,9 +10,9 @@
       href="https://unpkg.com/maplibre-gl@5.0.0/dist/maplibre-gl.css"
       crossorigin=""
     />
-    <link rel="stylesheet" href="../theme.css?v=6" />
-    <link rel="stylesheet" href="../styles.css?v=5" />
-    <link rel="stylesheet" href="live.css?v=36" />
+    <link rel="stylesheet" href="../theme.css?v=7" />
+    <link rel="stylesheet" href="../styles.css?v=6" />
+    <link rel="stylesheet" href="operator.css?v=1" />
   </head>
   <body>
     <div class="layout">
@@ -24,299 +24,150 @@
             </div>
             <div class="hero-copy">
               <h1>Project Heimdall</h1>
-              <p class="muted">Operational intelligence system</p>
+              <p class="muted">Minimal intelligence interface for photo localization.</p>
             </div>
           </div>
-          <nav class="mode-tabs" aria-label="View mode">
-            <button class="mode-tab" data-tab="analysis" aria-pressed="true">Analysis</button>
-            <button class="mode-tab" data-tab="scoring" aria-pressed="false">Scoring</button>
+          <nav class="mode-tabs" aria-label="Workspace">
+            <a class="mode-link active" href="/analysis/" aria-current="page">Analysis</a>
+            <a class="mode-link" href="/analysis/lab/">Lab</a>
           </nav>
         </header>
 
-        <div id="tab-analysis">
-          <section class="card section-card">
-            <div class="section-head">
-              <div class="section-title">
-                <div>
-                  <h2>Input</h2>
-                  <p class="muted">Upload an image and run live geo analysis.</p>
-                </div>
-              </div>
-              <div class="actions">
-                <div class="profile-select muted">
-                  Active strategy:
-                  <select id="profile-select">
-                    <option value="paris">Paris (SpaceNet)</option>
-                    <option value="paris_test">Paris Test (SpaceNet)</option>
-                    <option value="legacy">Open Geo (Wikimedia)</option>
-                  </select>
-                </div>
-                <span id="last-updated" class="muted"></span>
-              </div>
+        <section class="card section-card ingest-card">
+          <div class="section-head">
+            <div>
+              <h2>Ingest</h2>
+              <p class="muted">Upload one photo, then run geospatial localization.</p>
             </div>
-            <div class="inputs inputs-row">
-              <div class="file-input">
-                <div class="file-label">Image</div>
-                <label class="file-picker">
-                  <input type="file" id="image-file" accept="image/*" />
-                  <span class="file-button">Choose file</span>
-                  <span class="file-name" id="image-file-name">No file selected</span>
-                </label>
-              </div>
-              <button id="analyze-image">Analyze Image</button>
+            <span id="last-updated" class="muted"></span>
+          </div>
+          <div class="ingest-grid">
+            <div class="file-input">
+              <div class="file-label">Image</div>
+              <label class="file-picker">
+                <input type="file" id="image-file" accept="image/*" />
+                <span class="file-button">Choose file</span>
+                <span class="file-name" id="image-file-name">No file selected</span>
+              </label>
             </div>
-          </section>
-
-          <section class="card section-card">
-            <h2>Live Analysis</h2>
-            <div id="summary" class="summary">Waiting for analysis...</div>
-            <div id="progress" class="progress" aria-live="polite">
-              <div class="progress-track">
-                <div id="progress-bar" class="progress-bar"></div>
-              </div>
-              <span id="progress-text" class="muted">Analyzing...</span>
-            </div>
-
-            <div class="geo-grid">
-              <div class="geo-map">
-                <div class="panel-head">
-                  <h3 class="panel-title">Fusion Map</h3>
-                  <label class="legend-control muted">
-                    Show top
-                    <select id="live-topn">
-                      <option value="1">1</option>
-                      <option value="2">2</option>
-                      <option value="3">3</option>
-                      <option value="5">5</option>
-                      <option value="10">10</option>
-                      <option value="20" selected>20</option>
-                    </select>
-                  </label>
-                </div>
-                <div id="live-map" class="globe-canvas" aria-label="Fusion map"></div>
-                <div class="map-legend muted">
-                  <span class="legend-dot candidate"></span> Candidate (size = confidence)
-                  <span class="legend-dot mean"></span> Fused mean
-                  <span class="legend-dot ring"></span> Uncertainty radius
-                  <span class="legend-sep"></span>
-                  <span id="live-topn-label">Showing top 20 candidates on map</span>
-                </div>
-                <div class="map-toolbar">
-                  <button id="map-zoom-in">Zoom In</button>
-                  <button id="map-zoom-out">Zoom Out</button>
-                  <button id="map-zoom-reset">Reset</button>
-                  <span class="muted">Scroll to zoom, drag to pan</span>
-                </div>
-              </div>
-
-              <aside class="geo-sidebar">
-                <h3 class="panel-title">Geo Ranking</h3>
-                <div id="geo-ranking" class="geo-ranking muted"></div>
-              </aside>
-            </div>
-
-            <div class="result-grid">
-              <div class="preview">
-                <canvas id="canvas" width="960" height="640"></canvas>
-                <div class="image-toolbar">
-                  <button id="zoom-in">Zoom In</button>
-                  <button id="zoom-out">Zoom Out</button>
-                  <button id="zoom-reset">Reset</button>
-                  <span class="muted">Scroll to zoom, drag to pan</span>
-                </div>
-              </div>
-
-              <div class="panel">
-                <h3>Detections</h3>
-                <div id="detection-list" class="list"></div>
-                <h3>Details</h3>
-                <pre id="details" class="details">Select a detection to inspect details.</pre>
-              </div>
-            </div>
-          </section>
-        </div>
-
-        <div id="tab-scoring" class="tab-hidden">
-          <section class="card section-card">
-            <h2>Geo Scoring</h2>
-            <p class="muted">
-              Evaluate geo accuracy on a metadata CSV (lat/lon per image). Uses the active profile model.
-            </p>
-            <div class="score-strategy muted">
-              Active strategy:
-              <select id="geo-eval-strategy">
+            <label class="profile-select">
+              Profile
+              <select id="profile-select">
                 <option value="paris">Paris (SpaceNet)</option>
                 <option value="paris_test">Paris Test (SpaceNet)</option>
                 <option value="legacy">Open Geo (Wikimedia)</option>
               </select>
-            </div>
-            <div class="score-form">
-              <label>
-                Images directory
-                <div class="input-row">
-                  <input id="geo-eval-images" value="data/spacenet_paris/chips" />
-                  <button type="button" id="geo-eval-browse-images">Browse</button>
-                </div>
-              </label>
-              <label>
-                Metadata CSV
-                <div class="input-row">
-                  <input id="geo-eval-metadata" value="data/spacenet_paris/metadata.csv" />
-                  <button type="button" id="geo-eval-browse-metadata">Browse</button>
-                </div>
-              </label>
-              <label>
-                Limit (0 = all)
-                <input id="geo-eval-limit" type="number" min="0" value="200" />
-              </label>
-              <label class="score-toggle">
-                Retrieval-only
-                <input id="geo-eval-retrieval-only" type="checkbox" checked />
-              </label>
-              <button id="geo-eval-run">Run Geo Eval</button>
-            </div>
-            <div class="progress score-progress" id="geo-eval-progress">
-              <div class="progress-track">
-                <div id="geo-eval-progress-bar" class="progress-bar determinate"></div>
-              </div>
-              <span id="geo-eval-progress-text" class="muted">0%</span>
-            </div>
-            <div id="geo-eval-status" class="muted">Idle</div>
-            <pre id="geo-eval-output" class="details">No results yet.</pre>
-          </section>
+            </label>
+            <button id="analyze-image">Analyze Image</button>
+          </div>
+        </section>
 
-          <section class="card section-card">
-            <h2>Benchmark Comparison</h2>
-            <p class="muted">
-              Run retrieval scenario comparison (leaky vs realistic vs multi-index) plus backbone benchmark
-              in this tab.
-            </p>
-            <div class="bench-form">
-              <label>
-                Eval images dir
-                <input id="bench-images-dir" value="data/spacenet_paris_test/chips" />
-              </label>
-              <label>
-                Eval metadata CSV
-                <input id="bench-metadata" value="data/spacenet_paris_test/metadata.csv" />
-              </label>
-              <label>
-                Geo eval limit
-                <input id="bench-geo-limit" type="number" min="1" value="120" />
-              </label>
-              <label>
-                Train images dir
-                <input id="bench-train-images-dir" value="data/spacenet_paris/chips" />
-              </label>
-              <label>
-                Train metadata CSV
-                <input id="bench-train-metadata" value="data/spacenet_paris/metadata.csv" />
-              </label>
-              <label>
-                Backbone model ids (comma-separated)
-                <input
-                  id="bench-model-ids"
-                  value="openai/clip-vit-large-patch14,google/siglip-base-patch16-224"
-                />
-              </label>
-              <label>
-                Backbone train limit
-                <input id="bench-train-limit" type="number" min="1" value="120" />
-              </label>
-              <label>
-                Backbone eval limit
-                <input id="bench-eval-limit" type="number" min="1" value="60" />
-              </label>
-              <label class="score-toggle">
-                Reuse existing backbone indices
-                <input id="bench-reuse-indices" type="checkbox" checked />
-              </label>
-              <button id="bench-run">Run Benchmark Comparison</button>
+        <section class="card section-card result-card">
+          <div class="section-head">
+            <div>
+              <h2>Localization Result</h2>
+              <p class="muted">Most likely location, confidence, and supporting evidence.</p>
             </div>
-            <div class="progress score-progress" id="bench-progress">
-              <div class="progress-track">
-                <div id="bench-progress-bar" class="progress-bar determinate"></div>
-              </div>
-              <span id="bench-progress-text" class="muted">0%</span>
-            </div>
-            <div class="bench-history">
-              <label class="score-toggle bench-view-toggle">
-                Show selected saved run
-                <input id="bench-view-history" type="checkbox" />
-              </label>
-              <label for="bench-run-history" class="muted">Saved runs</label>
-              <select id="bench-run-history">
-                <option value="">No saved runs yet</option>
-              </select>
-              <button type="button" id="bench-run-refresh">Refresh</button>
-              <button type="button" id="bench-run-load">Load Selected Run</button>
-            </div>
-            <div id="bench-run-meta" class="muted">No historical run selected.</div>
-            <div class="bench-compare">
-              <label for="bench-compare-baseline" class="muted">Baseline run</label>
-              <select id="bench-compare-baseline">
-                <option value="">No saved runs yet</option>
-              </select>
-              <label for="bench-compare-candidate" class="muted">Candidate run</label>
-              <select id="bench-compare-candidate">
-                <option value="">No saved runs yet</option>
-              </select>
-              <button type="button" id="bench-compare-run">Compare Runs</button>
-              <button type="button" id="bench-compare-append-progress">Append Compare To PROGRESS.md</button>
-            </div>
-            <div id="bench-compare-status" class="muted">No comparison yet.</div>
-            <pre id="bench-compare-output" class="details">No comparison output yet.</pre>
-            <div id="bench-status" class="muted">Idle</div>
-            <div id="bench-output-meta" class="muted">Showing: no run selected.</div>
+          </div>
 
-            <div class="bench-grid">
-              <div class="bench-panel">
-                <h3>Scenario Comparison</h3>
-                <table class="compact">
-                  <thead>
-                    <tr>
-                      <th>Scenario</th>
-                      <th>Mean (km)</th>
-                      <th>Median (km)</th>
-                      <th>≤5km (%)</th>
-                      <th>≤10km (%)</th>
-                    </tr>
-                  </thead>
-                  <tbody id="bench-geo-body">
-                    <tr>
-                      <td colspan="5">No benchmark run yet.</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              <div class="bench-panel">
-                <h3>Backbone Comparison</h3>
-                <div id="bench-best-model" class="muted">Best model: -</div>
-                <table class="compact">
-                  <thead>
-                    <tr>
-                      <th>Model</th>
-                      <th>Mean (km)</th>
-                      <th>Median (km)</th>
-                      <th>≤5km (%)</th>
-                      <th>≤10km (%)</th>
-                    </tr>
-                  </thead>
-                  <tbody id="bench-model-body">
-                    <tr>
-                      <td colspan="5">No benchmark run yet.</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
+          <div class="result-metrics" aria-live="polite">
+            <article class="metric">
+              <span class="metric-label">Most Likely</span>
+              <span id="metric-location" class="metric-value">-</span>
+            </article>
+            <article class="metric">
+              <span class="metric-label">Confidence Tier</span>
+              <span id="metric-tier" class="metric-value">-</span>
+            </article>
+            <article class="metric">
+              <span class="metric-label">Geo Confidence</span>
+              <span id="metric-confidence" class="metric-value">-</span>
+            </article>
+            <article class="metric">
+              <span class="metric-label">Uncertainty Radius</span>
+              <span id="metric-radius" class="metric-value">-</span>
+            </article>
+            <article class="metric">
+              <span class="metric-label">Inference Mode</span>
+              <span id="metric-mode" class="metric-value">-</span>
+            </article>
+          </div>
+
+          <div id="summary" class="summary state-idle">Upload an image and start analysis.</div>
+          <div id="progress" class="progress" aria-live="polite">
+            <div class="progress-track">
+              <div id="progress-bar" class="progress-bar"></div>
             </div>
-            <pre id="bench-output" class="details">No benchmark output yet.</pre>
-          </section>
-        </div>
+            <span id="progress-text" class="muted">Analyzing...</span>
+          </div>
+
+          <div class="hero-grid">
+            <article class="hero-panel photo-stage">
+              <div class="panel-head">
+                <h3 class="panel-title">Source Photo</h3>
+                <span class="muted">Scroll to zoom, drag to pan</span>
+              </div>
+              <canvas id="canvas" width="960" height="640"></canvas>
+              <div class="image-toolbar">
+                <button id="zoom-in">Zoom In</button>
+                <button id="zoom-out">Zoom Out</button>
+                <button id="zoom-reset">Reset</button>
+              </div>
+            </article>
+
+            <article class="hero-panel map-stage">
+              <div class="panel-head">
+                <h3 class="panel-title">Fused Location</h3>
+                <label class="legend-control muted">
+                  Show top
+                  <select id="live-topn">
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="5">5</option>
+                    <option value="10">10</option>
+                    <option value="20" selected>20</option>
+                  </select>
+                </label>
+              </div>
+              <div id="live-map" class="globe-canvas" aria-label="Fusion map"></div>
+              <div class="map-legend muted">
+                <span class="legend-dot candidate"></span> Candidate confidence
+                <span class="legend-dot mean"></span> Fused mean
+                <span class="legend-dot ring"></span> Uncertainty radius
+                <span class="legend-sep"></span>
+                <span id="live-topn-label">Showing top 20 candidates on map</span>
+              </div>
+              <div class="map-toolbar">
+                <button id="map-zoom-in">Zoom In</button>
+                <button id="map-zoom-out">Zoom Out</button>
+                <button id="map-zoom-reset">Reset</button>
+              </div>
+            </article>
+          </div>
+
+          <details class="evidence-drawer">
+            <summary>Inspect Evidence</summary>
+            <div class="evidence-grid">
+              <section class="evidence-panel">
+                <h3>Geo Ranking</h3>
+                <div id="geo-ranking" class="geo-ranking muted"></div>
+              </section>
+              <section class="evidence-panel">
+                <h3>Detections</h3>
+                <div id="detection-list" class="list"></div>
+              </section>
+              <section class="evidence-panel evidence-panel-wide">
+                <h3>Details</h3>
+                <pre id="details" class="details">Select a detection to inspect details.</pre>
+              </section>
+            </div>
+          </details>
+        </section>
       </div>
     </div>
 
     <script src="https://unpkg.com/maplibre-gl@5.0.0/dist/maplibre-gl.js" crossorigin=""></script>
-    <script src="live.js?v=34"></script>
+    <script type="module" src="operator.js?v=1"></script>
   </body>
 </html>

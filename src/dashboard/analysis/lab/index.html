@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Heimdall Lab</title>
+    <link rel="icon" type="image/png" href="../../assets/logo-mark.png?v=1" />
+    <link rel="stylesheet" href="../../theme.css?v=7" />
+    <link rel="stylesheet" href="../../styles.css?v=6" />
+    <link rel="stylesheet" href="lab.css?v=1" />
+  </head>
+  <body>
+    <div class="layout">
+      <div class="layout-shell">
+        <header class="page-header">
+          <div class="page-header-brand">
+            <div class="brand-mark" aria-hidden="true">
+              <img class="brand-logo" src="../../assets/logo-mark.png?v=1" alt="Heimdall logo" />
+            </div>
+            <div class="hero-copy">
+              <h1>Project Heimdall Lab</h1>
+              <p class="muted">Evaluation and benchmark tooling for model iteration.</p>
+            </div>
+          </div>
+          <nav class="mode-tabs" aria-label="Workspace">
+            <a class="mode-link" href="/analysis/">Analysis</a>
+            <a class="mode-link active" href="/analysis/lab/" aria-current="page">Lab</a>
+          </nav>
+        </header>
+
+        <section class="card section-card">
+          <h2>Geo Scoring</h2>
+          <p class="muted">
+            Evaluate geo accuracy on a metadata CSV (lat/lon per image). Uses the selected profile.
+          </p>
+          <div class="score-strategy muted">
+            Active profile:
+            <select id="geo-eval-strategy">
+              <option value="paris">Paris (SpaceNet)</option>
+              <option value="paris_test">Paris Test (SpaceNet)</option>
+              <option value="legacy">Open Geo (Wikimedia)</option>
+            </select>
+          </div>
+          <div class="score-form">
+            <label>
+              Images directory
+              <div class="input-row">
+                <input id="geo-eval-images" value="data/spacenet_paris/chips" />
+                <button type="button" id="geo-eval-browse-images">Browse</button>
+              </div>
+            </label>
+            <label>
+              Metadata CSV
+              <div class="input-row">
+                <input id="geo-eval-metadata" value="data/spacenet_paris/metadata.csv" />
+                <button type="button" id="geo-eval-browse-metadata">Browse</button>
+              </div>
+            </label>
+            <label>
+              Limit (0 = all)
+              <input id="geo-eval-limit" type="number" min="0" value="200" />
+            </label>
+            <label class="score-toggle">
+              Retrieval-only
+              <input id="geo-eval-retrieval-only" type="checkbox" checked />
+            </label>
+            <button id="geo-eval-run">Run Geo Eval</button>
+          </div>
+          <div class="progress score-progress" id="geo-eval-progress">
+            <div class="progress-track">
+              <div id="geo-eval-progress-bar" class="progress-bar determinate"></div>
+            </div>
+            <span id="geo-eval-progress-text" class="muted">0%</span>
+          </div>
+          <div id="geo-eval-status" class="muted">Idle</div>
+          <pre id="geo-eval-output" class="details">No results yet.</pre>
+        </section>
+
+        <section class="card section-card">
+          <h2>Benchmark Comparison</h2>
+          <p class="muted">
+            Run retrieval scenario comparison (leaky vs realistic vs multi-index) plus backbone benchmark.
+          </p>
+          <div class="bench-form">
+            <label>
+              Eval images dir
+              <input id="bench-images-dir" value="data/spacenet_paris_test/chips" />
+            </label>
+            <label>
+              Eval metadata CSV
+              <input id="bench-metadata" value="data/spacenet_paris_test/metadata.csv" />
+            </label>
+            <label>
+              Geo eval limit
+              <input id="bench-geo-limit" type="number" min="1" value="120" />
+            </label>
+            <label>
+              Train images dir
+              <input id="bench-train-images-dir" value="data/spacenet_paris/chips" />
+            </label>
+            <label>
+              Train metadata CSV
+              <input id="bench-train-metadata" value="data/spacenet_paris/metadata.csv" />
+            </label>
+            <label>
+              Backbone model ids (comma-separated)
+              <input
+                id="bench-model-ids"
+                value="openai/clip-vit-large-patch14,google/siglip-base-patch16-224"
+              />
+            </label>
+            <label>
+              Backbone train limit
+              <input id="bench-train-limit" type="number" min="1" value="120" />
+            </label>
+            <label>
+              Backbone eval limit
+              <input id="bench-eval-limit" type="number" min="1" value="60" />
+            </label>
+            <label class="score-toggle">
+              Reuse existing backbone indices
+              <input id="bench-reuse-indices" type="checkbox" checked />
+            </label>
+            <button id="bench-run">Run Benchmark Comparison</button>
+          </div>
+          <div class="progress score-progress" id="bench-progress">
+            <div class="progress-track">
+              <div id="bench-progress-bar" class="progress-bar determinate"></div>
+            </div>
+            <span id="bench-progress-text" class="muted">0%</span>
+          </div>
+          <div class="bench-history">
+            <label class="score-toggle bench-view-toggle">
+              Show selected saved run
+              <input id="bench-view-history" type="checkbox" />
+            </label>
+            <label for="bench-run-history" class="muted">Saved runs</label>
+            <select id="bench-run-history">
+              <option value="">No saved runs yet</option>
+            </select>
+            <button type="button" id="bench-run-refresh">Refresh</button>
+            <button type="button" id="bench-run-load">Load Selected Run</button>
+          </div>
+          <div id="bench-run-meta" class="muted">No historical run selected.</div>
+          <div class="bench-compare">
+            <label for="bench-compare-baseline" class="muted">Baseline run</label>
+            <select id="bench-compare-baseline">
+              <option value="">No saved runs yet</option>
+            </select>
+            <label for="bench-compare-candidate" class="muted">Candidate run</label>
+            <select id="bench-compare-candidate">
+              <option value="">No saved runs yet</option>
+            </select>
+            <button type="button" id="bench-compare-run">Compare Runs</button>
+            <button type="button" id="bench-compare-append-progress">Append Compare To PROGRESS.md</button>
+          </div>
+          <div id="bench-compare-status" class="muted">No comparison yet.</div>
+          <pre id="bench-compare-output" class="details">No comparison output yet.</pre>
+          <div id="bench-status" class="muted">Idle</div>
+          <div id="bench-output-meta" class="muted">Showing: no run selected.</div>
+
+          <div class="bench-grid">
+            <div class="bench-panel">
+              <h3>Scenario Comparison</h3>
+              <table class="compact">
+                <thead>
+                  <tr>
+                    <th>Scenario</th>
+                    <th>Mean (km)</th>
+                    <th>Median (km)</th>
+                    <th>=5km (%)</th>
+                    <th>=10km (%)</th>
+                  </tr>
+                </thead>
+                <tbody id="bench-geo-body">
+                  <tr>
+                    <td colspan="5">No benchmark run yet.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="bench-panel">
+              <h3>Backbone Comparison</h3>
+              <div id="bench-best-model" class="muted">Best model: -</div>
+              <table class="compact">
+                <thead>
+                  <tr>
+                    <th>Model</th>
+                    <th>Mean (km)</th>
+                    <th>Median (km)</th>
+                    <th>=5km (%)</th>
+                    <th>=10km (%)</th>
+                  </tr>
+                </thead>
+                <tbody id="bench-model-body">
+                  <tr>
+                    <td colspan="5">No benchmark run yet.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <pre id="bench-output" class="details">No benchmark output yet.</pre>
+        </section>
+      </div>
+    </div>
+
+    <script type="module" src="lab.js?v=1"></script>
+  </body>
+</html>
