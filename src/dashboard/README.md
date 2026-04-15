@@ -40,6 +40,8 @@ Open:
 - `POST /analyze/video`
 - `POST /eval/geo/start`
 - `GET /eval/geo/status`
+- `POST /eval/geo/random/start`
+- `GET /eval/geo/random/status`
 - `POST /eval/benchmarks/start`
 - `GET /eval/benchmarks/status`
 - `GET /eval/benchmarks/runs`
@@ -86,3 +88,4 @@ Recommended demo interactions to include:
 2. Rotate/pan the 3D globe by dragging.
 3. Zoom in/out with mouse scroll on globe.
 4. Use map buttons: `Zoom In`, `Zoom Out`, `Reset`.
+5. In Lab, run `Run Random Samples` and review distance/accuracy output.
