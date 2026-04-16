@@ -644,3 +644,145 @@ Do not delete or edit past entries. Append new work at the end.
   - No benchmark artifact generated in this prompt cycle.
 - Decision:
   - Keep and use `upgrade_retrieval_backbone` as the standard path for aerial retrieval backbone upgrades on single-GPU runs.
+
+## 2026-04-16
+- Hypothesis:
+  - Running the new backbone-upgrade flow and a focused `within_2km_pct` retrieval sweep on the realistic split should produce measurable close-range uplift.
+- Change:
+  - Executed baseline realistic retrieval-only eval (`n=180`) before changes.
+  - Ran aerial backbone benchmark preset (`aerial_rtx5060_precise`) with objective `within_2km_pct`:
+    - compared `google/siglip-so400m-patch14-384`, `google/siglip-base-patch16-224`, and `openai/clip-vit-large-patch14`.
+  - Ran focused retrieval tuning sweep on Paris profile (`3456` combinations, objective `within_2km_pct`) and applied best-config output.
+  - Executed post-tune realistic retrieval-only eval (`n=180`) and compared pre/post metrics.
+  - Reverted non-improving config changes in `src/config/paris.json` (`retrieval_top_k` back to `25`, `retrieval_min_score` back to `0.05`) because end-to-end metrics were unchanged.
+- Files touched:
+  - `src/config/paris.json`
+  - `PROGRESS.md`
+  - `src/docs/RESEARCH_PAPER.md`
+- Validation command(s):
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --retrieval-only --limit 180 --seed 42 --config src/config/paris.json --output runs/geo_eval_paris_profile_180_pre_backbone_upgrade_v1.json`
+  - `./.venv/Scripts/python -m src.tools.upgrade_retrieval_backbone --train-images-dir data/spacenet_paris/chips --train-metadata data/spacenet_paris/metadata.csv --eval-images-dir data/spacenet_paris_test/chips --eval-metadata data/spacenet_paris_test/metadata.csv --config src/config/paris.json --model-preset aerial_rtx5060_precise --rank-objective within_2km_pct --benchmark-train-limit 600 --benchmark-eval-limit 180 --seed 42 --output-dir runs/backbone_upgrade_rtx5060_v1 --reuse-indices`
+  - `./.venv/Scripts/python -m src.tools.tune_retrieval_geo --config src/config/paris.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 180 --seed 42 --output runs/tune_retrieval_geo_within2km_v1.json --retrieval-topk "20,25,30" --retrieval-min-score "0.03,0.05,0.08" --retrieval-min-keep-topk "0,1" --retrieval-diversity-radius-km "0.0,1.0" --retrieval-diversity-lambda "1.0,0.9" --retrieval-diversity-min-keep "1,3" --retrieval-locality-radius-km "0.0,25.0" --retrieval-locality-weight "0.0,0.8,1.2" --retrieval-source-balance-beta "0.0,0.35" --retrieval-query-tta-reduce "max,mean" --rank-objective within_2km_pct --apply-best-config`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --retrieval-only --limit 180 --seed 42 --config src/config/paris.json --output runs/geo_eval_paris_profile_180_post_tune_v1.json`
+- Metrics (pre -> post):
+  - `mean_km`: `15.5569` -> `15.5569` (`delta=0.0000`)
+  - `median_km`: `9.7717` -> `9.7717` (`delta=0.0000`)
+  - `within_1km_pct`: `10.56` -> `10.56` (`delta=0.00`)
+  - `within_2km_pct`: `19.44` -> `19.44` (`delta=0.00`)
+  - `within_5km_pct`: `36.67` -> `36.67` (`delta=0.00`)
+  - `within_10km_pct`: `50.56` -> `50.56` (`delta=0.00`)
+- Artifacts:
+  - `runs/geo_eval_paris_profile_180_pre_backbone_upgrade_v1.json`
+  - `runs/backbone_upgrade_rtx5060_v1/backbone_benchmark.json`
+  - `runs/tune_retrieval_geo_within2km_v1.json`
+  - `runs/geo_eval_paris_profile_180_post_tune_v1.json`
+- Decision:
+  - Do not switch retrieval backbone from CLIP on this split: benchmark showed CLIP remains best among tested candidates.
+  - Do not keep the tuned config changes from this sweep: no end-to-end metric uplift on the canonical realistic eval.
+  - Next step should be non-trivial method upgrades (domain-adapted retrieval features, re-ranking head, or hard-negative data curation) rather than more local knob sweeps.
+
+## 2026-04-16
+- Hypothesis:
+  - A method-level local geometric reranker upgrade (dual-engine matching + evidence gating) can recover local-feature ranking quality without harming the canonical retrieval profile.
+- Change:
+  - Upgraded retrieval local matching in `src/core/geo/retrieval_provider.py`:
+    - added dual-engine local feature support (`SIFT` + `ORB`) with best-of-engines candidate scoring,
+    - added weak-signal gate to skip local reranking when geometric evidence is low,
+    - added adaptive blend scaling so local evidence only overrides retrieval score when local confidence is meaningful.
+  - Added regression coverage for the new safety behavior in `src/tests/test_retrieval_provider_multi_index.py` (`test_local_match_rerank_skips_when_signal_is_weak`).
+  - Re-ran realistic split evals (`n=180`) for control and local-match profiles, plus a combined KDE + dual-local profile.
+- Files touched:
+  - `src/core/geo/retrieval_provider.py`
+  - `src/tests/test_retrieval_provider_multi_index.py`
+  - `runs/bench_cfg/cfg_paris_kde_refine_e_w1_duallocal.json`
+  - `PROGRESS.md`
+  - `src/docs/RESEARCH_PAPER.md`
+  - `src/docs/GEO_TECH.md`
+  - `README.md`
+- Validation command(s):
+  - `./.venv/Scripts/python -m pytest -q src/tests/test_retrieval_provider_multi_index.py src/tests/test_config_loading.py`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config runs/bench_cfg/cfg_paris_qexp_ctrl.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 180 --output runs/geo_eval_paris_profile_180_qexp_ctrl_v2_after_dual_localcode.json`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config runs/bench_cfg/cfg_paris_localmatch_a.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 180 --output runs/geo_eval_paris_profile_180_localmatch_a_v2_dual.json`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config runs/bench_cfg/cfg_paris_localmatch_b.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 180 --output runs/geo_eval_paris_profile_180_localmatch_b_v2_dual.json`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config runs/bench_cfg/cfg_paris_localmatch_c.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 180 --output runs/geo_eval_paris_profile_180_localmatch_c_v2_dual.json`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config runs/bench_cfg/cfg_paris_kde_refine_e_w1_duallocal.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 180 --output runs/geo_eval_paris_profile_180_kde_refine_e_w1_duallocal_v1.json`
+- Metrics (before -> after):
+  - Control profile (`qexp_ctrl`): unchanged (`within_1km_pct`: `10.56` -> `10.56`), confirming no regression when local rerank is disabled.
+  - Local match profile A (`localmatch_a`):
+    - `mean_km`: `16.6122` -> `15.2447`
+    - `median_km`: `10.9454` -> `9.7717`
+    - `within_1km_pct`: `5.00` -> `8.89`
+    - `within_2km_pct`: `13.33` -> `18.33`
+    - `within_5km_pct`: `32.78` -> `37.22`
+    - `within_10km_pct`: `46.67` -> `51.11`
+  - Combined KDE (`c_w1`) + dual local profile did not improve close-range hit rate (`within_1km_pct`: `11.11` -> `8.89`).
+- Artifacts:
+  - `runs/geo_eval_paris_profile_180_qexp_ctrl_v2_after_dual_localcode.json`
+  - `runs/geo_eval_paris_profile_180_localmatch_a_v2_dual.json`
+  - `runs/geo_eval_paris_profile_180_localmatch_b_v2_dual.json`
+  - `runs/geo_eval_paris_profile_180_localmatch_c_v2_dual.json`
+  - `runs/geo_eval_paris_profile_180_kde_refine_e_w1_duallocal_v1.json`
+- Decision:
+  - Keep the dual local geometric reranker implementation as a meaningful method upgrade.
+  - Keep local-rerank knobs non-default for the canonical Paris profile because close-range (`within_1km_pct`) remains best with KDE refinement profile `c_w1`.
+  - Treat dual local rerank as an optional mode for reducing larger-distance errors, while primary close-range optimization continues via retrieval-density refinement and future domain-adapted representation upgrades.
+
+## 2026-04-16
+- Hypothesis:
+  - Extreme random-sample errors (`~5846 km`) came from evaluation profile/data mismatch (Paris dataset accidentally evaluated with `open_geo` index), not from corrupted Paris labels.
+- Change:
+  - Reproduced the mismatch on seed `1870334448` with `src/config/open_geo.json` against Paris data and confirmed US predictions near Statue of Liberty for Paris chips.
+  - Added backend profile resolution guard in `src/tools/ui_server.py` for both `/eval/geo/start` and `/eval/geo/random/start`:
+    - infer dataset family from `images_dir`/`metadata` path,
+    - auto-correct `legacy/open_geo` to `paris` or `paris_test` when Paris paths are detected,
+    - expose `profile_requested`, `profile_effective`, `profile_warning`, and `config_path` in eval status and random summary.
+  - Updated Lab UI profile persistence key to isolate Lab from Operator (`heimdallLabProfile`) and avoid cross-tab profile leakage.
+  - Updated random-sample output formatting to display requested/effective profile, config path, and correction warning.
+  - Added regression test: `test_start_geo_random_eval_autocorrects_legacy_profile_for_paris_paths`.
+- Files touched:
+  - `src/tools/ui_server.py`
+  - `src/dashboard/analysis/lab/lab.js`
+  - `src/tests/test_ui_server_runtime.py`
+  - `PROGRESS.md`
+- Validation command(s):
+  - `./.venv/Scripts/python -m pytest -q src/tests/test_ui_server_runtime.py src/tests/test_ui_server_safe_demo.py src/tests/test_ui_server_health.py`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --images-dir data/spacenet_paris/chips --metadata data/spacenet_paris/metadata.csv --retrieval-only --limit 2 --seed 1870334448 --config src/config/open_geo.json --output runs/tmp_paris_with_open_geo_seed1870334448.json --diag-samples 2`
+- Metrics/evidence:
+  - Repro run with `open_geo` on Paris chips:
+    - `mean_km`: `5846.1583`
+    - `within_1km_pct`: `0.0`
+    - both samples predicted `40.6892, -74.0445` while GT is Paris (`~48.59, 2.26`).
+  - Control run with `paris` on the same seed/samples:
+    - `mean_km`: `7.1809`
+    - `within_1km_pct`: `50.0`
+    - predictions remained in Paris region (`~48.61/2.27`, `~48.71/2.23`).
+- Decision:
+  - Treat this as an evaluation-integrity bug.
+  - Keep auto-correction guard enabled so Lab random/full eval cannot silently run Paris chips on legacy/open-geo profile.
+
+## 2026-04-16
+- Hypothesis:
+  - The research paper needs an explicit method-decision ledger (kept vs rejected) and complete artifact traceability so all attempted methods and outcomes are auditable.
+- Change:
+  - Expanded `src/docs/RESEARCH_PAPER.md` with:
+    - new evaluation-integrity results subsection (`7.10`) documenting the Paris/open_geo mismatch and fix impact,
+    - comprehensive method ledger (`8.3`) listing tried methods, best measured outcomes, and keep/reject decisions,
+    - default-policy summary (`8.4`) clarifying what stays on by default,
+    - updated Appendix B artifact index to include backbone-cycle and evaluation-integrity artifacts.
+  - Updated `AGENT.md` to enforce command-level documentation sync:
+    - added non-negotiable rule that every state-changing command must be reflected in docs,
+    - added explicit command-level enforcement checklist under per-prompt sync.
+- Files touched:
+  - `src/docs/RESEARCH_PAPER.md`
+  - `AGENT.md`
+  - `PROGRESS.md`
+- Validation command(s):
+  - `rg -n "### 7.10|### 8.3|### 8.4|## Appendix B" src/docs/RESEARCH_PAPER.md`
+  - `rg -n "state-changing command|Command-level enforcement" AGENT.md`
+- Metrics (before -> after):
+  - Documentation-only update; no model metric run in this prompt.
+- Artifacts:
+  - `src/docs/RESEARCH_PAPER.md`
+  - `AGENT.md`
+- Decision:
+  - Keep this documentation policy and ledger structure as the new baseline for future iterations.

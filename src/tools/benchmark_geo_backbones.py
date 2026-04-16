@@ -88,6 +88,19 @@ def _parse_float_list(raw: str) -> List[float]:
     return out
 
 
+def _parse_mode_list(raw: str) -> List[str]:
+    allowed = {"rgb", "gray", "equalize", "edge"}
+    out: List[str] = []
+    seen = set()
+    for item in str(raw).split(","):
+        mode = item.strip().lower()
+        if mode not in allowed or mode in seen:
+            continue
+        seen.add(mode)
+        out.append(mode)
+    return out or ["rgb"]
+
+
 def _slug(text: str) -> str:
     clean = re.sub(r"[^a-zA-Z0-9]+", "_", text).strip("_").lower()
     return clean or "model"
@@ -260,7 +273,27 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--retrieval-min-score", type=float, default=0.1)
     parser.add_argument("--retrieval-min-keep-topk", type=int, default=2)
     parser.add_argument("--query-tta-degrees", default="0,90,180,270")
+    parser.add_argument("--query-tta-modes", default="rgb")
+    parser.add_argument("--query-tta-auto-modality", action="store_true")
     parser.add_argument("--query-tta-reduce", default="max")
+    parser.add_argument("--query-expansion-top-n", type=int, default=0)
+    parser.add_argument("--query-expansion-beta", type=float, default=0.0)
+    parser.add_argument("--query-expansion-alpha", type=float, default=0.5)
+    parser.add_argument("--local-match-top-n", type=int, default=0)
+    parser.add_argument("--local-match-weight", type=float, default=0.0)
+    parser.add_argument("--local-match-ratio", type=float, default=0.8)
+    parser.add_argument("--local-match-max-features", type=int, default=1200)
+    parser.add_argument("--graph-rerank-top-n", type=int, default=0)
+    parser.add_argument("--graph-rerank-sigma-km", type=float, default=3.0)
+    parser.add_argument("--graph-rerank-score-alpha", type=float, default=0.4)
+    parser.add_argument("--graph-rerank-support-beta", type=float, default=1.0)
+    parser.add_argument("--graph-rerank-center-radius-km", type=float, default=0.0)
+    parser.add_argument("--kde-refine-top-n", type=int, default=0)
+    parser.add_argument("--kde-refine-sigma-km", type=float, default=2.0)
+    parser.add_argument("--kde-refine-score-power", type=float, default=1.0)
+    parser.add_argument("--kde-refine-margin-threshold", type=float, default=0.0)
+    parser.add_argument("--kde-refine-switch-radius-km", type=float, default=0.0)
+    parser.add_argument("--kde-refine-max-iters", type=int, default=8)
     parser.add_argument("--output", default="runs/backbone_bench/backbone_benchmark.json")
     parser.add_argument("--reuse-indices", action="store_true")
     args = parser.parse_args(argv)
@@ -285,6 +318,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     tta_degrees = _parse_float_list(args.query_tta_degrees)
     if not tta_degrees:
         tta_degrees = [0.0]
+    tta_modes = _parse_mode_list(args.query_tta_modes)
 
     train_rows_all = _load_rows(train_meta_path)
     eval_rows_all = _load_rows(eval_meta_path)
@@ -340,7 +374,27 @@ def main(argv: Optional[List[str]] = None) -> int:
                 min_score=float(args.retrieval_min_score),
                 min_keep_topk=int(args.retrieval_min_keep_topk),
                 query_tta_degrees=tta_degrees,
+                query_tta_modes=tta_modes,
+                query_tta_auto_modality=bool(args.query_tta_auto_modality),
                 query_tta_reduce=str(args.query_tta_reduce),
+                query_expansion_top_n=int(args.query_expansion_top_n),
+                query_expansion_beta=float(args.query_expansion_beta),
+                query_expansion_alpha=float(args.query_expansion_alpha),
+                local_match_top_n=int(args.local_match_top_n),
+                local_match_weight=float(args.local_match_weight),
+                local_match_ratio=float(args.local_match_ratio),
+                local_match_max_features=int(args.local_match_max_features),
+                graph_rerank_top_n=int(args.graph_rerank_top_n),
+                graph_rerank_sigma_km=float(args.graph_rerank_sigma_km),
+                graph_rerank_score_alpha=float(args.graph_rerank_score_alpha),
+                graph_rerank_support_beta=float(args.graph_rerank_support_beta),
+                graph_rerank_center_radius_km=float(args.graph_rerank_center_radius_km),
+                kde_refine_top_n=int(args.kde_refine_top_n),
+                kde_refine_sigma_km=float(args.kde_refine_sigma_km),
+                kde_refine_score_power=float(args.kde_refine_score_power),
+                kde_refine_margin_threshold=float(args.kde_refine_margin_threshold),
+                kde_refine_switch_radius_km=float(args.kde_refine_switch_radius_km),
+                kde_refine_max_iters=int(args.kde_refine_max_iters),
             )
             metrics = _evaluate_top1(provider=provider, rows=eval_rows, images_dir=eval_images_dir)
             eval_sec = float(time.perf_counter() - eval_start)
@@ -380,6 +434,26 @@ def main(argv: Optional[List[str]] = None) -> int:
         "model_preset": str(args.model_preset),
         "model_ids": list(model_ids),
         "rank_objective": str(args.rank_objective),
+        "query_tta_modes": tta_modes,
+        "query_tta_auto_modality": bool(args.query_tta_auto_modality),
+        "query_expansion_top_n": int(args.query_expansion_top_n),
+        "query_expansion_beta": float(args.query_expansion_beta),
+        "query_expansion_alpha": float(args.query_expansion_alpha),
+        "local_match_top_n": int(args.local_match_top_n),
+        "local_match_weight": float(args.local_match_weight),
+        "local_match_ratio": float(args.local_match_ratio),
+        "local_match_max_features": int(args.local_match_max_features),
+        "graph_rerank_top_n": int(args.graph_rerank_top_n),
+        "graph_rerank_sigma_km": float(args.graph_rerank_sigma_km),
+        "graph_rerank_score_alpha": float(args.graph_rerank_score_alpha),
+        "graph_rerank_support_beta": float(args.graph_rerank_support_beta),
+        "graph_rerank_center_radius_km": float(args.graph_rerank_center_radius_km),
+        "kde_refine_top_n": int(args.kde_refine_top_n),
+        "kde_refine_sigma_km": float(args.kde_refine_sigma_km),
+        "kde_refine_score_power": float(args.kde_refine_score_power),
+        "kde_refine_margin_threshold": float(args.kde_refine_margin_threshold),
+        "kde_refine_switch_radius_km": float(args.kde_refine_switch_radius_km),
+        "kde_refine_max_iters": int(args.kde_refine_max_iters),
         "models": results,
         "best_model": ranked_by_objective[0]["model_id"] if ranked_by_objective else None,
         "best_model_by_median_km": ranked_by_median[0]["model_id"] if ranked_by_median else None,
