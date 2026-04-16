@@ -73,7 +73,27 @@ def test_load_config_spatial_consensus_defaults() -> None:
         assert cfg.geolocator.retrieval_consensus_radius_km == 0.0
         assert cfg.geolocator.retrieval_consensus_score_power == 1.0
         assert cfg.geolocator.retrieval_query_tta_degrees == (0.0,)
+        assert cfg.geolocator.retrieval_query_tta_modes == ("rgb",)
+        assert cfg.geolocator.retrieval_query_tta_auto_modality is False
         assert cfg.geolocator.retrieval_query_tta_reduce == "mean"
+        assert cfg.geolocator.retrieval_query_expansion_top_n == 0
+        assert cfg.geolocator.retrieval_query_expansion_beta == 0.0
+        assert cfg.geolocator.retrieval_query_expansion_alpha == 0.5
+        assert cfg.geolocator.retrieval_local_match_top_n == 0
+        assert cfg.geolocator.retrieval_local_match_weight == 0.0
+        assert cfg.geolocator.retrieval_local_match_ratio == 0.8
+        assert cfg.geolocator.retrieval_local_match_max_features == 1200
+        assert cfg.geolocator.retrieval_graph_rerank_top_n == 0
+        assert cfg.geolocator.retrieval_graph_rerank_sigma_km == 3.0
+        assert cfg.geolocator.retrieval_graph_rerank_score_alpha == 0.4
+        assert cfg.geolocator.retrieval_graph_rerank_support_beta == 1.0
+        assert cfg.geolocator.retrieval_graph_rerank_center_radius_km == 0.0
+        assert cfg.geolocator.retrieval_kde_refine_top_n == 0
+        assert cfg.geolocator.retrieval_kde_refine_sigma_km == 2.0
+        assert cfg.geolocator.retrieval_kde_refine_score_power == 1.0
+        assert cfg.geolocator.retrieval_kde_refine_margin_threshold == 0.0
+        assert cfg.geolocator.retrieval_kde_refine_switch_radius_km == 0.0
+        assert cfg.geolocator.retrieval_kde_refine_max_iters == 8
 
 
 def test_load_config_spatial_consensus_overrides() -> None:
@@ -143,7 +163,27 @@ def test_load_config_spatial_consensus_overrides() -> None:
                     "retrieval_consensus_radius_km": 3.2,
                     "retrieval_consensus_score_power": 1.3,
                     "retrieval_query_tta_degrees": [0.0, 90.0, 180.0],
+                    "retrieval_query_tta_modes": ["rgb", "gray", "rgb"],
+                    "retrieval_query_tta_auto_modality": True,
                     "retrieval_query_tta_reduce": "rrf",
+                    "retrieval_query_expansion_top_n": 12,
+                    "retrieval_query_expansion_beta": 0.4,
+                    "retrieval_query_expansion_alpha": 0.35,
+                    "retrieval_local_match_top_n": 10,
+                    "retrieval_local_match_weight": 0.45,
+                    "retrieval_local_match_ratio": 0.78,
+                    "retrieval_local_match_max_features": 1800,
+                    "retrieval_graph_rerank_top_n": 30,
+                    "retrieval_graph_rerank_sigma_km": 2.8,
+                    "retrieval_graph_rerank_score_alpha": 0.35,
+                    "retrieval_graph_rerank_support_beta": 1.4,
+                    "retrieval_graph_rerank_center_radius_km": 2.6,
+                    "retrieval_kde_refine_top_n": 24,
+                    "retrieval_kde_refine_sigma_km": 2.2,
+                    "retrieval_kde_refine_score_power": 1.25,
+                    "retrieval_kde_refine_margin_threshold": 0.01,
+                    "retrieval_kde_refine_switch_radius_km": 3.5,
+                    "retrieval_kde_refine_max_iters": 11,
                 },
             },
         )
@@ -207,7 +247,27 @@ def test_load_config_spatial_consensus_overrides() -> None:
         assert cfg.geolocator.retrieval_consensus_radius_km == 3.2
         assert cfg.geolocator.retrieval_consensus_score_power == 1.3
         assert cfg.geolocator.retrieval_query_tta_degrees == (0.0, 90.0, 180.0)
+        assert cfg.geolocator.retrieval_query_tta_modes == ("rgb", "gray")
+        assert cfg.geolocator.retrieval_query_tta_auto_modality is True
         assert cfg.geolocator.retrieval_query_tta_reduce == "rrf"
+        assert cfg.geolocator.retrieval_query_expansion_top_n == 12
+        assert cfg.geolocator.retrieval_query_expansion_beta == 0.4
+        assert cfg.geolocator.retrieval_query_expansion_alpha == 0.35
+        assert cfg.geolocator.retrieval_local_match_top_n == 10
+        assert cfg.geolocator.retrieval_local_match_weight == 0.45
+        assert cfg.geolocator.retrieval_local_match_ratio == 0.78
+        assert cfg.geolocator.retrieval_local_match_max_features == 1800
+        assert cfg.geolocator.retrieval_graph_rerank_top_n == 30
+        assert cfg.geolocator.retrieval_graph_rerank_sigma_km == 2.8
+        assert cfg.geolocator.retrieval_graph_rerank_score_alpha == 0.35
+        assert cfg.geolocator.retrieval_graph_rerank_support_beta == 1.4
+        assert cfg.geolocator.retrieval_graph_rerank_center_radius_km == 2.6
+        assert cfg.geolocator.retrieval_kde_refine_top_n == 24
+        assert cfg.geolocator.retrieval_kde_refine_sigma_km == 2.2
+        assert cfg.geolocator.retrieval_kde_refine_score_power == 1.25
+        assert cfg.geolocator.retrieval_kde_refine_margin_threshold == 0.01
+        assert cfg.geolocator.retrieval_kde_refine_switch_radius_km == 3.5
+        assert cfg.geolocator.retrieval_kde_refine_max_iters == 11
 
 
 def test_load_config_invalid_retrieval_index_score_norm_falls_back_to_auto() -> None:
