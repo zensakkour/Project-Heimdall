@@ -7,6 +7,8 @@ from src.core.geo.retrieval_provider import (
     GeoRetrievalProvider,
     _aggregate_tta_scores,
     _normalize_tta_degrees,
+    _normalize_tta_modes,
+    _select_query_tta_modes,
     _query_embeddings,
 )
 
@@ -60,11 +62,27 @@ def test_query_embeddings_runs_all_tta_variants_and_normalizes() -> None:
 
     image = Image.new("RGB", (16, 16), color=(120, 10, 10))
     embedder = StubEmbedder()
-    mat = _query_embeddings(embedder, image, [0.0, 90.0, 180.0, 270.0])
+    mat = _query_embeddings(embedder, image, [0.0, 90.0, 180.0, 270.0], ["rgb"])
     assert mat.shape == (4, 3)
     assert embedder.calls == 4
     norms = np.linalg.norm(mat, axis=1)
     assert np.allclose(norms, np.ones_like(norms))
+
+
+def test_normalize_tta_modes_dedupes_and_filters_invalid() -> None:
+    out = _normalize_tta_modes(["rgb", "gray", "RGB", "bad", "edge"])
+    assert out == ["rgb", "gray", "edge"]
+
+
+def test_select_query_tta_modes_uses_pan_priority_when_enabled() -> None:
+    image = Image.new("RGB", (8, 8), color=(120, 120, 120))
+    out = _select_query_tta_modes(
+        image_path="PAN_example.jpg",
+        image=image,
+        base_modes=["rgb", "gray", "edge"],
+        auto_modality=True,
+    )
+    assert out == ["gray", "edge"]
 
 
 def test_provider_accepts_rrf_tta_reduce_mode() -> None:

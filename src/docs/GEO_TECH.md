@@ -1,6 +1,6 @@
 ﻿# Geolocation + Object Localization Tech (Current)
 
-## Status Snapshot (As of April 15, 2026)
+## Status Snapshot (As of April 16, 2026)
 
 This is the current technical state of the geo stack in the development branch:
 
@@ -19,6 +19,12 @@ This is the current technical state of the geo stack in the development branch:
   - Retrieval locality reranking for isolated outlier suppression
   - Retrieval source-fusion mode control (`weighted_score` or `rrf`) for multi-index aggregation strategy
   - Retrieval consensus top-1 refinement now performs adaptive center selection (cluster centroid vs weighted geo-median) using local support gating for close-range precision and local outlier robustness
+  - Retrieval KDE mode refinement can improve close-range/top-radius metrics in objective-specific profiles:
+    - best `within_1km_pct`: `11.11` (`runs/geo_eval_paris_profile_180_kde_refine_c_w1_v1.json`)
+    - best `within_2km_pct`: `20.00` (`runs/geo_eval_paris_profile_180_kde_refine_d_w2_v1.json`)
+  - Local geometric reranking upgraded to dual-engine matching (`SIFT` + `ORB`) with weak-signal gating and adaptive blend scaling:
+    - recovered local-match profile from `within_1km_pct: 5.00` to `8.89` and `within_2km_pct: 13.33` to `18.33` (`localmatch_a v1` -> `localmatch_a v2_dual`)
+    - remains optional for canonical close-range profile, where KDE-focused profile still performs best on `within_1km_pct`
   - Retrieval query TTA (multi-rotation embedding ensemble with configurable score reduction: mean/median/max/rrf)
 - Detection quality controls are configurable:
   - Minimum OBB area filter (`detector.min_area_px`)
