@@ -35,6 +35,7 @@ class GeoCandidate:
     longitude: float
     retrieval_score: float
     match_id: Optional[str] = None
+    image_path: Optional[str] = None
 
 
 @dataclass(frozen=True)
