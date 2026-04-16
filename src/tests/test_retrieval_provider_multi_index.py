@@ -4,9 +4,12 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
+import pytest
 from PIL import Image
 
+from src.core.geo import retrieval_provider as retrieval_mod
 from src.core.geo.retrieval_provider import GeoRetrievalProvider, LoadedRetrievalIndex, RetrievalIndex
+from src.core.logic.types import GeoCandidate
 
 
 class _StubEmbedder:
@@ -386,3 +389,201 @@ def test_source_fusion_mode_rrf_aggregates_cross_source_support() -> None:
         assert out_rrf
         assert abs(out_rrf[0].latitude - 20.0) < 1e-6
         assert abs(out_rrf[0].longitude - 20.0) < 1e-6
+
+
+def test_query_expansion_can_promote_dense_nearby_cluster() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        image_path = root / "q.jpg"
+        Image.new("RGB", (16, 16), color=(25, 25, 25)).save(image_path)
+        index_path = root / "idx.npz"
+        index_path.write_bytes(b"ok")
+
+        # Query is [1, 0]. "anchor" wins raw top-1, while b1/b2 form a dense
+        # secondary cluster that query-expansion can pull the query towards.
+        idx = _index(
+            rows=[
+                [1.0, 0.0],      # anchor
+                [0.8, 0.6],      # b1
+                [0.79, 0.61],    # b2
+            ],
+            ids=["anchor", "b1", "b2"],
+        )
+
+        base = GeoRetrievalProvider(
+            index_path=str(index_path),
+            top_k=1,
+            min_score=-1.0,
+            query_expansion_top_n=0,
+        )
+        base._ensure_indices = lambda: [_loaded(index_path, "idx", idx)]  # type: ignore[method-assign]
+        base._ensure_embedder = lambda: _StubEmbedder()  # type: ignore[method-assign]
+        out_base = base.candidates(str(image_path))
+        assert out_base
+        assert out_base[0].match_id == "retrieval:idx:anchor"
+
+        expanded = GeoRetrievalProvider(
+            index_path=str(index_path),
+            top_k=1,
+            min_score=-1.0,
+            query_expansion_top_n=3,
+            query_expansion_beta=0.9,
+            query_expansion_alpha=0.1,
+        )
+        expanded._ensure_indices = base._ensure_indices  # type: ignore[method-assign]
+        expanded._ensure_embedder = base._ensure_embedder  # type: ignore[method-assign]
+        out_expanded = expanded.candidates(str(image_path))
+        assert out_expanded
+        assert out_expanded[0].match_id in {"retrieval:idx:b1", "retrieval:idx:b2"}
+
+
+def test_local_match_rerank_can_promote_geometric_match(monkeypatch: pytest.MonkeyPatch) -> None:
+    ranked = [
+        GeoCandidate(latitude=48.85, longitude=2.35, retrieval_score=0.92, match_id="a", image_path="a.jpg"),
+        GeoCandidate(latitude=48.86, longitude=2.36, retrieval_score=0.90, match_id="b", image_path="b.jpg"),
+    ]
+
+    class _DummyOrb:
+        def detectAndCompute(self, _img, _mask):
+            return [object() for _ in range(20)], np.ones((20, 32), dtype=np.uint8)
+
+    class _DummyMatcher:
+        pass
+
+    class _DummyCV2:
+        NORM_HAMMING = 6
+
+        def ORB_create(self, **_kwargs):
+            return _DummyOrb()
+
+        def BFMatcher(self, *_args, **_kwargs):
+            return _DummyMatcher()
+
+    monkeypatch.setattr(retrieval_mod, "cv2", _DummyCV2(), raising=False)
+    monkeypatch.setattr(retrieval_mod, "_resolve_candidate_image_path", lambda raw: Path(str(raw)))
+
+    def _fake_score(*, cand_path: Path, **_kwargs) -> float:
+        return 0.05 if cand_path.name == "a.jpg" else 0.95
+
+    monkeypatch.setattr(retrieval_mod, "_score_local_feature_match", _fake_score)
+    out = retrieval_mod._apply_local_match_rerank(
+        ranked,
+        query_gray=np.zeros((16, 16), dtype=np.uint8),
+        top_n=2,
+        weight=0.9,
+        ratio_test=0.8,
+        max_features=512,
+    )
+    assert out
+    assert out[0].match_id == "b"
+
+
+def test_local_match_rerank_skips_when_signal_is_weak(monkeypatch: pytest.MonkeyPatch) -> None:
+    ranked = [
+        GeoCandidate(latitude=48.85, longitude=2.35, retrieval_score=0.92, match_id="a", image_path="a.jpg"),
+        GeoCandidate(latitude=48.86, longitude=2.36, retrieval_score=0.90, match_id="b", image_path="b.jpg"),
+    ]
+
+    class _DummyOrb:
+        def detectAndCompute(self, _img, _mask):
+            return [object() for _ in range(20)], np.ones((20, 32), dtype=np.uint8)
+
+    class _DummyMatcher:
+        pass
+
+    class _DummyCV2:
+        NORM_HAMMING = 6
+
+        def ORB_create(self, **_kwargs):
+            return _DummyOrb()
+
+        def BFMatcher(self, *_args, **_kwargs):
+            return _DummyMatcher()
+
+    monkeypatch.setattr(retrieval_mod, "cv2", _DummyCV2(), raising=False)
+    monkeypatch.setattr(retrieval_mod, "_resolve_candidate_image_path", lambda raw: Path(str(raw)))
+    monkeypatch.setattr(retrieval_mod, "_score_local_feature_match", lambda **_kwargs: 0.05)
+    out = retrieval_mod._apply_local_match_rerank(
+        ranked,
+        query_gray=np.zeros((16, 16), dtype=np.uint8),
+        top_n=2,
+        weight=0.9,
+        ratio_test=0.8,
+        max_features=512,
+    )
+    assert out
+    assert [cand.match_id for cand in out[:2]] == ["a", "b"]
+
+
+def test_graph_support_rerank_can_promote_dense_cluster() -> None:
+    ranked = [
+        GeoCandidate(latitude=10.0, longitude=10.0, retrieval_score=0.95, match_id="isolated"),
+        GeoCandidate(latitude=20.0, longitude=20.0, retrieval_score=0.86, match_id="cluster_a"),
+        GeoCandidate(latitude=20.01, longitude=20.01, retrieval_score=0.85, match_id="cluster_b"),
+        GeoCandidate(latitude=40.0, longitude=40.0, retrieval_score=0.80, match_id="far_tail"),
+    ]
+
+    out = retrieval_mod._apply_graph_support_rerank(
+        ranked,
+        top_n=4,
+        sigma_km=3.0,
+        score_alpha=0.4,
+        support_beta=1.2,
+        center_radius_km=0.0,
+    )
+    assert out
+    assert out[0].match_id in {"cluster_a", "cluster_b"}
+
+    centered = retrieval_mod._apply_graph_support_rerank(
+        ranked,
+        top_n=4,
+        sigma_km=3.0,
+        score_alpha=0.4,
+        support_beta=1.2,
+        center_radius_km=2.5,
+    )
+    assert centered
+    assert centered[0].match_id in {"cluster_a", "cluster_b", "retrieval:graph_support_consensus"}
+
+
+def test_kde_mode_refine_can_promote_dense_mode() -> None:
+    ranked = [
+        GeoCandidate(latitude=10.0, longitude=10.0, retrieval_score=0.98, match_id="isolated"),
+        GeoCandidate(latitude=20.0, longitude=20.0, retrieval_score=0.90, match_id="cluster_a"),
+        GeoCandidate(latitude=20.01, longitude=20.01, retrieval_score=0.89, match_id="cluster_b"),
+        GeoCandidate(latitude=19.99, longitude=20.02, retrieval_score=0.88, match_id="cluster_c"),
+    ]
+
+    out = retrieval_mod._apply_kde_mode_refinement(
+        ranked,
+        top_n=4,
+        sigma_km=2.0,
+        score_power=1.0,
+        margin_threshold=0.0,
+        switch_radius_km=0.0,
+        max_iters=8,
+    )
+    assert out
+    assert out[0].match_id == "retrieval:kde_mode"
+    assert out[0].latitude > 15.0
+
+
+def test_kde_mode_refine_respects_confident_top1_guard() -> None:
+    ranked = [
+        GeoCandidate(latitude=10.0, longitude=10.0, retrieval_score=0.99, match_id="isolated"),
+        GeoCandidate(latitude=20.0, longitude=20.0, retrieval_score=0.70, match_id="cluster_a"),
+        GeoCandidate(latitude=20.01, longitude=20.01, retrieval_score=0.69, match_id="cluster_b"),
+        GeoCandidate(latitude=19.99, longitude=20.02, retrieval_score=0.68, match_id="cluster_c"),
+    ]
+
+    out = retrieval_mod._apply_kde_mode_refinement(
+        ranked,
+        top_n=4,
+        sigma_km=2.0,
+        score_power=1.0,
+        margin_threshold=0.2,
+        switch_radius_km=2.0,
+        max_iters=8,
+    )
+    assert out
+    assert out[0].match_id == "isolated"

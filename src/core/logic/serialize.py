@@ -67,6 +67,7 @@ def _candidate_to_dict(candidate: "GeoCandidate") -> dict[str, Any]:
         "longitude": candidate.longitude,
         "retrieval_score": candidate.retrieval_score,
         "match_id": candidate.match_id,
+        "image_path": candidate.image_path,
     }
 
 
