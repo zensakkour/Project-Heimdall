@@ -123,7 +123,7 @@ The platform is organized as a modular pipeline:
 - API server: `src/tools/ui_server.py` (FastAPI).
 - Analysis frontend: `src/dashboard/analysis/`.
 
-## Technology Status (As of April 15, 2026)
+## Technology Status (As of April 16, 2026)
 
 Current implementation status:
 
@@ -143,6 +143,11 @@ Current implementation status:
   - Retrieval minimum-candidate keep policy (`retrieval_min_keep_topk`) to avoid null geo outputs in low-similarity scenes.
   - Retrieval locality reranking (`retrieval_locality_radius_km`, `retrieval_locality_weight`) to suppress geographically isolated false matches.
   - Retrieval consensus refinement (`retrieval_consensus_top_n`, `retrieval_consensus_radius_km`, `retrieval_consensus_score_power`) with adaptive center selection (centroid vs weighted geo-median) for local outlier robustness without forcing unnecessary top-1 shifts.
+  - Retrieval KDE mode refinement profiles are now benchmarked on the realistic split (`n=180`):
+    - best `within_1km_pct`: `11.11` (`runs/geo_eval_paris_profile_180_kde_refine_c_w1_v1.json`)
+    - best `within_2km_pct`: `20.00` (`runs/geo_eval_paris_profile_180_kde_refine_d_w2_v1.json`)
+  - Local geometric reranking was upgraded to dual-engine matching (`SIFT` + `ORB`) with weak-signal gating and adaptive blending.
+    - this materially improved legacy local-match performance (`localmatch_a`: `within_1km_pct` `5.00` -> `8.89`, `within_2km_pct` `13.33` -> `18.33`) while keeping control profile unchanged when local matching is disabled.
   - Retrieval query TTA with rotation ensembling (`retrieval_query_tta_degrees`, `retrieval_query_tta_reduce`) for aerial orientation robustness.
   - Multi-index retrieval support with per-index weighting (`retrieval_index_paths`, `retrieval_index_weights`, `retrieval_per_index_top_k`) for scalable dataset expansion.
   - Per-index retrieval model routing (`retrieval_index_model_ids`) so one run can mix indices built by different embedding backbones.

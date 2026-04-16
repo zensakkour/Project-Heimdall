@@ -1,6 +1,6 @@
 import { byId } from "../shared.js";
 
-const profileStorageKey = "heimdallProfile";
+const profileStorageKey = "heimdallLabProfile";
 let activeProfile = "paris";
 
 function syncProfileSelect() {
@@ -8,7 +8,12 @@ function syncProfileSelect() {
   if (!strategySelect) return;
 
   const storedProfile = localStorage.getItem(profileStorageKey);
-  const initialProfile = storedProfile || strategySelect.value || "paris";
+  const hasStoredProfile = Array.from(strategySelect.options).some(
+    (opt) => opt.value === storedProfile
+  );
+  const initialProfile = hasStoredProfile
+    ? storedProfile
+    : strategySelect.value || "paris";
   activeProfile = initialProfile;
   strategySelect.value = initialProfile;
 
@@ -115,6 +120,16 @@ function _formatGeoRandomOutput(raw) {
     `Seed: ${payload.seed ?? "-"} | Requested: ${payload.requested_samples ?? "-"} | ` +
       `Evaluated: ${payload.evaluated ?? "-"}`
   );
+  lines.push(
+    `Profile: requested ${payload.profile_requested ?? "-"} | ` +
+      `effective ${payload.profile_effective ?? "-"}`
+  );
+  if (payload.config_path) {
+    lines.push(`Config: ${payload.config_path}`);
+  }
+  if (payload.profile_warning) {
+    lines.push(`Warning: ${payload.profile_warning}`);
+  }
   lines.push(
     `Distance: mean ${_fmtMetricValue(payload.mean_km, 3)} km | ` +
       `median ${_fmtMetricValue(payload.median_km, 3)} km | ` +
