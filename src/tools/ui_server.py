@@ -52,13 +52,26 @@ DASHBOARD_DIR = APP_ROOT / "src" / "dashboard"
 app = FastAPI()
 
 _EVAL_STATE = {"status": "idle", "last_result": None}
-_GEO_EVAL_STATE = {"status": "idle", "last_result": None, "progress": None, "progress_path": None}
+_GEO_EVAL_STATE = {
+    "status": "idle",
+    "last_result": None,
+    "progress": None,
+    "progress_path": None,
+    "profile_requested": None,
+    "profile_effective": None,
+    "profile_warning": None,
+    "config_path": None,
+}
 _GEO_RANDOM_STATE = {
     "status": "idle",
     "last_result": None,
     "progress": None,
     "progress_path": None,
     "seed": None,
+    "profile_requested": None,
+    "profile_effective": None,
+    "profile_warning": None,
+    "config_path": None,
 }
 _BENCHMARK_STATE = {"status": "idle", "stage": None, "last_result": None, "progress": None, "run_id": None}
 
@@ -376,7 +389,27 @@ def build_pipeline(cfg: Optional[HeimdallConfig]) -> "HeimdallPipeline":
         consensus_radius_km=cfg.geolocator.retrieval_consensus_radius_km,
         consensus_score_power=cfg.geolocator.retrieval_consensus_score_power,
         query_tta_degrees=cfg.geolocator.retrieval_query_tta_degrees,
+        query_tta_modes=cfg.geolocator.retrieval_query_tta_modes,
+        query_tta_auto_modality=cfg.geolocator.retrieval_query_tta_auto_modality,
         query_tta_reduce=cfg.geolocator.retrieval_query_tta_reduce,
+        query_expansion_top_n=cfg.geolocator.retrieval_query_expansion_top_n,
+        query_expansion_beta=cfg.geolocator.retrieval_query_expansion_beta,
+        query_expansion_alpha=cfg.geolocator.retrieval_query_expansion_alpha,
+        local_match_top_n=cfg.geolocator.retrieval_local_match_top_n,
+        local_match_weight=cfg.geolocator.retrieval_local_match_weight,
+        local_match_ratio=cfg.geolocator.retrieval_local_match_ratio,
+        local_match_max_features=cfg.geolocator.retrieval_local_match_max_features,
+        graph_rerank_top_n=cfg.geolocator.retrieval_graph_rerank_top_n,
+        graph_rerank_sigma_km=cfg.geolocator.retrieval_graph_rerank_sigma_km,
+        graph_rerank_score_alpha=cfg.geolocator.retrieval_graph_rerank_score_alpha,
+        graph_rerank_support_beta=cfg.geolocator.retrieval_graph_rerank_support_beta,
+        graph_rerank_center_radius_km=cfg.geolocator.retrieval_graph_rerank_center_radius_km,
+        kde_refine_top_n=cfg.geolocator.retrieval_kde_refine_top_n,
+        kde_refine_sigma_km=cfg.geolocator.retrieval_kde_refine_sigma_km,
+        kde_refine_score_power=cfg.geolocator.retrieval_kde_refine_score_power,
+        kde_refine_margin_threshold=cfg.geolocator.retrieval_kde_refine_margin_threshold,
+        kde_refine_switch_radius_km=cfg.geolocator.retrieval_kde_refine_switch_radius_km,
+        kde_refine_max_iters=cfg.geolocator.retrieval_kde_refine_max_iters,
     )
     geoclip_provider = GeoCLIPProvider(
         model_path=cfg.geolocator.model_path,
@@ -720,6 +753,41 @@ def _config_path_for_profile(profile: Optional[str]) -> Path:
             if config_path.exists():
                 return config_path
     return default_path
+
+
+def _infer_profile_from_paths(images_dir: str, metadata: str) -> Optional[str]:
+    joined = f"{images_dir} {metadata}".replace("\\", "/").lower()
+    if "spacenet_paris_test" in joined:
+        return "paris_test"
+    if "spacenet_paris" in joined:
+        return "paris"
+    if "open_geo" in joined:
+        return "legacy"
+    return None
+
+
+def _is_legacy_profile(profile: Optional[str]) -> bool:
+    key = str(profile or "").strip().lower()
+    return key in {"legacy", "open_geo", "open-geo"}
+
+
+def _resolve_eval_profile(
+    requested_profile: Optional[str],
+    *,
+    images_dir: str,
+    metadata: str,
+) -> tuple[Optional[str], Optional[str]]:
+    inferred = _infer_profile_from_paths(images_dir=images_dir, metadata=metadata)
+    requested = str(requested_profile or "").strip().lower() or None
+    if inferred in {"paris", "paris_test"} and _is_legacy_profile(requested):
+        warning = (
+            f"profile auto-corrected to '{inferred}' because dataset paths are Paris SpaceNet "
+            "(requested legacy/open_geo)."
+        )
+        return inferred, warning
+    if requested is None and inferred is not None:
+        return inferred, None
+    return requested_profile, None
 
 
 def _resolve_local_path(raw: Optional[str]) -> Optional[Path]:
@@ -1455,6 +1523,16 @@ def start_geo_eval(
             output_path = Path("src/dashboard/data/geo_eval.json")
             progress_path = Path("src/dashboard/data/geo_eval.progress.json")
             _GEO_EVAL_STATE["progress_path"] = str(progress_path)
+            effective_profile, warning = _resolve_eval_profile(
+                profile,
+                images_dir=images_dir,
+                metadata=metadata,
+            )
+            config_path = _config_path_for_profile(effective_profile)
+            _GEO_EVAL_STATE["profile_requested"] = profile
+            _GEO_EVAL_STATE["profile_effective"] = effective_profile
+            _GEO_EVAL_STATE["profile_warning"] = warning
+            _GEO_EVAL_STATE["config_path"] = str(config_path)
             from src.tools.run_geo_eval import main as run_geo_eval
 
             args = [
@@ -1469,7 +1547,7 @@ def start_geo_eval(
             ]
             if limit and limit > 0:
                 args.extend(["--limit", str(limit)])
-            args.extend(["--config", str(_config_path_for_profile(profile))])
+            args.extend(["--config", str(config_path)])
             retrieval_flag = "1"
             if retrieval_only is not None and str(retrieval_only).lower() in {"0", "false", "no"}:
                 retrieval_flag = "0"
@@ -1507,7 +1585,10 @@ def _build_random_geo_eval_summary(
     *,
     sample_size: int,
     seed: int,
-    profile: Optional[str],
+    profile_requested: Optional[str],
+    profile_effective: Optional[str],
+    profile_warning: Optional[str],
+    config_path: str,
     retrieval_only: bool,
 ) -> dict:
     diagnostics = payload.get("samples")
@@ -1528,7 +1609,11 @@ def _build_random_geo_eval_summary(
     return {
         "generated_at": _utc_now_iso(),
         "mode": "random_samples",
-        "profile": (profile or "").strip().lower() or "default",
+        "profile": (profile_effective or "").strip().lower() or "default",
+        "profile_requested": (profile_requested or "").strip().lower() or "default",
+        "profile_effective": (profile_effective or "").strip().lower() or "default",
+        "profile_warning": profile_warning,
+        "config_path": config_path,
         "retrieval_only": bool(retrieval_only),
         "requested_samples": int(sample_size),
         "seed": int(seed),
@@ -1566,6 +1651,16 @@ def start_geo_random_eval(
             output_path = Path("src/dashboard/data/geo_eval_random.json")
             progress_path = Path("src/dashboard/data/geo_eval_random.progress.json")
             _GEO_RANDOM_STATE["progress_path"] = str(progress_path)
+            effective_profile, warning = _resolve_eval_profile(
+                profile,
+                images_dir=images_dir,
+                metadata=metadata,
+            )
+            config_path = _config_path_for_profile(effective_profile)
+            _GEO_RANDOM_STATE["profile_requested"] = profile
+            _GEO_RANDOM_STATE["profile_effective"] = effective_profile
+            _GEO_RANDOM_STATE["profile_warning"] = warning
+            _GEO_RANDOM_STATE["config_path"] = str(config_path)
             from src.tools.run_geo_eval import main as run_geo_eval
 
             random_seed = random.randint(1, 2_147_483_647)
@@ -1587,7 +1682,7 @@ def start_geo_random_eval(
                 "--seed",
                 str(random_seed),
                 "--config",
-                str(_config_path_for_profile(profile)),
+                str(config_path),
             ]
             retrieval_enabled = True
             if retrieval_only is not None and str(retrieval_only).lower() in {"0", "false", "no"}:
@@ -1601,7 +1696,10 @@ def start_geo_random_eval(
                     report,
                     sample_size=safe_sample_size,
                     seed=random_seed,
-                    profile=profile,
+                    profile_requested=profile,
+                    profile_effective=effective_profile,
+                    profile_warning=warning,
+                    config_path=str(config_path),
                     retrieval_only=retrieval_enabled,
                 )
                 _GEO_RANDOM_STATE["last_result"] = json.dumps(summary, indent=2, ensure_ascii=False)

@@ -62,6 +62,7 @@ Retrieval controls explored:
 - `retrieval_min_keep_topk` fallback recall guard.
 - Diversity re-selection (`retrieval_diversity_*`).
 - Locality reranking (`retrieval_locality_*`).
+- Local geometric reranking with dual feature engines (`SIFT` + `ORB`) and evidence gating.
 - Query TTA (`retrieval_query_tta_degrees`, `retrieval_query_tta_reduce`).
 - Multi-index expansion (`retrieval_index_paths`, `retrieval_index_weights`, `retrieval_per_index_top_k`).
 - Per-index model routing (`retrieval_index_model_ids`).
@@ -122,6 +123,8 @@ A governance layer was added to prevent ad-hoc metric claims:
 - Added a Lab random-sample evaluation mode for lightweight spot-checking of per-sample distance errors and quick accuracy sanity checks between full benchmark runs.
 - Added aerial retrieval backbone benchmark presets (`aerial_rtx5060_fast`, `aerial_rtx5060_precise`, `aerial_research`) with objective-driven model selection (`within_1km_pct`, `within_2km_pct`, etc.).
 - Added one-command retrieval backbone upgrade workflow (`src.tools.upgrade_retrieval_backbone`) that benchmarks candidate backbones, rebuilds the final index with the selected model, and patches config for reproducible rollout.
+- Added graph-support and KDE mode retrieval reranking ablations on the realistic split (`n=180`) with objective-specific profiles (`within_1km` and `within_2km`).
+- Upgraded local geometric reranking to a dual-engine method (`SIFT` + `ORB`) with weak-signal gating and adaptive blend scaling.
 
 ## 6. Experimental Protocol
 ### 6.1 Datasets and Artifacts Used in This Document
@@ -270,21 +273,126 @@ Observation:
 - Focused retrieval post-processing sweep (`within_2km_pct` objective) produced no measurable end-to-end uplift in the canonical evaluation run.
 - Practical implication: further gain likely requires method-level upgrades (domain-adapted representations, reranking head, or stronger hard-negative data), not additional local knob sweeps on current index/profile.
 
+### 7.8 Graph-Support and KDE Refinement Ablation (n=180)
+Control artifact:
+- `runs/geo_eval_paris_profile_180_qexp_ctrl_v1.json`
+
+Candidate artifacts:
+- `runs/geo_eval_paris_profile_180_graphrerank_a_v1.json`
+- `runs/geo_eval_paris_profile_180_graphrerank_b_v1.json`
+- `runs/geo_eval_paris_profile_180_graphrerank_c_v1.json`
+- `runs/geo_eval_paris_profile_180_kde_refine_a_v1.json`
+- `runs/geo_eval_paris_profile_180_kde_refine_b_no_consensus_v1.json`
+- `runs/geo_eval_paris_profile_180_kde_refine_c_w1_v1.json`
+- `runs/geo_eval_paris_profile_180_kde_refine_d_w2_v1.json`
+
+| Variant | mean_km | median_km | within_1km_pct | within_2km_pct | within_5km_pct |
+|---|---:|---:|---:|---:|---:|
+| Control (`qexp_ctrl_v1`) | 15.5264 | 9.7717 | 10.56 | 19.44 | 37.22 |
+| Graph rerank A | 16.1146 | 10.1016 | 5.56 | 17.78 | 35.56 |
+| Graph rerank B | 16.8216 | 10.3132 | 6.11 | 16.67 | 35.00 |
+| Graph rerank C | 15.3627 | 10.1008 | 7.22 | 17.78 | 37.22 |
+| KDE refine A | 15.6553 | 10.3081 | 8.89 | 18.89 | 36.67 |
+| KDE refine B (no consensus) | 14.6695 | 9.9699 | 8.33 | 18.89 | 37.78 |
+| KDE refine C (W1 focus) | 15.4602 | 9.8686 | 11.11 | 19.44 | 37.78 |
+| KDE refine D (W2 focus) | 15.4223 | 9.9580 | 10.00 | 20.00 | 38.33 |
+
+Observation:
+- Graph-support reranking underperformed control across close-range metrics on this split.
+- KDE mode refinement produced objective-dependent gains:
+  - best `within_1km_pct`: `11.11` (`kde_refine_c_w1_v1`, +0.55 over control),
+  - best `within_2km_pct`: `20.00` (`kde_refine_d_w2_v1`, +0.56 over control),
+  - best `within_5km_pct`: `38.33` (`kde_refine_d_w2_v1`, +1.11 over control).
+
+### 7.9 Dual Local Geometric Reranker Upgrade (n=180)
+Artifacts:
+- Control stability check:
+  - `runs/geo_eval_paris_profile_180_qexp_ctrl_v2_after_dual_localcode.json`
+- Legacy local matcher baseline:
+  - `runs/geo_eval_paris_profile_180_localmatch_a_v1.json`
+- Dual-local reranker evals:
+  - `runs/geo_eval_paris_profile_180_localmatch_a_v2_dual.json`
+  - `runs/geo_eval_paris_profile_180_localmatch_b_v2_dual.json`
+  - `runs/geo_eval_paris_profile_180_localmatch_c_v2_dual.json`
+- Combined KDE + dual-local probe:
+  - `runs/geo_eval_paris_profile_180_kde_refine_e_w1_duallocal_v1.json`
+
+| Variant | mean_km | median_km | within_1km_pct | within_2km_pct | within_5km_pct | within_10km_pct |
+|---|---:|---:|---:|---:|---:|---:|
+| Control after code change | 15.5264 | 9.7717 | 10.56 | 19.44 | 37.22 | 50.56 |
+| Legacy local match A (pre-upgrade) | 16.6122 | 10.9454 | 5.00 | 13.33 | 32.78 | 46.67 |
+| Dual local match A | 15.2447 | 9.7717 | 8.89 | 18.33 | 37.22 | 51.11 |
+| Dual local match B | 15.2417 | 9.7717 | 8.89 | 18.33 | 37.78 | 51.11 |
+| Dual local match C | 15.5318 | 9.7717 | 8.89 | 18.33 | 37.22 | 51.11 |
+| KDE C + Dual Local | 15.1863 | 9.8397 | 8.89 | 18.33 | 37.78 | 51.11 |
+
+Observation:
+- The dual local matcher is a real method upgrade over legacy local matching (large recovery in mean/median and all radius metrics).
+- Control profile stayed identical after the code change, confirming no regression when local match is disabled.
+- On this split, the dual local reranker did not exceed the best close-range profile from KDE refinement (`within_1km_pct` remained below `11.11`).
+- Practical use: keep dual local rerank as an optional mode for tail-error reduction while close-range target optimization continues through density-aware retrieval refinement and backbone/data upgrades.
+
+### 7.10 Evaluation Integrity Guard: Profile/Data Mismatch Fix
+Artifacts:
+- `runs/tmp_paris_with_open_geo_seed1870334448.json`
+- `runs/tmp_paris_with_paris_cfg_seed1870334448.json`
+
+| Setup (same two Paris chips, same seed) | mean_km | within_1km_pct | Key behavior |
+|---|---:|---:|---|
+| Paris data + `open_geo` profile | 5846.1583 | 0.00 | Predicted near `40.6892, -74.0445` (US) |
+| Paris data + `paris` profile | 7.1809 | 50.00 | Predictions stayed in Paris region |
+
+Observation:
+- Extreme errors were caused by evaluation profile/index mismatch, not label corruption.
+- This failure mode can dominate metrics and must be treated as an experimental validity issue.
+- The Lab/backend now auto-corrects legacy/open-geo profile selection when dataset paths clearly target Paris (`spacenet_paris*`), and surfaces requested/effective profile in output.
+
 ## 8. Methods Tried and Practical Outcome
 ### 8.1 Changes with Clear Practical Value
 - Multi-provider candidate generation and merge controls.
 - Retrieval locality and diversity controls.
 - Retrieval consensus top-1 refinement (clustered centroid over top candidates).
+- Retrieval KDE mode top-1 refinement with objective-specific profiles (`within_1km` vs `within_2km` emphasis).
 - `retrieval_min_keep_topk` fallback for robustness.
 - Cross-source fusion signals and confidence caps.
 - Benchmark governance with promotion workflow.
 - Automated aerial-backbone upgrade workflow (objective-based backbone benchmark + final-index rebuild + config patch).
+- Dual local geometric reranker (`SIFT` + `ORB` + evidence gate) as a safer local-feature ranking path than legacy local matching.
 
 ### 8.2 Changes with Conditional Value
 - Query TTA: useful in some regimes, neutral in tested subset.
 - Multi-index expansion: helps coverage potential but can degrade precision without score normalization and balancing.
 - Alternative TTA reducers (`mean`, `rrf`, `median`): not best in latest measured subset.
 - Aerial backbone swap to tested SigLIP candidates: no gain over CLIP on the realistic Paris split used here.
+- Graph-support reranking on current realistic split: under control baseline.
+- Dual local reranker + KDE combination: improved tail metrics but did not beat best close-range (`within_1km_pct`) profile.
+
+### 8.3 Complete Method Ledger (Keep vs Reject)
+This table is the explicit decision ledger for methods tried in this project cycle.
+
+| Method / Variant | Best measured result in this draft | Decision |
+|---|---|---|
+| `retrieval_min_keep_topk` guardrail | Avoided full collapse (`evaluated`: `0` -> `40`; `null_predictions`: `40` -> `0`) in strict threshold test | Keep (required safety guard) |
+| Query TTA on/off (`0,90,180,270` + `max`) | Neutral on tested subset (`mean_km` unchanged at `0.1982`) | Keep as optional; no universal gain |
+| TTA reducers (`max`, `rrf`, `mean`, `median`) | `max` best (`within_1km_pct=90.0` on sweep subset) | Keep `max` preference; others experimental |
+| Realistic-profile simplification (disable locality/diversity/source-balance in ranking path) | `within_1km_pct`: `1.67` -> `5.00`; `within_5km_pct`: `23.89` -> `30.56` | Keep |
+| Retrieval consensus top-1 refinement (`top_n=20`, `radius=3km`) | `within_1km_pct`: `5.00` -> `10.00`; `median_km`: `11.4990` -> `9.7717` | Keep |
+| Guarded adaptive centroid vs geo-median center selection | `within_1km_pct`: `10.00` -> `10.56` with flat median | Keep |
+| Multi-index source fusion mode `rrf` vs `weighted_score` | `rrf` worse (`within_1km_pct`: `7.78` vs `10.56`) | Keep as experimental; do not default |
+| Aerial backbone swap to tested SigLIP models | No win over CLIP on realistic split | Reject as default (CLIP stays baseline) |
+| Focused `within_2km_pct` knob sweep (`3456` combos) | No end-to-end uplift on canonical eval (`all deltas 0`) | Revert config changes |
+| Graph-support rerank (`A/B/C`) | All close-range metrics underperformed control | Reject for current profile |
+| KDE refine profile `C` (W1 focus) | Best close-range hit (`within_1km_pct=11.11`) | Keep as optional W1-focused profile |
+| KDE refine profile `D` (W2 focus) | Best `within_2km_pct=20.00`, `within_5km_pct=38.33` | Keep as optional W2-focused profile |
+| Dual local reranker (`SIFT+ORB`, weak-signal gate, adaptive blend) | Large gain vs legacy local match A (`within_1km_pct`: `5.00` -> `8.89`) | Keep as optional mode |
+| KDE + dual-local combined profile | Did not beat best W1 profile (`within_1km_pct` stayed `8.89`) | Do not adopt as close-range default |
+| Profile/data mismatch auto-correction in Lab/backend | Eliminated catastrophic profile mismatch failure mode (`~5846 km` case) | Keep (evaluation-integrity requirement) |
+
+### 8.4 What Is Currently Kept by Default
+- Canonical Paris realistic profile remains CLIP-based retrieval with consensus refinement.
+- KDE and dual-local methods remain opt-in evaluation profiles for objective-specific tradeoffs.
+- RRF source fusion and alternate backbones remain research modes, not production defaults on current split.
+- Evaluation-integrity guards (profile/path auto-resolution + explicit profile reporting) are mandatory.
 
 ## 9. Error Analysis
 Observed failure classes:
@@ -414,14 +522,37 @@ Project Heimdall demonstrates a practical path from prototype geolocation to a b
 - `runs/bench_realistic_single_180_precision_v2.json`
 - `runs/geo_eval_paris_profile_180_v2.json`
 - `runs/geo_eval_paris_profile_180_consensus_v1.json`
+- `runs/geo_eval_paris_profile_180_consensus_v2_geomedian.json`
+- `runs/geo_eval_paris_profile_180_consensus_v3_adaptive_center.json`
+- `runs/geo_eval_paris_profile_180_consensus_v4_adaptive_guarded.json`
 - `runs/geo_eval_paris_profile_180_sourcefusion_weighted_v1.json`
 - `runs/geo_eval_paris_profile_180_sourcefusion_rrf_v1.json`
+- `runs/bench_cfg/cfg_paris_sourcefusion_rrf.json`
+- `runs/geo_eval_paris_profile_180_pre_backbone_upgrade_v1.json`
+- `runs/geo_eval_paris_profile_180_post_tune_v1.json`
+- `runs/backbone_upgrade_rtx5060_v1/backbone_benchmark.json`
+- `runs/tune_retrieval_geo_within2km_v1.json`
+- `runs/geo_eval_paris_profile_180_graphrerank_a_v1.json`
+- `runs/geo_eval_paris_profile_180_graphrerank_b_v1.json`
+- `runs/geo_eval_paris_profile_180_graphrerank_c_v1.json`
+- `runs/geo_eval_paris_profile_180_kde_refine_a_v1.json`
+- `runs/geo_eval_paris_profile_180_kde_refine_b_no_consensus_v1.json`
+- `runs/geo_eval_paris_profile_180_kde_refine_c_w1_v1.json`
+- `runs/geo_eval_paris_profile_180_kde_refine_d_w2_v1.json`
+- `runs/geo_eval_paris_profile_180_localmatch_a_v1.json`
+- `runs/geo_eval_paris_profile_180_qexp_ctrl_v2_after_dual_localcode.json`
+- `runs/geo_eval_paris_profile_180_localmatch_a_v2_dual.json`
+- `runs/geo_eval_paris_profile_180_localmatch_b_v2_dual.json`
+- `runs/geo_eval_paris_profile_180_localmatch_c_v2_dual.json`
+- `runs/geo_eval_paris_profile_180_kde_refine_e_w1_duallocal_v1.json`
 - `runs/geo_eval_paris_no_tta_120.json`
 - `runs/geo_eval_paris_tta_120.json`
 - `runs/geo_eval_paris_strict_keep0_40.json`
 - `runs/geo_eval_paris_strict_keep2_40.json`
 - `runs/tune_retrieval_geo_tta_modes_med.json`
 - `runs/tune_retrieval_geo_realistic_within1km_focus_v1.json`
+- `runs/tmp_paris_with_open_geo_seed1870334448.json`
+- `runs/tmp_paris_with_paris_cfg_seed1870334448.json`
 - `runs/geo_impact_latest.json`
 - `runs/geo_impact_latest.md`
 
