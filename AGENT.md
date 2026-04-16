@@ -18,6 +18,7 @@ Use it to keep algorithm history, experiment intent, and evaluation standards co
 4. Keep config changes explicit and traceable; mention exact knobs changed.
 5. If a change touches scoring/fusion/retrieval logic, add or update regression tests.
 6. After each user prompt that changes code, config, metrics, experiments, or workflow, update documentation before finalizing work.
+7. Treat every state-changing command as documentation-relevant: if a command changes code, config, artifacts, or conclusions, reflect it in docs within the same prompt cycle.
 
 ## Per-Prompt Documentation Sync (Required)
 At the end of each user request cycle, verify and update docs as needed:
@@ -25,6 +26,10 @@ At the end of each user request cycle, verify and update docs as needed:
 - `src/docs/RESEARCH_PAPER.md`: keep methods tried, experiment outcomes, and conclusions current.
 - `README.md`: keep user-facing commands/links/config references accurate when behavior changes.
 - `docs/eval/*`: refresh benchmark outputs when running benchmark flows.
+
+Command-level enforcement:
+- After each meaningful command block (experiment run, config patch, benchmark, merge, or workflow change), immediately check whether docs need an update.
+- Do not defer documentation updates across multiple unrelated commands.
 
 If no documentation changes are needed for the prompt, explicitly confirm that docs were reviewed and already up to date.
 

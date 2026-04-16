@@ -166,3 +166,84 @@ def test_start_geo_random_eval_reports_distance_summary(monkeypatch) -> None:
         assert summary.get("within_2km_pct") == 40.0
         assert summary.get("within_5km_pct") == 80.0
         assert len(summary.get("samples", [])) == 5
+
+
+def test_start_geo_random_eval_autocorrects_legacy_profile_for_paris_paths(monkeypatch) -> None:
+    class _ImmediateThread:
+        def __init__(self, target=None, args=(), kwargs=None, daemon=None):
+            self._target = target
+            self._args = args
+            self._kwargs = kwargs or {}
+            self.daemon = daemon
+
+        def start(self):
+            if self._target is not None:
+                self._target(*self._args, **self._kwargs)
+
+    def _fake_geo_eval_main(argv: list[str]) -> None:
+        out_path = Path(argv[argv.index("--output") + 1])
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(
+            json.dumps(
+                {
+                    "total": 1,
+                    "evaluated": 1,
+                    "missing_files": 0,
+                    "null_predictions": 0,
+                    "mean_km": 1.0,
+                    "median_km": 1.0,
+                    "p90_km": 1.0,
+                    "within_1km_pct": 100.0,
+                    "within_5km_pct": 100.0,
+                    "within_10km_pct": 100.0,
+                    "within_50km_pct": 100.0,
+                    "samples": [{"image": "a.jpg", "dist_km": 1.0}],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    with tempfile.TemporaryDirectory() as tmp:
+        app_root = Path(tmp)
+        config_dir = app_root / "src" / "config"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        (config_dir / "defaults.json").write_text("{}", encoding="utf-8")
+        (config_dir / "paris.json").write_text("{}", encoding="utf-8")
+        (config_dir / "paris_test.json").write_text("{}", encoding="utf-8")
+        (config_dir / "open_geo.json").write_text("{}", encoding="utf-8")
+        monkeypatch.setattr(ui_server, "APP_ROOT", app_root)
+        monkeypatch.setattr(ui_server.random, "randint", lambda a, b: 456789)
+        fake_geo_mod = types.ModuleType("src.tools.run_geo_eval")
+        fake_geo_mod.main = _fake_geo_eval_main
+        monkeypatch.setitem(sys.modules, "src.tools.run_geo_eval", fake_geo_mod)
+
+        import threading
+
+        monkeypatch.setattr(threading, "Thread", _ImmediateThread)
+        client = TestClient(ui_server.app)
+        start_res = client.post(
+            "/eval/geo/random/start",
+            params={
+                "images_dir": "data/spacenet_paris/chips",
+                "metadata": "data/spacenet_paris/metadata.csv",
+                "sample_size": "1",
+                "profile": "legacy",
+                "retrieval_only": "1",
+            },
+        )
+        assert start_res.status_code == 200
+        assert start_res.json().get("status") == "running"
+
+        status_res = client.get("/eval/geo/random/status")
+        assert status_res.status_code == 200
+        payload = status_res.json()
+        assert payload.get("status") == "done"
+        assert payload.get("profile_requested") == "legacy"
+        assert payload.get("profile_effective") == "paris"
+        assert "auto-corrected" in str(payload.get("profile_warning"))
+        assert str(payload.get("config_path", "")).replace("\\", "/").endswith("/src/config/paris.json")
+
+        summary = json.loads(payload.get("last_result") or "{}")
+        assert summary.get("profile_requested") == "legacy"
+        assert summary.get("profile_effective") == "paris"
+        assert "auto-corrected" in str(summary.get("profile_warning"))
