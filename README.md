@@ -576,6 +576,8 @@ Config files are under `src/config/`:
 - `paris_test.json`: Paris test profile
 - `open_geo.json`: lightweight open-geo profile
 
+Each shipped profile also declares `profile_scope` at the JSON root so region intent is explicit (`PARIS` vs `US`) and easier to audit in runs.
+
 Pass a config where supported with `--config <path>`.
 
 Useful geo quality knobs in `geolocator`:

@@ -295,6 +295,23 @@ def _normalize_query_expansion_alpha(value: object) -> float:
     return max(0.0, min(1.0, alpha))
 
 
+def _normalize_tta_agreement_top_n(value: object) -> int:
+    try:
+        return max(0, int(value))
+    except Exception:
+        return 0
+
+
+def _normalize_tta_agreement_weight(value: object) -> float:
+    try:
+        weight = float(value)
+    except Exception:
+        return 0.0
+    if not math.isfinite(weight):
+        return 0.0
+    return max(0.0, min(1.0, weight))
+
+
 def _normalize_local_match_top_n(value: object) -> int:
     try:
         return max(0, int(value))
@@ -430,6 +447,16 @@ def _normalize_kde_refine_max_iters(value: object) -> int:
     except Exception:
         return 8
     return max(1, min(32, iters))
+
+
+def _normalize_kde_refine_adaptive_mass(value: object) -> float:
+    try:
+        mass = float(value)
+    except Exception:
+        return 0.0
+    if not math.isfinite(mass):
+        return 0.0
+    return max(0.0, min(1.0, mass))
 
 
 def _normalize_scores_for_source(scores: np.ndarray, mode: str) -> np.ndarray:
@@ -570,6 +597,8 @@ def _collect_weighted_ranked_candidates(
     query_expansion_top_n: int,
     query_expansion_beta: float,
     query_expansion_alpha: float,
+    tta_agreement_top_n: int,
+    tta_agreement_weight: float,
 ) -> Tuple[List[GeoCandidate], int]:
     return _collect_ranked_candidates(
         loaded_indices=loaded_indices,
@@ -582,6 +611,8 @@ def _collect_weighted_ranked_candidates(
         query_expansion_top_n=query_expansion_top_n,
         query_expansion_beta=query_expansion_beta,
         query_expansion_alpha=query_expansion_alpha,
+        tta_agreement_top_n=tta_agreement_top_n,
+        tta_agreement_weight=tta_agreement_weight,
         source_fusion_mode="weighted_score",
     )
 
@@ -598,6 +629,8 @@ def _collect_ranked_candidates(
     query_expansion_top_n: int,
     query_expansion_beta: float,
     query_expansion_alpha: float,
+    tta_agreement_top_n: int,
+    tta_agreement_weight: float,
     source_fusion_mode: str,
 ) -> Tuple[List[GeoCandidate], int]:
     merged: List[GeoCandidate] = []
@@ -628,6 +661,12 @@ def _collect_ranked_candidates(
             alpha=query_expansion_alpha,
         )
         scores = _normalize_scores_for_source(scores_raw, mode=effective_norm)
+        scores = _apply_tta_agreement_rerank(
+            scores_aug=scores_aug,
+            aggregated_scores=scores,
+            top_n=tta_agreement_top_n,
+            weight=tta_agreement_weight,
+        )
         if scores.size <= 0:
             continue
         per_source_top = min(
@@ -785,11 +824,14 @@ class GeoRetrievalProvider:
         consensus_score_power: float = 1.0,
         query_tta_degrees: Optional[Sequence[float]] = None,
         query_tta_modes: Optional[Sequence[str]] = None,
+        query_tta_scales: Optional[Sequence[float]] = None,
         query_tta_auto_modality: bool = False,
         query_tta_reduce: str = "mean",
         query_expansion_top_n: int = 0,
         query_expansion_beta: float = 0.0,
         query_expansion_alpha: float = 0.5,
+        tta_agreement_top_n: int = 0,
+        tta_agreement_weight: float = 0.0,
         local_match_top_n: int = 0,
         local_match_weight: float = 0.0,
         local_match_ratio: float = 0.8,
@@ -805,6 +847,7 @@ class GeoRetrievalProvider:
         kde_refine_margin_threshold: float = 0.0,
         kde_refine_switch_radius_km: float = 0.0,
         kde_refine_max_iters: int = 8,
+        kde_refine_adaptive_mass: float = 0.0,
         source_fusion_mode: str = "weighted_score",
     ) -> None:
         self.index_paths = _normalize_index_paths(index_path=index_path, index_paths=index_paths)
@@ -832,6 +875,7 @@ class GeoRetrievalProvider:
         self.consensus_score_power = max(0.0, float(consensus_score_power))
         self.query_tta_degrees = _normalize_tta_degrees(query_tta_degrees)
         self.query_tta_modes = _normalize_tta_modes(query_tta_modes)
+        self.query_tta_scales = _normalize_tta_scales(query_tta_scales)
         self.query_tta_auto_modality = bool(query_tta_auto_modality)
         reduce_mode = str(query_tta_reduce).lower()
         if reduce_mode not in {"mean", "median", "max", "rrf"}:
@@ -840,6 +884,8 @@ class GeoRetrievalProvider:
         self.query_expansion_top_n = _normalize_query_expansion_top_n(query_expansion_top_n)
         self.query_expansion_beta = _normalize_query_expansion_beta(query_expansion_beta)
         self.query_expansion_alpha = _normalize_query_expansion_alpha(query_expansion_alpha)
+        self.tta_agreement_top_n = _normalize_tta_agreement_top_n(tta_agreement_top_n)
+        self.tta_agreement_weight = _normalize_tta_agreement_weight(tta_agreement_weight)
         self.local_match_top_n = _normalize_local_match_top_n(local_match_top_n)
         self.local_match_weight = _normalize_local_match_weight(local_match_weight)
         self.local_match_ratio = _normalize_local_match_ratio(local_match_ratio)
@@ -859,6 +905,7 @@ class GeoRetrievalProvider:
             kde_refine_switch_radius_km
         )
         self.kde_refine_max_iters = _normalize_kde_refine_max_iters(kde_refine_max_iters)
+        self.kde_refine_adaptive_mass = _normalize_kde_refine_adaptive_mass(kde_refine_adaptive_mass)
         self._indices: Optional[List[LoadedRetrievalIndex]] = None
         self._embedder: Optional[ClipEmbedder] = None
         self._embedders_by_model: dict[str, ClipEmbedder] = {}
@@ -902,6 +949,7 @@ class GeoRetrievalProvider:
                         image,
                         self.query_tta_degrees,
                         effective_tta_modes,
+                        self.query_tta_scales,
                     )
                     continue
                 other = self._ensure_embedder_for_model(model_id)
@@ -910,6 +958,7 @@ class GeoRetrievalProvider:
                     image,
                     self.query_tta_degrees,
                     effective_tta_modes,
+                    self.query_tta_scales,
                 )
             ranked, top_k = _collect_ranked_candidates(
                 loaded_indices=loaded_indices,
@@ -922,6 +971,8 @@ class GeoRetrievalProvider:
                 query_expansion_top_n=self.query_expansion_top_n,
                 query_expansion_beta=self.query_expansion_beta,
                 query_expansion_alpha=self.query_expansion_alpha,
+                tta_agreement_top_n=self.tta_agreement_top_n,
+                tta_agreement_weight=self.tta_agreement_weight,
                 source_fusion_mode=self.source_fusion_mode,
             )
             if not ranked:
@@ -990,6 +1041,7 @@ class GeoRetrievalProvider:
                 margin_threshold=self.kde_refine_margin_threshold,
                 switch_radius_km=self.kde_refine_switch_radius_km,
                 max_iters=self.kde_refine_max_iters,
+                adaptive_mass=self.kde_refine_adaptive_mass,
             )
             self.last_error = None
             return results
@@ -1628,6 +1680,7 @@ def _apply_kde_mode_refinement(
     margin_threshold: float,
     switch_radius_km: float,
     max_iters: int,
+    adaptive_mass: float = 0.0,
 ) -> List[GeoCandidate]:
     if not ranked:
         return []
@@ -1641,8 +1694,24 @@ def _apply_kde_mode_refinement(
     if n < 2 or sigma <= 0.0:
         return ordered
 
-    subset = list(ordered[:n])
-    weights = [max(1e-9, _score_to_unit_interval(item.retrieval_score) ** power) for item in subset]
+    subset_full = list(ordered[:n])
+    weights_full = [max(1e-9, _score_to_unit_interval(item.retrieval_score) ** power) for item in subset_full]
+    mass = _normalize_kde_refine_adaptive_mass(adaptive_mass)
+    if mass > 0.0 and len(subset_full) >= 3:
+        target = mass * sum(weights_full)
+        running = 0.0
+        keep = 0
+        for weight in weights_full:
+            running += float(weight)
+            keep += 1
+            if keep >= 2 and running >= target:
+                break
+        keep = max(2, min(len(subset_full), keep))
+        subset = subset_full[:keep]
+        weights = weights_full[:keep]
+    else:
+        subset = subset_full
+        weights = weights_full
     total_w = sum(weights)
     if total_w <= 1e-12:
         return ordered
@@ -1758,6 +1827,31 @@ def _normalize_tta_modes(values: Optional[Sequence[str]]) -> List[str]:
     return out or ["rgb"]
 
 
+def _normalize_tta_scales(values: Optional[Sequence[float]]) -> List[float]:
+    if not values:
+        return [1.0]
+    out: List[float] = []
+    seen = set()
+    for raw in values:
+        if not isinstance(raw, (int, float)):
+            continue
+        val = float(raw)
+        if not math.isfinite(val):
+            continue
+        val = min(1.0, max(0.45, val))
+        key = round(val, 3)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(float(key))
+    if not out:
+        return [1.0]
+    if 1.0 not in seen:
+        out.insert(0, 1.0)
+    out = sorted(out, reverse=True)
+    return out[:6]
+
+
 def _apply_tta_mode(image: Image.Image, mode: str) -> Image.Image:
     if mode == "gray":
         return ImageOps.grayscale(image).convert("RGB")
@@ -1768,6 +1862,45 @@ def _apply_tta_mode(image: Image.Image, mode: str) -> Image.Image:
         gray = ImageOps.grayscale(image)
         return gray.filter(ImageFilter.FIND_EDGES).convert("RGB")
     return image
+
+
+def _iter_tta_scaled_views(image: Image.Image, scales: Sequence[float]):
+    width, height = image.size
+    yielded = set()
+    for scale in scales:
+        ratio = min(1.0, max(0.45, float(scale)))
+        if ratio >= 0.999:
+            if "full" not in yielded:
+                yielded.add("full")
+                yield image
+            continue
+
+        crop_w = max(8, int(round(width * ratio)))
+        crop_h = max(8, int(round(height * ratio)))
+        crop_w = min(width, crop_w)
+        crop_h = min(height, crop_h)
+        if crop_w >= width and crop_h >= height:
+            if "full" not in yielded:
+                yielded.add("full")
+                yield image
+            continue
+
+        anchors = [
+            ((width - crop_w) // 2, (height - crop_h) // 2),
+            (0, 0),
+            (max(0, width - crop_w), 0),
+            (0, max(0, height - crop_h)),
+            (max(0, width - crop_w), max(0, height - crop_h)),
+        ]
+        for left, top in anchors:
+            box = (int(left), int(top), int(left + crop_w), int(top + crop_h))
+            if box in yielded:
+                continue
+            yielded.add(box)
+            yield image.crop(box)
+
+    if not yielded:
+        yield image
 
 
 def _detect_query_modality(image_path: str, image: Image.Image) -> str:
@@ -1822,6 +1955,7 @@ def _query_embeddings(
     image: Image.Image,
     tta_degrees: Sequence[float],
     tta_modes: Sequence[str],
+    tta_scales: Sequence[float],
 ) -> np.ndarray:
     vectors: List[np.ndarray] = []
     for deg in tta_degrees:
@@ -1831,15 +1965,16 @@ def _query_embeddings(
             resampling = getattr(Image, "Resampling", Image)
             variant = image.rotate(float(deg), resample=resampling.BICUBIC, expand=False)
         for mode in tta_modes:
-            view = _apply_tta_mode(variant, mode)
-            emb = embedder.embed(view)
-            if emb.ndim == 2:
-                if emb.shape[0] <= 0:
-                    continue
-                vec = emb[0]
-            else:
-                vec = emb
-            vectors.append(np.asarray(vec, dtype=np.float32))
+            base_view = _apply_tta_mode(variant, mode)
+            for view in _iter_tta_scaled_views(base_view, tta_scales):
+                emb = embedder.embed(view)
+                if emb.ndim == 2:
+                    if emb.shape[0] <= 0:
+                        continue
+                    vec = emb[0]
+                else:
+                    vec = emb
+                vectors.append(np.asarray(vec, dtype=np.float32))
 
     if not vectors:
         raise ValueError("query_embedding_empty")
@@ -1866,6 +2001,48 @@ def _aggregate_tta_scores(scores_aug: np.ndarray, mode: str = "mean") -> np.ndar
         out = _rrf_aggregate(scores_aug)
     else:
         out = np.mean(scores_aug, axis=1)
+    return np.asarray(out, dtype=np.float32)
+
+
+def _apply_tta_agreement_rerank(
+    *,
+    scores_aug: np.ndarray,
+    aggregated_scores: np.ndarray,
+    top_n: int,
+    weight: float,
+) -> np.ndarray:
+    if scores_aug.ndim != 2:
+        return np.asarray(aggregated_scores, dtype=np.float32)
+    n_items, n_aug = scores_aug.shape
+    if n_items <= 1 or n_aug <= 1:
+        return np.asarray(aggregated_scores, dtype=np.float32)
+    keep_n = min(max(0, int(top_n)), n_items)
+    blend = _normalize_tta_agreement_weight(weight)
+    if keep_n < 2 or blend <= 1e-9:
+        return np.asarray(aggregated_scores, dtype=np.float32)
+
+    support = np.zeros(n_items, dtype=np.float64)
+    rank_norm = float(sum(1.0 / float(rank + 1) for rank in range(keep_n)))
+    if rank_norm <= 1e-12:
+        return np.asarray(aggregated_scores, dtype=np.float32)
+
+    for col in range(n_aug):
+        order = _top_indices(np.asarray(scores_aug[:, col], dtype=np.float32), keep_n)
+        for rank, item_idx in enumerate(order):
+            support[int(item_idx)] += 1.0 / float(rank + 1)
+
+    support /= float(n_aug) * rank_norm
+    support = np.clip(support, 0.0, 1.0)
+
+    base = np.asarray(aggregated_scores, dtype=np.float32)
+    lo = float(np.min(base))
+    hi = float(np.max(base))
+    span = hi - lo
+    if span <= 1e-12:
+        return base
+    base_unit = (base - lo) / span
+    merged_unit = ((1.0 - blend) * base_unit) + (blend * np.asarray(support, dtype=np.float32))
+    out = lo + (np.clip(merged_unit, 0.0, 1.0) * span)
     return np.asarray(out, dtype=np.float32)
 
 

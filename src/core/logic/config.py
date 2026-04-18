@@ -56,11 +56,14 @@ class GeoConfig:
     retrieval_consensus_score_power: float = 1.0
     retrieval_query_tta_degrees: Tuple[float, ...] = (0.0,)
     retrieval_query_tta_modes: Tuple[str, ...] = ("rgb",)
+    retrieval_query_tta_scales: Tuple[float, ...] = (1.0,)
     retrieval_query_tta_auto_modality: bool = False
     retrieval_query_tta_reduce: str = "mean"
     retrieval_query_expansion_top_n: int = 0
     retrieval_query_expansion_beta: float = 0.0
     retrieval_query_expansion_alpha: float = 0.5
+    retrieval_tta_agreement_top_n: int = 0
+    retrieval_tta_agreement_weight: float = 0.0
     retrieval_local_match_top_n: int = 0
     retrieval_local_match_weight: float = 0.0
     retrieval_local_match_ratio: float = 0.8
@@ -76,6 +79,7 @@ class GeoConfig:
     retrieval_kde_refine_margin_threshold: float = 0.0
     retrieval_kde_refine_switch_radius_km: float = 0.0
     retrieval_kde_refine_max_iters: int = 8
+    retrieval_kde_refine_adaptive_mass: float = 0.0
     candidate_dedupe_radius_m: float = 300.0
     candidate_source_balance_beta: float = 0.0
     candidate_max_results: int = 80
@@ -205,11 +209,14 @@ def load_config(path: str) -> HeimdallConfig:
             retrieval_consensus_score_power=geo.get("retrieval_consensus_score_power", 1.0),
             retrieval_query_tta_degrees=_parse_float_tuple(geo.get("retrieval_query_tta_degrees", [0.0])),
             retrieval_query_tta_modes=_parse_tta_modes(geo.get("retrieval_query_tta_modes", ["rgb"])),
+            retrieval_query_tta_scales=_parse_float_tuple(geo.get("retrieval_query_tta_scales", [1.0])),
             retrieval_query_tta_auto_modality=geo.get("retrieval_query_tta_auto_modality", False),
             retrieval_query_tta_reduce=_parse_tta_reduce(geo.get("retrieval_query_tta_reduce", "mean")),
             retrieval_query_expansion_top_n=geo.get("retrieval_query_expansion_top_n", 0),
             retrieval_query_expansion_beta=geo.get("retrieval_query_expansion_beta", 0.0),
             retrieval_query_expansion_alpha=geo.get("retrieval_query_expansion_alpha", 0.5),
+            retrieval_tta_agreement_top_n=geo.get("retrieval_tta_agreement_top_n", 0),
+            retrieval_tta_agreement_weight=geo.get("retrieval_tta_agreement_weight", 0.0),
             retrieval_local_match_top_n=geo.get("retrieval_local_match_top_n", 0),
             retrieval_local_match_weight=geo.get("retrieval_local_match_weight", 0.0),
             retrieval_local_match_ratio=geo.get("retrieval_local_match_ratio", 0.8),
@@ -225,6 +232,7 @@ def load_config(path: str) -> HeimdallConfig:
             retrieval_kde_refine_margin_threshold=geo.get("retrieval_kde_refine_margin_threshold", 0.0),
             retrieval_kde_refine_switch_radius_km=geo.get("retrieval_kde_refine_switch_radius_km", 0.0),
             retrieval_kde_refine_max_iters=geo.get("retrieval_kde_refine_max_iters", 8),
+            retrieval_kde_refine_adaptive_mass=geo.get("retrieval_kde_refine_adaptive_mass", 0.0),
             candidate_dedupe_radius_m=geo.get("candidate_dedupe_radius_m", 300.0),
             candidate_source_balance_beta=geo.get("candidate_source_balance_beta", 0.0),
             candidate_max_results=geo.get("candidate_max_results", 80),

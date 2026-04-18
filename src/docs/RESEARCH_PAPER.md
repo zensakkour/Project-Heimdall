@@ -349,6 +349,29 @@ Observation:
 - This failure mode can dominate metrics and must be treated as an experimental validity issue.
 - The Lab/backend now auto-corrects legacy/open-geo profile selection when dataset paths clearly target Paris (`spacenet_paris*`), and surfaces requested/effective profile in output.
 
+### 7.11 Multi-Scale Query Views and Adaptive-Mass KDE Follow-Up (n=180)
+Artifacts:
+- Multi-scale query-view probe:
+  - `runs/geo_eval_paris_profile_180_tta_agreement_ctrl_v1.json`
+  - `runs/geo_eval_paris_profile_180_multiscale_a_v1.json`
+- Adaptive-mass KDE follow-up:
+  - `runs/geo_eval_paris_profile_180_kde_refine_d_w2_v1.json`
+  - `runs/geo_eval_paris_profile_180_kde_refine_d_w2_adapt_a_v1.json`
+  - `runs/geo_eval_paris_profile_180_kde_refine_d_w2_adapt_b_v1.json`
+
+| Variant | mean_km | median_km | p90_km | within_1km_pct | within_2km_pct | within_5km_pct | within_10km_pct |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| TTA control (`tta_agreement_ctrl`) | 15.5264 | 9.7717 | 43.3924 | 10.56 | 19.44 | 37.22 | 50.56 |
+| Multi-scale query views (`multiscale_a`) | 15.3451 | 10.1387 | 42.7910 | 6.11 | 17.22 | 37.78 | 49.44 |
+| KDE-W2 baseline (`kde_refine_d_w2`) | 15.4223 | 9.9580 | 42.6563 | 10.00 | 20.00 | 38.33 | 50.56 |
+| KDE-W2 + adaptive mass 0.7 (`adapt_a`) | 15.4590 | 10.1419 | 43.2513 | 11.11 | 19.44 | 38.33 | 49.44 |
+| KDE-W2 + adaptive mass 0.5 (`adapt_b`) | 15.4685 | 10.1257 | 42.7986 | 8.89 | 17.78 | 38.89 | 49.44 |
+
+Observation:
+- Multi-scale query views improved mean and p90 slightly but materially hurt close-range accuracy (`within_1km_pct` and `within_2km_pct`), so this variant is not promoted.
+- Adaptive-mass KDE (`0.7`) improved `within_1km_pct` on this run but regressed the primary W2 objective (`within_2km_pct`) and worsened central tendency; `0.5` regressed both close-range metrics.
+- Current default stance remains: keep fixed-mass KDE profiles and single-scale query views unless a future leakage-safe benchmark shows a consistent gain.
+
 ## 8. Methods Tried and Practical Outcome
 ### 8.1 Changes with Clear Practical Value
 - Multi-provider candidate generation and merge controls.
@@ -365,8 +388,10 @@ Observation:
 - Query TTA: useful in some regimes, neutral in tested subset.
 - Multi-index expansion: helps coverage potential but can degrade precision without score normalization and balancing.
 - Alternative TTA reducers (`mean`, `rrf`, `median`): not best in latest measured subset.
+- Multi-scale query views (`retrieval_query_tta_scales`): no close-range win on realistic Paris split.
 - Aerial backbone swap to tested SigLIP candidates: no gain over CLIP on the realistic Paris split used here.
 - Graph-support reranking on current realistic split: under control baseline.
+- Adaptive-mass KDE refinement (`retrieval_kde_refine_adaptive_mass`): mixed results; did not improve `within_2km_pct` vs fixed-mass KDE-W2 baseline.
 - Dual local reranker + KDE combination: improved tail metrics but did not beat best close-range (`within_1km_pct`) profile.
 
 ### 8.3 Complete Method Ledger (Keep vs Reject)
@@ -386,6 +411,8 @@ This table is the explicit decision ledger for methods tried in this project cyc
 | Graph-support rerank (`A/B/C`) | All close-range metrics underperformed control | Reject for current profile |
 | KDE refine profile `C` (W1 focus) | Best close-range hit (`within_1km_pct=11.11`) | Keep as optional W1-focused profile |
 | KDE refine profile `D` (W2 focus) | Best `within_2km_pct=20.00`, `within_5km_pct=38.33` | Keep as optional W2-focused profile |
+| Multi-scale query views (`retrieval_query_tta_scales`) | Mean/p90 improved but close-range regressed (`within_1km_pct`: `10.56` -> `6.11`) | Keep as experimental; do not default |
+| Adaptive-mass KDE refinement (`retrieval_kde_refine_adaptive_mass`) | `adapt_a` raised `within_1km_pct` (`10.00` -> `11.11`) but reduced `within_2km_pct` (`20.00` -> `19.44`) | Keep as experimental; do not default |
 | Dual local reranker (`SIFT+ORB`, weak-signal gate, adaptive blend) | Large gain vs legacy local match A (`within_1km_pct`: `5.00` -> `8.89`) | Keep as optional mode |
 | KDE + dual-local combined profile | Did not beat best W1 profile (`within_1km_pct` stayed `8.89`) | Do not adopt as close-range default |
 | Profile/data mismatch auto-correction in Lab/backend | Eliminated catastrophic profile mismatch failure mode (`~5846 km` case) | Keep (evaluation-integrity requirement) |
@@ -394,6 +421,7 @@ This table is the explicit decision ledger for methods tried in this project cyc
 - Canonical Paris realistic profile remains CLIP-based retrieval with consensus refinement.
 - KDE and dual-local methods remain opt-in evaluation profiles for objective-specific tradeoffs.
 - RRF source fusion and alternate backbones remain research modes, not production defaults on current split.
+- Multi-scale query views and adaptive-mass KDE remain experimental toggles; defaults stay single-scale (`1.0`) and fixed adaptive mass (`0.0`).
 - Evaluation-integrity guards (profile/path auto-resolution + explicit profile reporting) are mandatory.
 
 ## 9. Error Analysis
@@ -492,7 +520,7 @@ Project Heimdall demonstrates a practical path from prototype geolocation to a b
 - `Selective abstention`: add a localizability head/policy to decide predict vs abstain before final confidence tiering.
 - `Spatially guaranteed uncertainty`: conformal prediction for region-level coverage guarantees on top of probabilistic fusion.
 - `Rank-based multi-index fusion`: RRF was implemented as an optional mode (`retrieval_source_fusion_mode=rrf`) and benchmarked.
-: On current realistic Paris split (`n=180`), it underperformed `weighted_score` (`within_1km_pct`: `7.78` vs `10.56`), so it remains experimental for future multi-index/global settings.
+- On current realistic Paris split (`n=180`), it underperformed `weighted_score` (`within_1km_pct`: `7.78` vs `10.56`), so it remains experimental for future multi-index/global settings.
 
 ## Appendix A: Major Algorithmic Knobs (Geo)
 - Retrieval:
@@ -500,9 +528,11 @@ Project Heimdall demonstrates a practical path from prototype geolocation to a b
   - `retrieval_diversity_radius_km`, `retrieval_diversity_lambda`, `retrieval_diversity_min_keep`
   - `retrieval_locality_radius_km`, `retrieval_locality_weight`
   - `retrieval_consensus_top_n`, `retrieval_consensus_radius_km`, `retrieval_consensus_score_power`
-  - `retrieval_query_tta_degrees`, `retrieval_query_tta_reduce`
+  - `retrieval_query_tta_degrees`, `retrieval_query_tta_modes`, `retrieval_query_tta_scales`, `retrieval_query_tta_auto_modality`, `retrieval_query_tta_reduce`
+  - `retrieval_tta_agreement_top_n`, `retrieval_tta_agreement_weight`
   - `retrieval_index_paths`, `retrieval_index_weights`, `retrieval_per_index_top_k`
   - `retrieval_index_model_ids`, `retrieval_index_score_norm`, `retrieval_source_fusion_mode`, `retrieval_source_balance_beta`
+  - `retrieval_kde_refine_top_n`, `retrieval_kde_refine_sigma_km`, `retrieval_kde_refine_score_power`, `retrieval_kde_refine_margin_threshold`, `retrieval_kde_refine_switch_radius_km`, `retrieval_kde_refine_max_iters`, `retrieval_kde_refine_adaptive_mass`
 - Candidate merge:
   - `candidate_source_balance_beta`
 - Fusion:
@@ -541,6 +571,10 @@ Project Heimdall demonstrates a practical path from prototype geolocation to a b
 - `runs/geo_eval_paris_profile_180_kde_refine_b_no_consensus_v1.json`
 - `runs/geo_eval_paris_profile_180_kde_refine_c_w1_v1.json`
 - `runs/geo_eval_paris_profile_180_kde_refine_d_w2_v1.json`
+- `runs/geo_eval_paris_profile_180_tta_agreement_ctrl_v1.json`
+- `runs/geo_eval_paris_profile_180_multiscale_a_v1.json`
+- `runs/geo_eval_paris_profile_180_kde_refine_d_w2_adapt_a_v1.json`
+- `runs/geo_eval_paris_profile_180_kde_refine_d_w2_adapt_b_v1.json`
 - `runs/geo_eval_paris_profile_180_localmatch_a_v1.json`
 - `runs/geo_eval_paris_profile_180_qexp_ctrl_v2_after_dual_localcode.json`
 - `runs/geo_eval_paris_profile_180_localmatch_a_v2_dual.json`

@@ -64,11 +64,14 @@ def build_pipeline(
             consensus_score_power=geo_cfg.retrieval_consensus_score_power,
             query_tta_degrees=geo_cfg.retrieval_query_tta_degrees,
             query_tta_modes=geo_cfg.retrieval_query_tta_modes,
+            query_tta_scales=geo_cfg.retrieval_query_tta_scales,
             query_tta_auto_modality=geo_cfg.retrieval_query_tta_auto_modality,
             query_tta_reduce=geo_cfg.retrieval_query_tta_reduce,
             query_expansion_top_n=geo_cfg.retrieval_query_expansion_top_n,
             query_expansion_beta=geo_cfg.retrieval_query_expansion_beta,
             query_expansion_alpha=geo_cfg.retrieval_query_expansion_alpha,
+            tta_agreement_top_n=geo_cfg.retrieval_tta_agreement_top_n,
+            tta_agreement_weight=geo_cfg.retrieval_tta_agreement_weight,
             local_match_top_n=geo_cfg.retrieval_local_match_top_n,
             local_match_weight=geo_cfg.retrieval_local_match_weight,
             local_match_ratio=geo_cfg.retrieval_local_match_ratio,
@@ -84,6 +87,7 @@ def build_pipeline(
             kde_refine_margin_threshold=geo_cfg.retrieval_kde_refine_margin_threshold,
             kde_refine_switch_radius_km=geo_cfg.retrieval_kde_refine_switch_radius_km,
             kde_refine_max_iters=geo_cfg.retrieval_kde_refine_max_iters,
+            kde_refine_adaptive_mass=geo_cfg.retrieval_kde_refine_adaptive_mass,
             source_fusion_mode=geo_cfg.retrieval_source_fusion_mode,
         )
         geoclip_provider = GeoCLIPProvider(
