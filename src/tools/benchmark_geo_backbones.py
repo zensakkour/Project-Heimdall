@@ -274,11 +274,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--retrieval-min-keep-topk", type=int, default=2)
     parser.add_argument("--query-tta-degrees", default="0,90,180,270")
     parser.add_argument("--query-tta-modes", default="rgb")
+    parser.add_argument("--query-tta-scales", default="1.0")
     parser.add_argument("--query-tta-auto-modality", action="store_true")
     parser.add_argument("--query-tta-reduce", default="max")
     parser.add_argument("--query-expansion-top-n", type=int, default=0)
     parser.add_argument("--query-expansion-beta", type=float, default=0.0)
     parser.add_argument("--query-expansion-alpha", type=float, default=0.5)
+    parser.add_argument("--tta-agreement-top-n", type=int, default=0)
+    parser.add_argument("--tta-agreement-weight", type=float, default=0.0)
     parser.add_argument("--local-match-top-n", type=int, default=0)
     parser.add_argument("--local-match-weight", type=float, default=0.0)
     parser.add_argument("--local-match-ratio", type=float, default=0.8)
@@ -294,6 +297,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--kde-refine-margin-threshold", type=float, default=0.0)
     parser.add_argument("--kde-refine-switch-radius-km", type=float, default=0.0)
     parser.add_argument("--kde-refine-max-iters", type=int, default=8)
+    parser.add_argument("--kde-refine-adaptive-mass", type=float, default=0.0)
     parser.add_argument("--output", default="runs/backbone_bench/backbone_benchmark.json")
     parser.add_argument("--reuse-indices", action="store_true")
     args = parser.parse_args(argv)
@@ -319,6 +323,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     if not tta_degrees:
         tta_degrees = [0.0]
     tta_modes = _parse_mode_list(args.query_tta_modes)
+    tta_scales = _parse_float_list(args.query_tta_scales)
+    if not tta_scales:
+        tta_scales = [1.0]
 
     train_rows_all = _load_rows(train_meta_path)
     eval_rows_all = _load_rows(eval_meta_path)
@@ -375,11 +382,14 @@ def main(argv: Optional[List[str]] = None) -> int:
                 min_keep_topk=int(args.retrieval_min_keep_topk),
                 query_tta_degrees=tta_degrees,
                 query_tta_modes=tta_modes,
+                query_tta_scales=tta_scales,
                 query_tta_auto_modality=bool(args.query_tta_auto_modality),
                 query_tta_reduce=str(args.query_tta_reduce),
                 query_expansion_top_n=int(args.query_expansion_top_n),
                 query_expansion_beta=float(args.query_expansion_beta),
                 query_expansion_alpha=float(args.query_expansion_alpha),
+                tta_agreement_top_n=int(args.tta_agreement_top_n),
+                tta_agreement_weight=float(args.tta_agreement_weight),
                 local_match_top_n=int(args.local_match_top_n),
                 local_match_weight=float(args.local_match_weight),
                 local_match_ratio=float(args.local_match_ratio),
@@ -395,6 +405,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 kde_refine_margin_threshold=float(args.kde_refine_margin_threshold),
                 kde_refine_switch_radius_km=float(args.kde_refine_switch_radius_km),
                 kde_refine_max_iters=int(args.kde_refine_max_iters),
+                kde_refine_adaptive_mass=float(args.kde_refine_adaptive_mass),
             )
             metrics = _evaluate_top1(provider=provider, rows=eval_rows, images_dir=eval_images_dir)
             eval_sec = float(time.perf_counter() - eval_start)
@@ -434,11 +445,15 @@ def main(argv: Optional[List[str]] = None) -> int:
         "model_preset": str(args.model_preset),
         "model_ids": list(model_ids),
         "rank_objective": str(args.rank_objective),
+        "query_tta_degrees": tta_degrees,
         "query_tta_modes": tta_modes,
+        "query_tta_scales": tta_scales,
         "query_tta_auto_modality": bool(args.query_tta_auto_modality),
         "query_expansion_top_n": int(args.query_expansion_top_n),
         "query_expansion_beta": float(args.query_expansion_beta),
         "query_expansion_alpha": float(args.query_expansion_alpha),
+        "tta_agreement_top_n": int(args.tta_agreement_top_n),
+        "tta_agreement_weight": float(args.tta_agreement_weight),
         "local_match_top_n": int(args.local_match_top_n),
         "local_match_weight": float(args.local_match_weight),
         "local_match_ratio": float(args.local_match_ratio),
@@ -454,6 +469,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         "kde_refine_margin_threshold": float(args.kde_refine_margin_threshold),
         "kde_refine_switch_radius_km": float(args.kde_refine_switch_radius_km),
         "kde_refine_max_iters": int(args.kde_refine_max_iters),
+        "kde_refine_adaptive_mass": float(args.kde_refine_adaptive_mass),
         "models": results,
         "best_model": ranked_by_objective[0]["model_id"] if ranked_by_objective else None,
         "best_model_by_median_km": ranked_by_median[0]["model_id"] if ranked_by_median else None,
