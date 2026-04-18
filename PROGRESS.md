@@ -801,3 +801,66 @@ Do not delete or edit past entries. Append new work at the end.
   - `src/docs/RESEARCH_PAPER.md` (companion reference).
 - Validation:
   - Documentation-only update; no runtime code path changed.
+
+## 2026-04-18
+- Hypothesis:
+  - Non-trivial retrieval changes (multi-scale query views and adaptive-mass KDE refinement) might improve close-range accuracy on the realistic Paris split (`n=180`).
+- Change:
+  - Added retrieval query multi-scale support via `retrieval_query_tta_scales` and wired it through runtime/config/tooling paths.
+  - Added adaptive-mass KDE option via `retrieval_kde_refine_adaptive_mass` and wired it through runtime/config/tooling paths.
+  - Added regression coverage for new knobs in retrieval/config tests.
+  - Standardized shipped config scope labels with `profile_scope` (`PARIS`/`US`) across `src/config/*.json`.
+  - Hardened UI benchmark scenario config resolution in `src/tools/ui_server.py`:
+    - prefer new scoped names when available,
+    - fall back to legacy `runs/bench_cfg/*.json` names when scoped files are absent.
+  - Updated `README.md` and `src/docs/RESEARCH_PAPER.md` to document these methods, outcomes, and scope conventions.
+- Files touched:
+  - `src/core/geo/retrieval_provider.py`
+  - `src/core/logic/config.py`
+  - `src/cli.py`
+  - `src/batch_run.py`
+  - `src/tools/run_all.py`
+  - `src/tools/run_geo_eval.py`
+  - `src/tools/tune_retrieval_geo.py`
+  - `src/tools/benchmark_geo_backbones.py`
+  - `src/tools/ui_server.py`
+  - `src/config/defaults.json`
+  - `src/config/paris.json`
+  - `src/config/paris_test.json`
+  - `src/config/open_geo.json`
+  - `src/tests/test_config_loading.py`
+  - `src/tests/test_retrieval_tta.py`
+  - `src/tests/test_retrieval_provider_multi_index.py`
+  - `README.md`
+  - `src/docs/RESEARCH_PAPER.md`
+  - `PROGRESS.md`
+- Validation command(s):
+  - `./.venv/Scripts/python -m pytest -q src/tests/test_config_loading.py src/tests/test_retrieval_tta.py src/tests/test_retrieval_provider_multi_index.py`
+  - prior realistic eval artifacts compared in this cycle:
+    - `runs/geo_eval_paris_profile_180_tta_agreement_ctrl_v1.json`
+    - `runs/geo_eval_paris_profile_180_multiscale_a_v1.json`
+    - `runs/geo_eval_paris_profile_180_kde_refine_d_w2_v1.json`
+    - `runs/geo_eval_paris_profile_180_kde_refine_d_w2_adapt_a_v1.json`
+    - `runs/geo_eval_paris_profile_180_kde_refine_d_w2_adapt_b_v1.json`
+- Metrics (before -> after):
+  - Multi-scale query views vs control:
+    - `mean_km`: `15.5264` -> `15.3451`
+    - `median_km`: `9.7717` -> `10.1387`
+    - `within_1km_pct`: `10.56` -> `6.11`
+    - `within_2km_pct`: `19.44` -> `17.22`
+  - Adaptive-mass KDE (`0.7`) vs fixed-mass KDE-W2:
+    - `within_1km_pct`: `10.00` -> `11.11`
+    - `within_2km_pct`: `20.00` -> `19.44`
+    - `mean_km`: `15.4223` -> `15.4590`
+  - Adaptive-mass KDE (`0.5`) vs fixed-mass KDE-W2:
+    - `within_1km_pct`: `10.00` -> `8.89`
+    - `within_2km_pct`: `20.00` -> `17.78`
+- Artifacts:
+  - `runs/geo_eval_paris_profile_180_tta_agreement_ctrl_v1.json`
+  - `runs/geo_eval_paris_profile_180_multiscale_a_v1.json`
+  - `runs/geo_eval_paris_profile_180_kde_refine_d_w2_v1.json`
+  - `runs/geo_eval_paris_profile_180_kde_refine_d_w2_adapt_a_v1.json`
+  - `runs/geo_eval_paris_profile_180_kde_refine_d_w2_adapt_b_v1.json`
+- Decision:
+  - Keep both features available as experimental knobs.
+  - Do not promote either feature to default profile settings yet because close-range target metrics did not improve consistently (`within_2km_pct` regressed).

@@ -5,7 +5,9 @@ from PIL import Image
 
 from src.core.geo.retrieval_provider import (
     GeoRetrievalProvider,
+    _apply_tta_agreement_rerank,
     _aggregate_tta_scores,
+    _normalize_tta_scales,
     _normalize_tta_degrees,
     _normalize_tta_modes,
     _select_query_tta_modes,
@@ -62,16 +64,38 @@ def test_query_embeddings_runs_all_tta_variants_and_normalizes() -> None:
 
     image = Image.new("RGB", (16, 16), color=(120, 10, 10))
     embedder = StubEmbedder()
-    mat = _query_embeddings(embedder, image, [0.0, 90.0, 180.0, 270.0], ["rgb"])
+    mat = _query_embeddings(embedder, image, [0.0, 90.0, 180.0, 270.0], ["rgb"], [1.0])
     assert mat.shape == (4, 3)
     assert embedder.calls == 4
     norms = np.linalg.norm(mat, axis=1)
     assert np.allclose(norms, np.ones_like(norms))
 
 
+def test_query_embeddings_with_scaled_views_increases_view_count() -> None:
+    class StubEmbedder:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def embed(self, _image: Image.Image) -> np.ndarray:
+            self.calls += 1
+            return np.asarray([1.0, 0.0, 0.0], dtype=np.float32)
+
+    image = Image.new("RGB", (24, 24), color=(120, 10, 10))
+    embedder = StubEmbedder()
+    mat = _query_embeddings(embedder, image, [0.0], ["rgb"], [1.0, 0.75])
+    # 1 full-frame view + 5 anchor crops for the zoomed scale.
+    assert mat.shape[0] == 6
+    assert embedder.calls == 6
+
+
 def test_normalize_tta_modes_dedupes_and_filters_invalid() -> None:
     out = _normalize_tta_modes(["rgb", "gray", "RGB", "bad", "edge"])
     assert out == ["rgb", "gray", "edge"]
+
+
+def test_normalize_tta_scales_dedupes_and_clamps() -> None:
+    out = _normalize_tta_scales([1.0, 0.8, 0.8, 0.1, 3.0, float("nan")])  # type: ignore[list-item]
+    assert out == [1.0, 0.8, 0.45]
 
 
 def test_select_query_tta_modes_uses_pan_priority_when_enabled() -> None:
@@ -93,3 +117,50 @@ def test_provider_accepts_rrf_tta_reduce_mode() -> None:
 def test_provider_accepts_median_tta_reduce_mode() -> None:
     provider = GeoRetrievalProvider(index_path=None, query_tta_reduce="median")
     assert provider.query_tta_reduce == "median"
+
+
+def test_tta_agreement_rerank_promotes_consistent_candidate() -> None:
+    # item0 wins one view strongly; item1 is consistently near-top in all views.
+    scores_aug = np.asarray(
+        [
+            [0.99, 0.10, 0.10, 0.10],
+            [0.72, 0.73, 0.74, 0.75],
+            [0.60, 0.61, 0.59, 0.58],
+        ],
+        dtype=np.float32,
+    )
+    base = _aggregate_tta_scores(scores_aug, mode="max")
+    adjusted = _apply_tta_agreement_rerank(
+        scores_aug=scores_aug,
+        aggregated_scores=base,
+        top_n=2,
+        weight=0.65,
+    )
+    assert int(np.argmax(base)) == 0
+    assert int(np.argmax(adjusted)) == 1
+
+
+def test_provider_accepts_tta_agreement_knobs() -> None:
+    provider = GeoRetrievalProvider(
+        index_path=None,
+        tta_agreement_top_n=6,
+        tta_agreement_weight=0.4,
+    )
+    assert provider.tta_agreement_top_n == 6
+    assert provider.tta_agreement_weight == 0.4
+
+
+def test_provider_accepts_tta_scales() -> None:
+    provider = GeoRetrievalProvider(
+        index_path=None,
+        query_tta_scales=[1.0, 0.8],
+    )
+    assert provider.query_tta_scales == [1.0, 0.8]
+
+
+def test_provider_accepts_kde_adaptive_mass() -> None:
+    provider = GeoRetrievalProvider(
+        index_path=None,
+        kde_refine_adaptive_mass=0.7,
+    )
+    assert provider.kde_refine_adaptive_mass == 0.7
