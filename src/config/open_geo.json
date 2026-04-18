@@ -1,4 +1,5 @@
 {
+  "profile_scope": "US",
   "detector": {
     "weights_path": "yolo11x-obb.pt",
     "min_confidence": 0.25,
@@ -51,6 +52,8 @@
     "retrieval_query_expansion_top_n": 0,
     "retrieval_query_expansion_beta": 0.0,
     "retrieval_query_expansion_alpha": 0.5,
+    "retrieval_tta_agreement_top_n": 0,
+    "retrieval_tta_agreement_weight": 0.0,
     "candidate_source_balance_beta": 0.2,
     "retrieval_local_match_top_n": 0,
     "retrieval_local_match_weight": 0.0,
@@ -67,8 +70,12 @@
     "retrieval_kde_refine_margin_threshold": 0.0,
     "retrieval_kde_refine_switch_radius_km": 0.0,
     "retrieval_kde_refine_max_iters": 8,
+    "retrieval_kde_refine_adaptive_mass": 0.0,
     "retrieval_query_tta_modes": [
       "rgb"
+    ],
+    "retrieval_query_tta_scales": [
+      1.0
     ],
     "retrieval_query_tta_auto_modality": false
   },
