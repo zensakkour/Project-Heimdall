@@ -587,3 +587,35 @@ def test_kde_mode_refine_respects_confident_top1_guard() -> None:
     )
     assert out
     assert out[0].match_id == "isolated"
+
+
+def test_kde_mode_refine_adaptive_mass_changes_solution() -> None:
+    ranked = [
+        GeoCandidate(latitude=10.0, longitude=10.0, retrieval_score=0.98, match_id="isolated"),
+        GeoCandidate(latitude=20.0, longitude=20.0, retrieval_score=0.90, match_id="cluster_a"),
+        GeoCandidate(latitude=20.01, longitude=20.01, retrieval_score=0.89, match_id="cluster_b"),
+        GeoCandidate(latitude=19.99, longitude=20.02, retrieval_score=0.88, match_id="cluster_c"),
+    ]
+
+    full = retrieval_mod._apply_kde_mode_refinement(
+        ranked,
+        top_n=4,
+        sigma_km=2.0,
+        score_power=1.0,
+        margin_threshold=0.0,
+        switch_radius_km=0.0,
+        max_iters=8,
+        adaptive_mass=0.0,
+    )
+    narrow = retrieval_mod._apply_kde_mode_refinement(
+        ranked,
+        top_n=4,
+        sigma_km=2.0,
+        score_power=1.0,
+        margin_threshold=0.0,
+        switch_radius_km=0.0,
+        max_iters=8,
+        adaptive_mass=0.5,
+    )
+    assert full and narrow
+    assert abs(float(full[0].latitude) - float(narrow[0].latitude)) > 0.01
