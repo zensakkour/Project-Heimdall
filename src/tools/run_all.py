@@ -63,11 +63,14 @@ def main() -> int:
             consensus_score_power=cfg.geolocator.retrieval_consensus_score_power,
             query_tta_degrees=cfg.geolocator.retrieval_query_tta_degrees,
             query_tta_modes=cfg.geolocator.retrieval_query_tta_modes,
+            query_tta_scales=cfg.geolocator.retrieval_query_tta_scales,
             query_tta_auto_modality=cfg.geolocator.retrieval_query_tta_auto_modality,
             query_tta_reduce=cfg.geolocator.retrieval_query_tta_reduce,
             query_expansion_top_n=cfg.geolocator.retrieval_query_expansion_top_n,
             query_expansion_beta=cfg.geolocator.retrieval_query_expansion_beta,
             query_expansion_alpha=cfg.geolocator.retrieval_query_expansion_alpha,
+            tta_agreement_top_n=cfg.geolocator.retrieval_tta_agreement_top_n,
+            tta_agreement_weight=cfg.geolocator.retrieval_tta_agreement_weight,
             local_match_top_n=cfg.geolocator.retrieval_local_match_top_n,
             local_match_weight=cfg.geolocator.retrieval_local_match_weight,
             local_match_ratio=cfg.geolocator.retrieval_local_match_ratio,
@@ -83,6 +86,7 @@ def main() -> int:
             kde_refine_margin_threshold=cfg.geolocator.retrieval_kde_refine_margin_threshold,
             kde_refine_switch_radius_km=cfg.geolocator.retrieval_kde_refine_switch_radius_km,
             kde_refine_max_iters=cfg.geolocator.retrieval_kde_refine_max_iters,
+            kde_refine_adaptive_mass=cfg.geolocator.retrieval_kde_refine_adaptive_mass,
         )
         geoclip_provider = GeoCLIPProvider(
             model_path=cfg.geolocator.model_path,
