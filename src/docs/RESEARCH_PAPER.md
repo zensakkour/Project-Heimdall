@@ -481,10 +481,12 @@ Observation:
 - Alternative TTA reducers (`mean`, `rrf`, `median`): not best in latest measured subset.
 - Multi-scale query views (`retrieval_query_tta_scales`): no close-range win on realistic Paris split.
 - Aerial backbone swap to tested SigLIP candidates: no gain over CLIP on the realistic Paris split used here.
-- Graph-support reranking on current realistic split: under control baseline.
+- Graph-support reranking on single-index control underperformed baseline, but in dual-index stack it improved `within_1km_pct` when paired with KDE refinement (with mean/tail tradeoff).
 - Adaptive-mass KDE refinement (`retrieval_kde_refine_adaptive_mass`): mixed results; did not improve `within_2km_pct` vs fixed-mass KDE-W2 baseline.
 - Ambiguity-gated local rerank override: protective behavior, but no metric uplift observed on tested local-match profiles.
 - Dual local reranker + KDE combination: improved tail metrics but did not beat best close-range (`within_1km_pct`) profile.
+- Geo-aware database-side descriptor augmentation (DBA): can improve close-range metrics in objective-specific settings, but current variants regressed broader tail metrics on canonical `n=180`.
+- Dual-index projected+DBA stack with `rrf` source fusion: improved close-range and central tendency on canonical `n=180`, with slight `within_10km_pct` tradeoff.
 
 ### 8.3 Complete Method Ledger (Keep vs Reject)
 This table is the explicit decision ledger for methods tried in this project cycle.
@@ -514,6 +516,10 @@ This table is the explicit decision ledger for methods tried in this project cyc
 | Hard-negative projection adaptation (`trainref_v2_mild`) | `within_1km_pct`: `9.17` -> `12.50`, `within_2km_pct`: `16.67` -> `28.33` on `n=120` realistic eval | Keep as current best retrieval adaptation direction |
 | Projection V2 + geo-prior stack on canonical Paris split (`n=180`) | No delta vs baseline (`within_1km_pct=11.67`, `within_2km_pct=26.67` in both) | Keep geo-prior as scope-safety guard; do not claim close-range lift on in-scope data |
 | Dual-space projected+raw CLIP fusion with per-index projection routing (`retrieval_index_projection_paths`) | Underperformed projection V2 baseline on `n=180` (`within_1km_pct`: `11.67` -> `8.89`, `within_2km_pct`: `26.67` -> `18.89`) | Keep capability as experimental infra; reject as default profile |
+| Geo-aware DBA index augmentation (`neighbors=5`, `max_geo_distance_km=2`) | On canonical `n=180`: `mean_km`: `15.25` -> `14.80`, `within_1km_pct`: `11.67` -> `13.33`, `within_2km_pct`: `26.67` -> `29.44`, but `within_5km_pct`: `50.00` -> `46.67` | Keep as objective-specific close-range profile; reject as default until tail regression is solved |
+| Dual-index projection+DBA with `rrf` (`index_paths=[baseline,dba_geo2_k5]`) | On canonical `n=180`: `mean_km`: `15.25` -> `14.84`, `median_km`: `5.50` -> `4.87`, `within_1km_pct`: `11.67` -> `12.78`, `within_2km_pct`: `26.67` -> `31.11`, `within_5km_pct`: `50.00` -> `50.56`, `within_10km_pct`: `64.44` -> `63.33` | Keep as strongest current close-range profile candidate; monitor slight `<=10km` regression |
+| Dual-index projection+DBA `rrf` balanced weighting (`index_weights=[1.0,0.5]`) | On canonical `n=180`: `mean_km`: `15.25` -> `14.60`, `median_km`: `5.50` -> `4.21`, `within_1km_pct`: `11.67` -> `10.56`, `within_2km_pct`: `26.67` -> `31.11`, `within_5km_pct`: `50.00` -> `52.78`, `within_10km_pct`: `64.44` -> `65.56` | Keep as balanced profile when broader-radius reliability matters more than max `<=1km` |
+| Dual-index projection+DBA + graph-support + KDE refinement | On canonical `n=180`: `within_1km_pct`: `11.67` -> `13.89` (best measured), `within_2km_pct`: `26.67` -> `31.11`, with `mean_km`: `15.25` -> `15.28` and slight `<=5km/<=10km` regressions | Keep as aggressive W1 profile only; do not use as global default |
 
 ### 8.4 What Is Currently Kept by Default
 - Canonical Paris realistic profile remains CLIP-based retrieval with consensus refinement.
@@ -522,6 +528,10 @@ This table is the explicit decision ledger for methods tried in this project cyc
 - RRF source fusion and alternate backbones remain research modes, not production defaults on current split.
 - Per-index projection routing is kept as infrastructure for future heterogeneous-index experiments, but current dual-space RRF profile is not promoted.
 - Multi-scale query views and adaptive-mass KDE remain experimental toggles; defaults stay single-scale (`1.0`) and fixed adaptive mass (`0.0`).
+- Geo-aware DBA remains optional for close-range objective runs (`<=1km`/`<=2km`) and is not promoted to default profile yet.
+- Dual-index projection+DBA (`rrf`) is now the preferred experimental profile when the objective is `<=2km` rather than broad-radius recall.
+- Dual-index balanced weighting (`[1.0,0.5]`) is preferred when optimizing mean/median and `<=10km` while preserving `<=2km`.
+- Dual-index + graph+KDE remains a specialized W1-max profile (`<=1km`) with explicit tail-risk tradeoff.
 - Evaluation-integrity guards (profile/path auto-resolution + explicit profile reporting + CLI scope validation) are mandatory.
 
 ## 9. Error Analysis
