@@ -209,6 +209,75 @@ def resolve_image_path(images_dir: Path, rel_path: str) -> Path:
     return direct
 
 
+def normalize_scope(raw_scope: Optional[str]) -> str:
+    if not raw_scope:
+        return ""
+    value = str(raw_scope).strip().upper().replace("-", "_")
+    if "PARIS" in value:
+        return "PARIS"
+    if value in {"US", "USA"} or "OPEN_GEO" in value:
+        return "US"
+    if value == "GLOBAL":
+        return "GLOBAL"
+    if value == "UNKNOWN":
+        return "UNKNOWN"
+    return value
+
+
+def load_profile_scope(config_path: str) -> str:
+    path = Path(config_path)
+    scope_raw: Optional[str] = None
+    if path.exists():
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(payload, dict):
+                value = payload.get("profile_scope")
+                scope_raw = value if isinstance(value, str) else None
+        except Exception:
+            scope_raw = None
+    scope = normalize_scope(scope_raw)
+    if scope:
+        return scope
+    name = path.stem.lower()
+    if "paris" in name:
+        return "PARIS"
+    if "open_geo" in name or name.startswith("us") or "_us" in name:
+        return "US"
+    return ""
+
+
+def infer_dataset_scope(images_dir: Path, metadata_path: Path) -> str:
+    blob = f"{images_dir.as_posix().lower()} {metadata_path.as_posix().lower()}"
+    if "spacenet_paris" in blob or "/paris/" in blob or "_paris" in blob:
+        return "PARIS"
+    if "open_geo" in blob or "/us/" in blob or "_us" in blob:
+        return "US"
+    return "UNKNOWN"
+
+
+def validate_scope_alignment(
+    profile_scope: str,
+    dataset_scope: str,
+    *,
+    allow_scope_mismatch: bool,
+) -> Optional[str]:
+    profile = normalize_scope(profile_scope)
+    dataset = normalize_scope(dataset_scope)
+    if not profile or profile == "GLOBAL":
+        return None
+    if dataset in {"", "UNKNOWN"}:
+        return None
+    if profile == dataset:
+        return None
+    warning = (
+        f"profile/data scope mismatch: profile_scope='{profile}' "
+        f"but inferred dataset_scope='{dataset}'"
+    )
+    if not allow_scope_mismatch:
+        raise ValueError(f"{warning}. Use --allow-scope-mismatch to override.")
+    return warning
+
+
 def main(argv: Optional[list[str]] = None) -> None:
     import pandas as pd
 
@@ -222,7 +291,22 @@ def main(argv: Optional[list[str]] = None) -> None:
     parser.add_argument("--limit", type=int, default=0, help="Limit number of samples (0=all).")
     parser.add_argument("--seed", type=int, default=42, help="Shuffle seed.")
     parser.add_argument("--config", default="src/config/defaults.json", help="Config file.")
+    parser.add_argument(
+        "--allow-scope-mismatch",
+        action="store_true",
+        help="Allow evaluation when config profile_scope and inferred dataset scope disagree.",
+    )
     args = parser.parse_args(argv)
+
+    profile_scope = load_profile_scope(args.config) if args.config else ""
+    metadata_path = Path(args.metadata)
+    images_dir = Path(args.images_dir)
+    dataset_scope = infer_dataset_scope(images_dir, metadata_path)
+    scope_warning = validate_scope_alignment(
+        profile_scope,
+        dataset_scope,
+        allow_scope_mismatch=bool(args.allow_scope_mismatch),
+    )
 
     cfg = load_config(args.config) if args.config else None
     pipeline = None
@@ -232,8 +316,6 @@ def main(argv: Optional[list[str]] = None) -> None:
     else:
         retrieval_provider = build_retrieval_provider(cfg)
 
-    metadata_path = Path(args.metadata)
-    images_dir = Path(args.images_dir)
     df = pd.read_csv(metadata_path)
     if not {"path", "latitude", "longitude"}.issubset(df.columns):
         raise ValueError("metadata must include columns: path, latitude, longitude")
@@ -320,6 +402,10 @@ def main(argv: Optional[list[str]] = None) -> None:
 
     report = {
         "config": args.config,
+        "profile_scope": profile_scope or None,
+        "dataset_scope": dataset_scope,
+        "scope_warning": scope_warning,
+        "allow_scope_mismatch": bool(args.allow_scope_mismatch),
         "retrieval_only": bool(args.retrieval_only),
         "images_dir": str(images_dir),
         "metadata": str(metadata_path),
