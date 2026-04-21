@@ -13,6 +13,7 @@ Geospatial perception and analysis platform that combines object detection, geo-
 - How to use it: check the top snapshot for current status, then review dated entries for full history.
 - Benchmark governance: [docs/eval/latest_report.md](docs/eval/latest_report.md), [docs/eval/history.jsonl](docs/eval/history.jsonl), [docs/eval/baseline.json](docs/eval/baseline.json)
 - Full research-style write-up: [src/docs/RESEARCH_PAPER.md](src/docs/RESEARCH_PAPER.md)
+- External market and SOTA review: [src/docs/MARKET_RESEARCH.md](src/docs/MARKET_RESEARCH.md)
 - Optional publication formatting: the research draft can be converted to submission style (IMRaD with numbered equations and references).
 - Documentation index: [docs/DOCS_MAP.md](docs/DOCS_MAP.md)
 

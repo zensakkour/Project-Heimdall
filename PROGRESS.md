@@ -787,6 +787,21 @@ Do not delete or edit past entries. Append new work at the end.
 - Decision:
   - Keep this documentation policy and ledger structure as the new baseline for future iterations.
 
+## 2026-04-15
+- Added a dedicated external market/SOTA research companion document at `src/docs/MARKET_RESEARCH.md` based on the provided report (`C:\Users\zen\Downloads\deep-research-report.md`).
+- Document scope:
+  - external landscape summary,
+  - datasets/tooling ecosystem,
+  - prioritized roadmap,
+  - explicit "approaches we will consider" list,
+  - current-cycle decision snapshot for retrieval source-fusion mode.
+- Linked the new research companion in:
+  - `README.md` (Project Status Tracking)
+  - `docs/DOCS_MAP.md` (Core Entry Points)
+  - `src/docs/RESEARCH_PAPER.md` (companion reference).
+- Validation:
+  - Documentation-only update; no runtime code path changed.
+
 ## 2026-04-18
 - Hypothesis:
   - Non-trivial retrieval changes (multi-scale query views and adaptive-mass KDE refinement) might improve close-range accuracy on the realistic Paris split (`n=180`).

@@ -7,6 +7,7 @@ Use it as the first stop before adding new `.md` files.
 - `README.md`: user-facing setup, run commands, and high-level platform overview.
 - `PROGRESS.md`: append-only engineering/research history and validation snapshots.
 - `src/docs/RESEARCH_PAPER.md`: full research-style narrative of methods, experiments, results, and conclusions.
+- `src/docs/MARKET_RESEARCH.md`: external market/SOTA landscape synthesis and prioritized approaches considered.
 - `src/docs/GEO_TECH.md`: geolocation architecture, knobs, and technical behavior.
 - `src/docs/REPRODUCIBILITY.md`: reproducibility and evaluation procedures.
 - `AGENT.md`: operational rules for coding agents and per-prompt documentation sync.
