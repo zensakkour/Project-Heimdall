@@ -889,3 +889,66 @@ Do not delete or edit past entries. Append new work at the end.
   - No new `runs/*.json` evaluation artifact generated in this prompt cycle.
 - Decision:
   - Keep this guard enabled by default as a reliability baseline for CLI benchmarking.
+
+## 2026-04-21
+- Hypothesis:
+  - Local geometric reranking should not be allowed to override a very confident retrieval top-1 unless geometric evidence is clearly stronger; adding an ambiguity gate may recover close-range precision in hybrid local-match profiles.
+- Change:
+  - Added ambiguity-gated override logic in `src/core/geo/retrieval_provider.py` inside `_apply_local_match_rerank`:
+    - when base top1-top2 retrieval gap is high (`>= 0.10`), local rerank override is blocked unless local evidence advantage is strong (`>= 0.28`).
+  - Added regression tests:
+    - `test_local_match_rerank_skips_confident_override_without_strong_local_advantage`
+    - `test_local_match_rerank_allows_confident_override_when_local_advantage_is_strong`
+  - Re-ran realistic retrieval-only evals for existing local-match profiles.
+- Files touched:
+  - `src/core/geo/retrieval_provider.py`
+  - `src/tests/test_retrieval_provider_multi_index.py`
+- Validation command(s):
+  - `./.venv/Scripts/python -m pytest -q src/tests/test_retrieval_provider_multi_index.py src/tests/test_run_geo_eval_retrieval_provider.py src/tests/test_run_geo_eval_scope_guard.py`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config runs/bench_cfg/cfg_paris_localmatch_a.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 180 --seed 42 --output runs/geo_eval_paris_profile_180_localmatch_a_v3_ambiguity_gate.json`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config runs/bench_cfg/cfg_paris_kde_refine_e_w1_duallocal.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 180 --seed 42 --output runs/geo_eval_paris_profile_180_kde_refine_e_w1_duallocal_v2_ambiguity_gate.json`
+- Metrics (before -> after):
+  - `localmatch_a`: unchanged (`within_1km_pct=8.89`, `within_2km_pct=18.33`, `mean_km=15.2447`).
+  - `kde_refine_e_w1_duallocal`: unchanged (`within_1km_pct=8.89`, `within_2km_pct=18.33`, `mean_km=15.1863`).
+- Artifacts:
+  - `runs/geo_eval_paris_profile_180_localmatch_a_v3_ambiguity_gate.json`
+  - `runs/geo_eval_paris_profile_180_kde_refine_e_w1_duallocal_v2_ambiguity_gate.json`
+- Decision:
+  - Keep the ambiguity-gate as a defensive guardrail, but not as a promoted accuracy lever based on current measured deltas.
+
+## 2026-04-21
+- Hypothesis:
+  - Step-change accuracy gains now require data-centric upgrades (hard negatives around real failure zones), not additional local knob sweeps.
+- Change:
+  - Added new mining utility: `src/tools/mine_hard_negative_triplets.py`.
+    - Inputs: metadata CSV + optional `run_geo_eval` report.
+    - Outputs: query-positive-hard-negative triplets in JSONL + summary JSON.
+    - Supports failure-threshold filtering (`--min-error-km`), positive/negative radius controls, and scene-level deduplication across sensor/modal variants.
+  - Added regression tests:
+    - `src/tests/test_mine_hard_negative_triplets.py`
+  - Added docs for hard-negative mining workflow in `README.md`.
+  - Updated research narrative in `src/docs/RESEARCH_PAPER.md`.
+  - Ran an eval artifact with full diagnostics (`diag_samples=180`) and mined triplets from it.
+- Files touched:
+  - `src/tools/mine_hard_negative_triplets.py`
+  - `src/tests/test_mine_hard_negative_triplets.py`
+  - `README.md`
+  - `src/docs/RESEARCH_PAPER.md`
+  - `PROGRESS.md`
+- Validation command(s):
+  - `./.venv/Scripts/python -m pytest -q src/tests/test_mine_hard_negative_triplets.py src/tests/test_retrieval_provider_multi_index.py src/tests/test_run_geo_eval_retrieval_provider.py src/tests/test_run_geo_eval_scope_guard.py`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config src/config/paris.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 180 --seed 42 --diag-samples 180 --output runs/geo_eval_paris_profile_180_for_mining_v1.json`
+  - `./.venv/Scripts/python -m src.tools.mine_hard_negative_triplets --metadata data/spacenet_paris_test/metadata.csv --eval-report runs/geo_eval_paris_profile_180_for_mining_v1.json --output runs/hard_negative_triplets_paris_test_v2_scene_dedup.jsonl --summary-output runs/hard_negative_triplets_paris_test_v2_scene_dedup_summary.json --min-error-km 2.0 --positive-radius-km 0.35 --negative-pred-radius-km 2.0 --negative-min-gt-distance-km 2.0 --negative-max-gt-distance-km 25.0 --max-positives 3 --max-negatives 12`
+- Metrics/artifacts:
+  - Eval artifact for mining:
+    - `runs/geo_eval_paris_profile_180_for_mining_v1.json`
+  - Mined triplets:
+    - `runs/hard_negative_triplets_paris_test_v2_scene_dedup.jsonl`
+    - `runs/hard_negative_triplets_paris_test_v2_scene_dedup_summary.json`
+  - Summary:
+    - `total_records=2391`
+    - `total_failures_considered=180`
+    - `triplets_written=145`
+    - avg positives `~2.90`, avg hard negatives `12.0`
+- Decision:
+  - Keep and prioritize the hard-negative mining pipeline as the immediate path toward real retrieval-backbone accuracy gains.

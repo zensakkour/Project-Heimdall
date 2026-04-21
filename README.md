@@ -417,6 +417,15 @@ Apply learned calibration directly to config:
 .\.venv\Scripts\python -m src.tools.tune_retrieval_geo --config src/config/paris_test.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 300 --output runs/tune_retrieval_geo.json --rank-objective within_2km_pct --apply-best-config
 ```
 
+### Mine hard-negative triplets (error-driven training data)
+
+```powershell
+.\.venv\Scripts\python -m src.tools.run_geo_eval --retrieval-only --config src/config/paris.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 180 --seed 42 --diag-samples 180 --output runs/geo_eval_paris_profile_180_for_mining_v1.json
+.\.venv\Scripts\python -m src.tools.mine_hard_negative_triplets --metadata data/spacenet_paris_test/metadata.csv --eval-report runs/geo_eval_paris_profile_180_for_mining_v1.json --output runs/hard_negative_triplets_paris_test_v2_scene_dedup.jsonl --summary-output runs/hard_negative_triplets_paris_test_v2_scene_dedup_summary.json --min-error-km 2.0 --positive-radius-km 0.35 --negative-pred-radius-km 2.0 --negative-min-gt-distance-km 2.0 --negative-max-gt-distance-km 25.0 --max-positives 3 --max-negatives 12
+```
+
+This gives you query-positive-hard-negative tuples from real failure cases (not random tuples), ready for retrieval backbone fine-tuning.
+
 ### Auto-tune full geo stack (retrieval + priors + calibration)
 
 ```powershell
