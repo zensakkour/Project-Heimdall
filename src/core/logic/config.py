@@ -38,6 +38,7 @@ class GeoConfig:
     retrieval_index_paths: Tuple[str, ...] = ()
     retrieval_index_weights: Tuple[float, ...] = ()
     retrieval_index_model_ids: Tuple[str, ...] = ()
+    retrieval_index_projection_paths: Tuple[Optional[str], ...] = ()
     retrieval_model_id: Optional[str] = None
     retrieval_projection_path: Optional[str] = None
     retrieval_top_k: int = 10
@@ -194,6 +195,9 @@ def load_config(path: str) -> HeimdallConfig:
             retrieval_index_paths=_parse_str_tuple(geo.get("retrieval_index_paths", [])),
             retrieval_index_weights=_parse_float_tuple_allow_empty(geo.get("retrieval_index_weights", [])),
             retrieval_index_model_ids=_parse_str_tuple(geo.get("retrieval_index_model_ids", [])),
+            retrieval_index_projection_paths=_parse_optional_str_sequence(
+                geo.get("retrieval_index_projection_paths", [])
+            ),
             retrieval_model_id=geo.get("retrieval_model_id"),
             retrieval_projection_path=geo.get("retrieval_projection_path"),
             retrieval_top_k=geo.get("retrieval_top_k", 10),
@@ -342,6 +346,19 @@ def _parse_str_tuple(raw) -> Tuple[str, ...]:
             continue
         seen.add(text)
         out.append(text)
+    return tuple(out)
+
+
+def _parse_optional_str_sequence(raw) -> Tuple[Optional[str], ...]:
+    if not isinstance(raw, (list, tuple)):
+        return ()
+    out = []
+    for value in raw:
+        if value is None:
+            out.append(None)
+            continue
+        text = str(value).strip()
+        out.append(text or None)
     return tuple(out)
 
 

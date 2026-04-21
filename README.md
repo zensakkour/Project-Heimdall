@@ -158,6 +158,9 @@ Current implementation status:
   - Retrieval query TTA with rotation ensembling (`retrieval_query_tta_degrees`, `retrieval_query_tta_reduce`) for aerial orientation robustness.
   - Multi-index retrieval support with per-index weighting (`retrieval_index_paths`, `retrieval_index_weights`, `retrieval_per_index_top_k`) for scalable dataset expansion.
   - Per-index retrieval model routing (`retrieval_index_model_ids`) so one run can mix indices built by different embedding backbones.
+  - Per-index projection routing (`retrieval_index_projection_paths`) so multi-index runs can mix projected and non-projected spaces safely.
+    - first realistic dual-space test (`n=180`, projected+raw CLIP with `rrf`) underperformed current projection V2 baseline, so it remains experimental.
+    - artifacts: `runs/geo_eval_projection_trainref_v2_mild_180_baseline.json`, `runs/geo_eval_paris_dualspace_rrf_v1_180.json`.
   - Per-index score normalization for multi-index retrieval (`retrieval_index_score_norm`) to reduce cross-dataset score-scale bias.
   - Retrieval source-fusion mode (`retrieval_source_fusion_mode`: `weighted_score` or `rrf`) for multi-index rank aggregation policy.
   - Source-balanced retrieval selection (`retrieval_source_balance_beta`) to prevent single-index domination in multi-source top-k.
@@ -623,6 +626,7 @@ Useful geo quality knobs in `geolocator`:
 - `retrieval_index_paths`: optional list of extra retrieval indices to query alongside `retrieval_index_path`.
 - `retrieval_index_weights`: optional per-index score multipliers (same order as `retrieval_index_paths`).
 - `retrieval_index_model_ids`: optional per-index embedding model IDs (same order as `retrieval_index_path` + `retrieval_index_paths`) to mix different backbones in one retrieval pass.
+- `retrieval_index_projection_paths`: optional per-index projection paths (same order as `retrieval_index_path` + `retrieval_index_paths`); use `null` for indices that should stay unprojected.
 - `retrieval_projection_path`: optional projection file (`.npz`) applied to query embeddings for metric-adapted retrieval.
 - `retrieval_per_index_top_k`: optional per-index cap before global merge/rerank (`0` uses `retrieval_top_k`).
 - `retrieval_index_score_norm`: per-index score normalization mode (`auto`, `none`, `minmax`, `zscore_sigmoid`, `rank_exp`); `auto` uses `zscore_sigmoid` for multi-index and `none` for single-index.
