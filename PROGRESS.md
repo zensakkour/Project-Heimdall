@@ -1202,3 +1202,159 @@ Do not delete or edit past entries. Append new work at the end.
   - Full suite: `184 passed, 3 warnings`.
 - Decision:
   - Keep fix; this restores CI stability without changing intended retrieval behavior.
+
+## 2026-04-21
+- Hypothesis:
+  - Index-side descriptor augmentation (DBA) can improve retrieval precision by smoothing noisy per-image descriptors.
+  - A geo-aware DBA constraint (only blend neighbors within a small geographic radius) should preserve close-range gains better than unconstrained DBA.
+- Change:
+  - Added a new tooling path: `src/tools/augment_geo_index_embeddings.py`
+    - Supports descriptor DBA with cosine-neighbor pooling (`neighbors`, `self_weight`, `min_similarity`, `temperature`).
+    - Added geo-aware masking via `--max-geo-distance-km` using index lat/lon.
+  - Added regression tests for the DBA tool:
+    - `src/tests/test_augment_geo_index_embeddings.py`
+  - Built and benchmarked multiple DBA index variants on the canonical Paris projected index.
+- Files touched:
+  - `src/tools/augment_geo_index_embeddings.py`
+  - `src/tests/test_augment_geo_index_embeddings.py`
+  - `src/config/paris_close_range_dba.json`
+  - `PROGRESS.md`
+  - `src/docs/RESEARCH_PAPER.md`
+  - `README.md`
+- Validation command(s):
+  - `./.venv/Scripts/python -m pytest -q src/tests/test_augment_geo_index_embeddings.py`
+  - `./.venv/Scripts/python -m pytest -q src/tests/test_retrieval_provider_multi_index.py src/tests/test_run_geo_eval_retrieval_provider.py`
+  - `./.venv/Scripts/python -m src.tools.augment_geo_index_embeddings --index data/geo_index/spacenet_paris_chips_openai_clip_vit_large_patch14_proj_trainref_v2_mild.npz --output data/geo_index/spacenet_paris_chips_openai_clip_vit_large_patch14_proj_trainref_v2_mild_dba_k5.npz --neighbors 5 --self-weight 1.0 --min-similarity 0.0 --temperature 0.07`
+  - `./.venv/Scripts/python -m src.tools.augment_geo_index_embeddings --index data/geo_index/spacenet_paris_chips_openai_clip_vit_large_patch14_proj_trainref_v2_mild.npz --output data/geo_index/spacenet_paris_chips_openai_clip_vit_large_patch14_proj_trainref_v2_mild_dba_k10.npz --neighbors 10 --self-weight 1.0 --min-similarity 0.0 --temperature 0.07`
+  - `./.venv/Scripts/python -m src.tools.augment_geo_index_embeddings --index data/geo_index/spacenet_paris_chips_openai_clip_vit_large_patch14_proj_trainref_v2_mild.npz --output data/geo_index/spacenet_paris_chips_openai_clip_vit_large_patch14_proj_trainref_v2_mild_dba_k20.npz --neighbors 20 --self-weight 1.0 --min-similarity 0.0 --temperature 0.07`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config runs/bench_cfg/cfg_paris_projection_trainref_v2_mild.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 60 --seed 42 --diag-samples 60 --output runs/geo_eval_projection_trainref_v2_mild_baseline_60.json`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config runs/bench_cfg/cfg_paris_projection_trainref_v2_mild_dba_k5.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 60 --seed 42 --diag-samples 60 --output runs/geo_eval_projection_trainref_v2_mild_dba_k5_60.json`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config runs/bench_cfg/cfg_paris_projection_trainref_v2_mild_dba_k10.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 60 --seed 42 --diag-samples 60 --output runs/geo_eval_projection_trainref_v2_mild_dba_k10_60.json`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config runs/bench_cfg/cfg_paris_projection_trainref_v2_mild_dba_k20.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 60 --seed 42 --diag-samples 60 --output runs/geo_eval_projection_trainref_v2_mild_dba_k20_60.json`
+  - `./.venv/Scripts/python -m src.tools.augment_geo_index_embeddings --index data/geo_index/spacenet_paris_chips_openai_clip_vit_large_patch14_proj_trainref_v2_mild.npz --output data/geo_index/spacenet_paris_chips_openai_clip_vit_large_patch14_proj_trainref_v2_mild_dba_geo2_k5.npz --neighbors 5 --self-weight 1.0 --min-similarity 0.0 --temperature 0.07 --max-geo-distance-km 2.0`
+  - `./.venv/Scripts/python -m src.tools.augment_geo_index_embeddings --index data/geo_index/spacenet_paris_chips_openai_clip_vit_large_patch14_proj_trainref_v2_mild.npz --output data/geo_index/spacenet_paris_chips_openai_clip_vit_large_patch14_proj_trainref_v2_mild_dba_geo5_k5.npz --neighbors 5 --self-weight 1.0 --min-similarity 0.0 --temperature 0.07 --max-geo-distance-km 5.0`
+  - `./.venv/Scripts/python -m src.tools.augment_geo_index_embeddings --index data/geo_index/spacenet_paris_chips_openai_clip_vit_large_patch14_proj_trainref_v2_mild.npz --output data/geo_index/spacenet_paris_chips_openai_clip_vit_large_patch14_proj_trainref_v2_mild_dba_geo2_k8.npz --neighbors 8 --self-weight 1.0 --min-similarity 0.0 --temperature 0.07 --max-geo-distance-km 2.0`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config runs/bench_cfg/cfg_paris_projection_trainref_v2_mild_dba_geo2_k5.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 180 --seed 42 --diag-samples 180 --output runs/geo_eval_projection_trainref_v2_mild_dba_geo2_k5_180.json`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config runs/bench_cfg/cfg_paris_projection_trainref_v2_mild_dba_geo5_k5.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 180 --seed 42 --diag-samples 180 --output runs/geo_eval_projection_trainref_v2_mild_dba_geo5_k5_180.json`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config runs/bench_cfg/cfg_paris_projection_trainref_v2_mild_dba_geo2_k8.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 180 --seed 42 --diag-samples 180 --output runs/geo_eval_projection_trainref_v2_mild_dba_geo2_k8_180.json`
+- Metrics:
+  - Baseline (`n=180`, `runs/geo_eval_projection_trainref_v2_mild_180_baseline.json`):
+    - `mean_km=15.2523`, `median_km=5.5043`, `within_1km_pct=11.67`, `within_2km_pct=26.67`, `within_5km_pct=50.00`, `within_10km_pct=64.44`.
+  - Unconstrained DBA (`k=5`) on `n=180`:
+    - `mean_km=17.0584`, `within_1km_pct=10.56`, `within_2km_pct=22.22` (regression).
+  - Geo-aware DBA (`k=5`, `max_geo_distance_km=5`) on `n=180`:
+    - `mean_km=15.8026`, `within_1km_pct=11.67`, `within_2km_pct=25.56` (no close-range gain).
+  - Geo-aware DBA (`k=8`, `max_geo_distance_km=2`) on `n=180`:
+    - `mean_km=16.3238`, `within_1km_pct=11.11`, `within_2km_pct=25.56` (regression).
+  - Geo-aware DBA (`k=5`, `max_geo_distance_km=2`) on `n=180`:
+    - `mean_km=14.8018`, `median_km=6.3058`, `within_1km_pct=13.33`, `within_2km_pct=29.44`, `within_5km_pct=46.67`, `within_10km_pct=60.56`.
+    - vs baseline deltas: `mean_km -0.4505`, `within_1km_pct +1.67`, `within_2km_pct +2.78`, `within_5km_pct -3.33`, `within_10km_pct -3.89`.
+- Artifacts:
+  - `runs/geo_eval_projection_trainref_v2_mild_baseline_60.json`
+  - `runs/geo_eval_projection_trainref_v2_mild_dba_k5_60.json`
+  - `runs/geo_eval_projection_trainref_v2_mild_dba_k10_60.json`
+  - `runs/geo_eval_projection_trainref_v2_mild_dba_k20_60.json`
+  - `runs/geo_eval_projection_trainref_v2_mild_dba_k5_180.json`
+  - `runs/geo_eval_projection_trainref_v2_mild_dba_geo2_k5_60.json`
+  - `runs/geo_eval_projection_trainref_v2_mild_dba_geo5_k5_60.json`
+  - `runs/geo_eval_projection_trainref_v2_mild_dba_geo2_k8_60.json`
+  - `runs/geo_eval_projection_trainref_v2_mild_dba_geo2_k5_180.json`
+  - `runs/geo_eval_projection_trainref_v2_mild_dba_geo5_k5_180.json`
+  - `runs/geo_eval_projection_trainref_v2_mild_dba_geo2_k8_180.json`
+- Decision:
+  - Reject unconstrained DBA and most geo-aware DBA settings for default profile.
+  - Keep `geo-aware DBA (k=5, radius=2km)` as an objective-specific option for close-range (`<=1km`/`<=2km`) optimization, not as global default due tail regression (`<=5km`/`<=10km`).
+
+## 2026-04-21
+- Hypothesis:
+  - A dual-index retrieval stack (baseline projected index + geo-aware DBA index) with rank-based source fusion can retain tail robustness while improving close-range accuracy.
+- Change:
+  - Built and evaluated dual-index configurations using the existing multi-index retrieval path:
+    - baseline projected index: `...proj_trainref_v2_mild.npz`
+    - geo-aware DBA index: `...proj_trainref_v2_mild_dba_geo2_k5.npz`
+  - Added a promoted experimental close-range profile:
+    - `src/config/paris_close_range_dual_rrf.json`
+  - Updated docs to include the new profile and evaluation command.
+- Files touched:
+  - `src/config/paris_close_range_dual_rrf.json`
+  - `README.md`
+  - `PROGRESS.md`
+  - `src/docs/RESEARCH_PAPER.md`
+- Validation command(s):
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config runs/bench_cfg/cfg_paris_projection_trainref_v2_mild_dual_dba_w90_10_weighted.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 60 --seed 42 --diag-samples 60 --output runs/geo_eval_projection_trainref_v2_mild_dual_dba_w90_10_weighted_60.json`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config runs/bench_cfg/cfg_paris_projection_trainref_v2_mild_dual_dba_w80_20_weighted.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 60 --seed 42 --diag-samples 60 --output runs/geo_eval_projection_trainref_v2_mild_dual_dba_w80_20_weighted_60.json`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config runs/bench_cfg/cfg_paris_projection_trainref_v2_mild_dual_dba_w70_30_weighted.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 60 --seed 42 --diag-samples 60 --output runs/geo_eval_projection_trainref_v2_mild_dual_dba_w70_30_weighted_60.json`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config runs/bench_cfg/cfg_paris_projection_trainref_v2_mild_dual_dba_w100_100_weighted.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 60 --seed 42 --diag-samples 60 --output runs/geo_eval_projection_trainref_v2_mild_dual_dba_w100_100_weighted_60.json`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config runs/bench_cfg/cfg_paris_projection_trainref_v2_mild_dual_dba_w100_100_rrf.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 60 --seed 42 --diag-samples 60 --output runs/geo_eval_projection_trainref_v2_mild_dual_dba_w100_100_rrf_60.json`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config runs/bench_cfg/cfg_paris_projection_trainref_v2_mild_dual_dba_w100_100_weighted_sb02.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 60 --seed 42 --diag-samples 60 --output runs/geo_eval_projection_trainref_v2_mild_dual_dba_w100_100_weighted_sb02_60.json`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config runs/bench_cfg/cfg_paris_projection_trainref_v2_mild_dual_dba_w100_100_rrf.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 180 --seed 42 --diag-samples 180 --output runs/geo_eval_projection_trainref_v2_mild_dual_dba_w100_100_rrf_180.json`
+- Metrics:
+  - Baseline (`n=180`): `mean_km=15.2523`, `median_km=5.5043`, `within_1km_pct=11.67`, `within_2km_pct=26.67`, `within_5km_pct=50.00`, `within_10km_pct=64.44`.
+  - Dual-index `rrf` (`n=180`):
+    - `mean_km=14.8410` (`-0.4113`)
+    - `median_km=4.8705` (`-0.6337`)
+    - `within_1km_pct=12.78` (`+1.11`)
+    - `within_2km_pct=31.11` (`+4.44`)
+    - `within_5km_pct=50.56` (`+0.56`)
+    - `within_10km_pct=63.33` (`-1.11`)
+- Artifacts:
+  - `runs/geo_eval_projection_trainref_v2_mild_dual_dba_w90_10_weighted_60.json`
+  - `runs/geo_eval_projection_trainref_v2_mild_dual_dba_w80_20_weighted_60.json`
+  - `runs/geo_eval_projection_trainref_v2_mild_dual_dba_w70_30_weighted_60.json`
+  - `runs/geo_eval_projection_trainref_v2_mild_dual_dba_w100_100_weighted_60.json`
+  - `runs/geo_eval_projection_trainref_v2_mild_dual_dba_w100_100_rrf_60.json`
+  - `runs/geo_eval_projection_trainref_v2_mild_dual_dba_w100_100_weighted_sb02_60.json`
+  - `runs/geo_eval_projection_trainref_v2_mild_dual_dba_w100_100_rrf_180.json`
+- Decision:
+  - Keep dual-index `rrf` profile as the strongest current close-range candidate.
+  - Track the small `within_10km_pct` regression and avoid replacing broad-recall default until that tradeoff is explicitly accepted.
+
+## 2026-04-21
+- Hypothesis:
+  - Dual-index retrieval can be further improved by objective-specific post-retrieval refinement, yielding separate best profiles for (a) max close-range hit (`<=1km`) and (b) balanced overall error.
+- Change:
+  - Extended dual-index `rrf` benchmarking with additional weighting and refinement variants:
+    - Weighting sweep: `w100_50_rrf` vs existing `w100_100_rrf`.
+    - Structural refinement sweep on dual-index stack: geo-prior, graph support rerank, KDE refinement, and graph+KDE.
+  - Added new Paris-scoped profile configs:
+    - `src/config/paris_balanced_dual_rrf.json`
+    - `src/config/paris_close_range_dual_rrf_graph_kde.json`
+  - Updated documentation to expose objective-specific profile selection.
+- Files touched:
+  - `src/config/paris_balanced_dual_rrf.json`
+  - `src/config/paris_close_range_dual_rrf_graph_kde.json`
+  - `README.md`
+  - `PROGRESS.md`
+  - `src/docs/RESEARCH_PAPER.md`
+- Validation command(s):
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config runs/bench_cfg/cfg_paris_projection_trainref_v2_mild_dual_dba_w100_50_rrf.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 180 --seed 42 --diag-samples 180 --output runs/geo_eval_projection_trainref_v2_mild_dual_dba_w100_50_rrf_180.json`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config runs/bench_cfg/cfg_paris_projection_trainref_v2_mild_dual_dba_w100_100_rrf_geo_prior.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 60 --seed 42 --diag-samples 60 --output runs/geo_eval_projection_trainref_v2_mild_dual_dba_w100_100_rrf_geo_prior_60.json`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config runs/bench_cfg/cfg_paris_projection_trainref_v2_mild_dual_dba_w100_100_rrf_graph_v1.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 60 --seed 42 --diag-samples 60 --output runs/geo_eval_projection_trainref_v2_mild_dual_dba_w100_100_rrf_graph_v1_60.json`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config runs/bench_cfg/cfg_paris_projection_trainref_v2_mild_dual_dba_w100_100_rrf_kde_v1.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 60 --seed 42 --diag-samples 60 --output runs/geo_eval_projection_trainref_v2_mild_dual_dba_w100_100_rrf_kde_v1_60.json`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config runs/bench_cfg/cfg_paris_projection_trainref_v2_mild_dual_dba_w100_100_rrf_graph_kde_v1.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 60 --seed 42 --diag-samples 60 --output runs/geo_eval_projection_trainref_v2_mild_dual_dba_w100_100_rrf_graph_kde_v1_60.json`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config runs/bench_cfg/cfg_paris_projection_trainref_v2_mild_dual_dba_w100_100_rrf_graph_v1.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 180 --seed 42 --diag-samples 180 --output runs/geo_eval_projection_trainref_v2_mild_dual_dba_w100_100_rrf_graph_v1_180.json`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config runs/bench_cfg/cfg_paris_projection_trainref_v2_mild_dual_dba_w100_100_rrf_graph_kde_v1.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 180 --seed 42 --diag-samples 180 --output runs/geo_eval_projection_trainref_v2_mild_dual_dba_w100_100_rrf_graph_kde_v1_180.json`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config src/config/paris_balanced_dual_rrf.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 5 --seed 42 --diag-samples 5 --output runs/geo_eval_smoke_paris_balanced_dual_rrf_5.json`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config src/config/paris_close_range_dual_rrf_graph_kde.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 5 --seed 42 --diag-samples 5 --output runs/geo_eval_smoke_paris_close_range_dual_rrf_graph_kde_5.json`
+  - `./.venv/Scripts/python -m pytest -q src/tests/test_augment_geo_index_embeddings.py src/tests/test_config_loading.py src/tests/test_retrieval_provider_multi_index.py`
+- Metrics:
+  - Baseline (`n=180`): `mean_km=15.2523`, `median_km=5.5043`, `within_1km_pct=11.67`, `within_2km_pct=26.67`, `within_5km_pct=50.00`, `within_10km_pct=64.44`.
+  - Dual-index close-range (`w100_100_rrf`, `n=180`): `mean_km=14.8410`, `median_km=4.8705`, `within_1km_pct=12.78`, `within_2km_pct=31.11`, `within_5km_pct=50.56`, `within_10km_pct=63.33`.
+  - Dual-index balanced (`w100_50_rrf`, `n=180`): `mean_km=14.5971`, `median_km=4.2125`, `within_1km_pct=10.56`, `within_2km_pct=31.11`, `within_5km_pct=52.78`, `within_10km_pct=65.56`.
+  - Dual-index graph-only (`n=180`): `mean_km=15.1006`, `median_km=5.3282`, `within_1km_pct=13.33`, `within_2km_pct=30.00`, `within_5km_pct=50.00`, `within_10km_pct=63.33`.
+  - Dual-index graph+KDE (`n=180`): `mean_km=15.2811`, `median_km=5.3115`, `within_1km_pct=13.89`, `within_2km_pct=31.11`, `within_5km_pct=49.44`, `within_10km_pct=63.33`.
+- Artifacts:
+  - `runs/geo_eval_projection_trainref_v2_mild_dual_dba_w100_50_rrf_180.json`
+  - `runs/geo_eval_projection_trainref_v2_mild_dual_dba_w100_100_rrf_geo_prior_60.json`
+  - `runs/geo_eval_projection_trainref_v2_mild_dual_dba_w100_100_rrf_graph_v1_60.json`
+  - `runs/geo_eval_projection_trainref_v2_mild_dual_dba_w100_100_rrf_kde_v1_60.json`
+  - `runs/geo_eval_projection_trainref_v2_mild_dual_dba_w100_100_rrf_graph_kde_v1_60.json`
+  - `runs/geo_eval_projection_trainref_v2_mild_dual_dba_w100_100_rrf_graph_v1_180.json`
+  - `runs/geo_eval_projection_trainref_v2_mild_dual_dba_w100_100_rrf_graph_kde_v1_180.json`
+  - `runs/geo_eval_smoke_paris_balanced_dual_rrf_5.json`
+  - `runs/geo_eval_smoke_paris_close_range_dual_rrf_graph_kde_5.json`
+- Decision:
+  - Keep three explicit Paris dual-index objective profiles:
+    - `paris_close_range_dual_rrf`: best default for close-range (`<=1km`/`<=2km`) without major mean regression.
+    - `paris_balanced_dual_rrf`: best balanced profile for mean/median/`<=10km` while preserving `<=2km` gain.
+    - `paris_close_range_dual_rrf_graph_kde`: aggressive W1 profile with highest measured `<=1km`, accepted only when slight broader-radius regression is acceptable.
