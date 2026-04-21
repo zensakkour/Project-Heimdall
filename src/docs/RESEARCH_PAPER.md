@@ -510,12 +510,15 @@ This table is the explicit decision ledger for methods tried in this project cyc
 | Scope-aware retrieval geo prior (`retrieval_geo_prior_*`) | Mixed-scope stress test: `mean_km` `6656.66` -> `18.82`; replay seed case `7408.15` -> `0.00` | Keep (Paris defaults) |
 | Error-driven hard-negative triplet miner | Produced `145` structured triplets from `180` realistic eval failures | Keep; use for backbone fine-tuning pipeline |
 | Hard-negative projection adaptation (`trainref_v2_mild`) | `within_1km_pct`: `9.17` -> `12.50`, `within_2km_pct`: `16.67` -> `28.33` on `n=120` realistic eval | Keep as current best retrieval adaptation direction |
+| Projection V2 + geo-prior stack on canonical Paris split (`n=180`) | No delta vs baseline (`within_1km_pct=11.67`, `within_2km_pct=26.67` in both) | Keep geo-prior as scope-safety guard; do not claim close-range lift on in-scope data |
+| Dual-space projected+raw CLIP fusion with per-index projection routing (`retrieval_index_projection_paths`) | Underperformed projection V2 baseline on `n=180` (`within_1km_pct`: `11.67` -> `8.89`, `within_2km_pct`: `26.67` -> `18.89`) | Keep capability as experimental infra; reject as default profile |
 
 ### 8.4 What Is Currently Kept by Default
 - Canonical Paris realistic profile remains CLIP-based retrieval with consensus refinement.
 - Projection-adapted retrieval profile (V2 mild) is the current best experimental direction and should be preferred for further Paris hard-negative training cycles.
 - KDE and dual-local methods remain opt-in evaluation profiles for objective-specific tradeoffs.
 - RRF source fusion and alternate backbones remain research modes, not production defaults on current split.
+- Per-index projection routing is kept as infrastructure for future heterogeneous-index experiments, but current dual-space RRF profile is not promoted.
 - Multi-scale query views and adaptive-mass KDE remain experimental toggles; defaults stay single-scale (`1.0`) and fixed adaptive mass (`0.0`).
 - Evaluation-integrity guards (profile/path auto-resolution + explicit profile reporting + CLI scope validation) are mandatory.
 
@@ -623,6 +626,8 @@ Project Heimdall demonstrates a practical path from prototype geolocation to a b
 - `Spatially guaranteed uncertainty`: conformal prediction for region-level coverage guarantees on top of probabilistic fusion.
 - `Rank-based multi-index fusion`: RRF was implemented as an optional mode (`retrieval_source_fusion_mode=rrf`) and benchmarked.
 - On current realistic Paris split (`n=180`), it underperformed `weighted_score` (`within_1km_pct`: `7.78` vs `10.56`), so it remains experimental for future multi-index/global settings.
+- `Dual-space projection routing`: per-index query projection routing (`retrieval_index_projection_paths`) was added to safely combine projected and non-projected indices in one run.
+- First Paris realistic test (`n=180`, projected+raw CLIP with `rrf`) underperformed the current projection V2 baseline (`within_1km_pct`: `8.89` vs `11.67`; `within_2km_pct`: `18.89` vs `26.67`), so this remains experimental infrastructure.
 
 ## Appendix A: Major Algorithmic Knobs (Geo)
 - Retrieval:
@@ -634,7 +639,7 @@ Project Heimdall demonstrates a practical path from prototype geolocation to a b
   - `retrieval_query_tta_degrees`, `retrieval_query_tta_modes`, `retrieval_query_tta_scales`, `retrieval_query_tta_auto_modality`, `retrieval_query_tta_reduce`
   - `retrieval_tta_agreement_top_n`, `retrieval_tta_agreement_weight`
   - `retrieval_index_paths`, `retrieval_index_weights`, `retrieval_per_index_top_k`
-  - `retrieval_index_model_ids`, `retrieval_index_score_norm`, `retrieval_source_fusion_mode`, `retrieval_source_balance_beta`
+  - `retrieval_index_model_ids`, `retrieval_index_projection_paths`, `retrieval_index_score_norm`, `retrieval_source_fusion_mode`, `retrieval_source_balance_beta`
   - `retrieval_geo_prior_mode`, `retrieval_geo_prior_bbox`, `retrieval_geo_prior_sigma_km`, `retrieval_geo_prior_min_keep`
   - `retrieval_kde_refine_top_n`, `retrieval_kde_refine_sigma_km`, `retrieval_kde_refine_score_power`, `retrieval_kde_refine_margin_threshold`, `retrieval_kde_refine_switch_radius_km`, `retrieval_kde_refine_max_iters`, `retrieval_kde_refine_adaptive_mass`
 - Candidate merge:
@@ -702,6 +707,12 @@ Project Heimdall demonstrates a practical path from prototype geolocation to a b
 - `runs/geo_eval_projection_trainref_v1_120_rerun.json`
 - `runs/geo_eval_projection_trainref_v2_mild_120.json`
 - `runs/geo_eval_projection_trainref_v3_dim256_120.json`
+- `runs/geo_eval_projection_trainref_v2_mild_180_baseline.json`
+- `runs/geo_eval_projection_trainref_v2_mild_geo_prior_180.json`
+- `runs/geo_eval_projection_trainref_v3_dim256_180.json`
+- `runs/geo_eval_projection_trainref_v2_mild_localmatch_v1_180.json`
+- `runs/geo_eval_paris_dualspace_rrf_v1_180.json`
+- `runs/bench_cfg/cfg_paris_dualspace_rrf_v1.json`
 - `runs/geo_impact_latest.json`
 - `runs/geo_impact_latest.md`
 
