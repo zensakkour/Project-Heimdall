@@ -372,6 +372,7 @@ def build_pipeline(cfg: Optional[HeimdallConfig]) -> "HeimdallPipeline":
         index_paths=cfg.geolocator.retrieval_index_paths,
         index_weights=cfg.geolocator.retrieval_index_weights,
         index_model_ids=cfg.geolocator.retrieval_index_model_ids,
+        index_projection_paths=cfg.geolocator.retrieval_index_projection_paths,
         model_id=cfg.geolocator.retrieval_model_id or "openai/clip-vit-large-patch14",
         projection_path=cfg.geolocator.retrieval_projection_path,
         top_k=cfg.geolocator.retrieval_top_k,

@@ -61,6 +61,7 @@ def test_load_config_spatial_consensus_defaults() -> None:
         assert cfg.geolocator.retrieval_index_paths == ()
         assert cfg.geolocator.retrieval_index_weights == ()
         assert cfg.geolocator.retrieval_index_model_ids == ()
+        assert cfg.geolocator.retrieval_index_projection_paths == ()
         assert cfg.geolocator.retrieval_projection_path is None
         assert cfg.geolocator.retrieval_per_index_top_k == 0
         assert cfg.geolocator.retrieval_index_score_norm == "auto"
@@ -157,6 +158,7 @@ def test_load_config_spatial_consensus_overrides() -> None:
                     "retrieval_index_paths": ["a.npz", "b.npz", "a.npz"],
                     "retrieval_index_weights": [1.0, 0.8],
                     "retrieval_index_model_ids": ["openai/clip-vit-large-patch14", "google/siglip-base-patch16-224"],
+                    "retrieval_index_projection_paths": ["runs/projections/paris_v1.npz", None],
                     "retrieval_projection_path": "runs/projections/paris_v1.npz",
                     "retrieval_per_index_top_k": 5,
                     "retrieval_index_score_norm": "zscore_sigmoid",
@@ -249,6 +251,10 @@ def test_load_config_spatial_consensus_overrides() -> None:
         assert cfg.geolocator.retrieval_index_model_ids == (
             "openai/clip-vit-large-patch14",
             "google/siglip-base-patch16-224",
+        )
+        assert cfg.geolocator.retrieval_index_projection_paths == (
+            "runs/projections/paris_v1.npz",
+            None,
         )
         assert cfg.geolocator.retrieval_projection_path == "runs/projections/paris_v1.npz"
         assert cfg.geolocator.retrieval_per_index_top_k == 5

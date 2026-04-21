@@ -47,6 +47,7 @@ def build_pipeline(
             index_paths=geo_cfg.retrieval_index_paths,
             index_weights=geo_cfg.retrieval_index_weights,
             index_model_ids=geo_cfg.retrieval_index_model_ids,
+            index_projection_paths=geo_cfg.retrieval_index_projection_paths,
             model_id=geo_cfg.retrieval_model_id or "openai/clip-vit-large-patch14",
             projection_path=geo_cfg.retrieval_projection_path,
             top_k=geo_cfg.retrieval_top_k,
