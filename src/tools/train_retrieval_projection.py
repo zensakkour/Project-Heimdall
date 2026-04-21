@@ -489,30 +489,32 @@ def main(argv: Optional[List[str]] = None) -> int:
     embed_written = 0
     embed_missing = 0
     if requested_paths:
+        missing_before_embed = [
+            path
+            for path in requested_paths
+            if _lookup_embedding(path, by_exact=by_exact, by_name=by_name) is None
+        ]
         if torch is None:
             # Without torch we can only continue if index covered everything.
-            still_missing = sum(
-                1
-                for path in requested_paths
-                if _lookup_embedding(path, by_exact=by_exact, by_name=by_name) is None
-            )
+            still_missing = len(missing_before_embed)
             if still_missing > 0:
                 raise RuntimeError("torch_not_available_for_missing_embeddings")
         else:
-            use_device = str(args.device).strip().lower()
-            if use_device == "auto":
-                use_device = "cuda" if torch.cuda.is_available() else "cpu"
-            images_dir = Path(args.images_dir)
-            if not images_dir.exists():
-                raise FileNotFoundError(f"images_dir_not_found:{images_dir}")
-            embed_written, embed_missing = _embed_missing(
-                requested_paths=requested_paths,
-                by_exact=by_exact,
-                by_name=by_name,
-                model_id=str(args.model_id),
-                images_dir=images_dir,
-                device=use_device,
-            )
+            if missing_before_embed:
+                use_device = str(args.device).strip().lower()
+                if use_device == "auto":
+                    use_device = "cuda" if torch.cuda.is_available() else "cpu"
+                images_dir = Path(args.images_dir)
+                if not images_dir.exists():
+                    raise FileNotFoundError(f"images_dir_not_found:{images_dir}")
+                embed_written, embed_missing = _embed_missing(
+                    requested_paths=requested_paths,
+                    by_exact=by_exact,
+                    by_name=by_name,
+                    model_id=str(args.model_id),
+                    images_dir=images_dir,
+                    device=use_device,
+                )
 
     matrix, rows, ds_stats = _build_training_records(triplets, by_exact=by_exact, by_name=by_name)
     if matrix.size <= 0 or not rows:
