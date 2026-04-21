@@ -271,6 +271,10 @@ def _collect_raw_samples(
         kde_refine_switch_radius_km=cfg.geolocator.retrieval_kde_refine_switch_radius_km,
         kde_refine_max_iters=cfg.geolocator.retrieval_kde_refine_max_iters,
         kde_refine_adaptive_mass=cfg.geolocator.retrieval_kde_refine_adaptive_mass,
+        geo_prior_mode=cfg.geolocator.retrieval_geo_prior_mode,
+        geo_prior_bbox=cfg.geolocator.retrieval_geo_prior_bbox,
+        geo_prior_sigma_km=cfg.geolocator.retrieval_geo_prior_sigma_km,
+        geo_prior_min_keep=cfg.geolocator.retrieval_geo_prior_min_keep,
     )
     samples: List[RetrievalSample] = []
     missing_files = 0
@@ -468,6 +472,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         "retrieval_kde_refine_switch_radius_km": cfg.geolocator.retrieval_kde_refine_switch_radius_km,
         "retrieval_kde_refine_max_iters": cfg.geolocator.retrieval_kde_refine_max_iters,
         "retrieval_kde_refine_adaptive_mass": cfg.geolocator.retrieval_kde_refine_adaptive_mass,
+        "retrieval_geo_prior_mode": cfg.geolocator.retrieval_geo_prior_mode,
+        "retrieval_geo_prior_bbox": list(cfg.geolocator.retrieval_geo_prior_bbox),
+        "retrieval_geo_prior_sigma_km": cfg.geolocator.retrieval_geo_prior_sigma_km,
+        "retrieval_geo_prior_min_keep": cfg.geolocator.retrieval_geo_prior_min_keep,
         "retrieval_query_tta_reduce_search": tta_reduce_modes,
         "rank_objective": rank_objective,
         "retrieval_min_keep_topk_default": cfg.geolocator.retrieval_min_keep_topk,

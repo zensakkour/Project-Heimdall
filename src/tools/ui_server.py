@@ -415,6 +415,10 @@ def build_pipeline(cfg: Optional[HeimdallConfig]) -> "HeimdallPipeline":
         kde_refine_switch_radius_km=cfg.geolocator.retrieval_kde_refine_switch_radius_km,
         kde_refine_max_iters=cfg.geolocator.retrieval_kde_refine_max_iters,
         kde_refine_adaptive_mass=cfg.geolocator.retrieval_kde_refine_adaptive_mass,
+        geo_prior_mode=cfg.geolocator.retrieval_geo_prior_mode,
+        geo_prior_bbox=cfg.geolocator.retrieval_geo_prior_bbox,
+        geo_prior_sigma_km=cfg.geolocator.retrieval_geo_prior_sigma_km,
+        geo_prior_min_keep=cfg.geolocator.retrieval_geo_prior_min_keep,
     )
     geoclip_provider = GeoCLIPProvider(
         model_path=cfg.geolocator.model_path,

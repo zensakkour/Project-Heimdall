@@ -1033,3 +1033,69 @@ Do not delete or edit past entries. Append new work at the end.
   - Local validation after fix: `180 passed, 3 warnings`.
 - Decision:
   - Keep this CI compatibility fix; no modeling behavior change to projection math itself.
+
+## 2026-04-21
+- Hypothesis:
+  - A scope-aware geographic prior in retrieval (Paris bbox hard gate) can remove catastrophic cross-region errors (thousands of km) that appear when mixed-source indices are used.
+- Change:
+  - Added geo-prior controls to retrieval provider:
+    - `retrieval_geo_prior_mode` (`off|soft|hard`)
+    - `retrieval_geo_prior_bbox`
+    - `retrieval_geo_prior_sigma_km`
+    - `retrieval_geo_prior_min_keep`
+  - Wired the new knobs through all config-driven entrypoints:
+    - `src/cli.py`, `src/batch_run.py`, `src/tools/run_all.py`, `src/tools/run_geo_eval.py`, `src/tools/tune_retrieval_geo.py`, `src/tools/ui_server.py`
+  - Extended config schema + loader and profile configs:
+    - `src/core/logic/config.py`
+    - `src/config/defaults.json`, `src/config/paris.json`, `src/config/paris_test.json`, `src/config/open_geo.json`
+  - Added retrieval geo-prior regression tests:
+    - `src/tests/test_retrieval_geo_prior.py`
+    - updated `src/tests/test_config_loading.py`
+  - Updated documentation with method + artifacts:
+    - `README.md`, `src/docs/RESEARCH_PAPER.md`
+- Files touched:
+  - `src/core/geo/retrieval_provider.py`
+  - `src/core/logic/config.py`
+  - `src/cli.py`
+  - `src/batch_run.py`
+  - `src/tools/run_all.py`
+  - `src/tools/run_geo_eval.py`
+  - `src/tools/tune_retrieval_geo.py`
+  - `src/tools/ui_server.py`
+  - `src/config/defaults.json`
+  - `src/config/paris.json`
+  - `src/config/paris_test.json`
+  - `src/config/open_geo.json`
+  - `src/tests/test_retrieval_geo_prior.py`
+  - `src/tests/test_config_loading.py`
+  - `README.md`
+  - `src/docs/RESEARCH_PAPER.md`
+  - `PROGRESS.md`
+- Validation command(s):
+  - `./.venv/Scripts/python -m pytest -q src/tests/test_retrieval_geo_prior.py src/tests/test_config_loading.py src/tests/test_retrieval_provider_multi_index.py src/tests/test_retrieval_provider_min_keep.py src/tests/test_retrieval_tta.py`
+  - `./.venv/Scripts/python -m pytest -q`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --config runs/configs/paris_mixed_scope_no_prior.json --retrieval-only --limit 120 --seed 42 --output runs/geo_eval_mixed_scope_no_prior_120.json`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --config runs/configs/paris_mixed_scope_hard_prior.json --retrieval-only --limit 120 --seed 42 --output runs/geo_eval_mixed_scope_hard_prior_120.json`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --images-dir data/spacenet_paris/chips --metadata data/spacenet_paris/metadata.csv --config runs/configs/paris_mixed_scope_no_prior.json --retrieval-only --limit 2 --seed 1870334448 --output runs/geo_eval_mixed_scope_no_prior_seed1870334448_2.json`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --images-dir data/spacenet_paris/chips --metadata data/spacenet_paris/metadata.csv --config runs/configs/paris_mixed_scope_hard_prior.json --retrieval-only --limit 2 --seed 1870334448 --output runs/geo_eval_mixed_scope_hard_prior_seed1870334448_2.json`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --config src/config/paris_test.json --retrieval-only --limit 40 --seed 42 --output runs/geo_eval_paris_test_profile_with_geo_prior_40.json`
+- Metrics (before -> after):
+  - Mixed-scope stress test (`n=120`, Paris test, Paris+open-geo index mix):
+    - `mean_km`: `6656.661` -> `18.822`
+    - `median_km`: `5830.112` -> `12.362`
+    - `within_10km_pct`: `0.00` -> `40.83`
+    - `within_1km_pct`: `0.00` -> `5.00`
+  - Replay seed (`1870334448`, `n=2`, same chips previously reported):
+    - `mean_km`: `7408.151` -> `0.000`
+    - `within_10km_pct`: `0.00` -> `100.00`
+- Artifacts:
+  - `runs/configs/paris_mixed_scope_no_prior.json`
+  - `runs/configs/paris_mixed_scope_hard_prior.json`
+  - `runs/geo_eval_mixed_scope_no_prior_120.json`
+  - `runs/geo_eval_mixed_scope_hard_prior_120.json`
+  - `runs/geo_eval_mixed_scope_no_prior_seed1870334448_2.json`
+  - `runs/geo_eval_mixed_scope_hard_prior_seed1870334448_2.json`
+  - `runs/geo_eval_paris_test_profile_with_geo_prior_40.json`
+- Decision:
+  - Keep hard geo-prior defaults on Paris configs (`defaults`, `paris`, `paris_test`).
+  - Keep `open_geo` profile geo prior disabled (`off`) because it is a broad-scope/legacy profile.

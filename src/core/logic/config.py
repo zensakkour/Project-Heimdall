@@ -81,6 +81,10 @@ class GeoConfig:
     retrieval_kde_refine_switch_radius_km: float = 0.0
     retrieval_kde_refine_max_iters: int = 8
     retrieval_kde_refine_adaptive_mass: float = 0.0
+    retrieval_geo_prior_mode: str = "off"
+    retrieval_geo_prior_bbox: Tuple[float, ...] = ()
+    retrieval_geo_prior_sigma_km: float = 250.0
+    retrieval_geo_prior_min_keep: int = 0
     candidate_dedupe_radius_m: float = 300.0
     candidate_source_balance_beta: float = 0.0
     candidate_max_results: int = 80
@@ -235,6 +239,10 @@ def load_config(path: str) -> HeimdallConfig:
             retrieval_kde_refine_switch_radius_km=geo.get("retrieval_kde_refine_switch_radius_km", 0.0),
             retrieval_kde_refine_max_iters=geo.get("retrieval_kde_refine_max_iters", 8),
             retrieval_kde_refine_adaptive_mass=geo.get("retrieval_kde_refine_adaptive_mass", 0.0),
+            retrieval_geo_prior_mode=_parse_geo_prior_mode(geo.get("retrieval_geo_prior_mode", "off")),
+            retrieval_geo_prior_bbox=_parse_geo_prior_bbox(geo.get("retrieval_geo_prior_bbox")),
+            retrieval_geo_prior_sigma_km=geo.get("retrieval_geo_prior_sigma_km", 250.0),
+            retrieval_geo_prior_min_keep=geo.get("retrieval_geo_prior_min_keep", 0),
             candidate_dedupe_radius_m=geo.get("candidate_dedupe_radius_m", 300.0),
             candidate_source_balance_beta=geo.get("candidate_source_balance_beta", 0.0),
             candidate_max_results=geo.get("candidate_max_results", 80),
@@ -390,3 +398,24 @@ def _parse_source_fusion_mode(raw: object) -> str:
     if mode not in {"weighted_score", "rrf"}:
         return "weighted_score"
     return mode
+
+
+def _parse_geo_prior_mode(raw: object) -> str:
+    mode = str(raw).strip().lower()
+    if mode not in {"off", "soft", "hard"}:
+        return "off"
+    return mode
+
+
+def _parse_geo_prior_bbox(raw) -> Tuple[float, ...]:
+    if not isinstance(raw, (list, tuple)) or len(raw) != 4:
+        return ()
+    out = []
+    for value in raw:
+        if not isinstance(value, (int, float)):
+            return ()
+        val = float(value)
+        if val != val or val in (float("inf"), float("-inf")):
+            return ()
+        out.append(val)
+    return tuple(out)

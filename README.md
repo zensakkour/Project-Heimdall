@@ -151,6 +151,10 @@ Current implementation status:
   - Added projection-aware retrieval adaptation from mined hard negatives.
     - best measured variant (`n=120`, realistic split): `within_1km_pct` `9.17` -> `12.50`, `within_2km_pct` `16.67` -> `28.33`
     - artifacts: `runs/geo_eval_projection_baseline_120.json`, `runs/geo_eval_projection_trainref_v2_mild_120.json`.
+  - Added scope-aware retrieval geo prior (`retrieval_geo_prior_mode`, `retrieval_geo_prior_bbox`, `retrieval_geo_prior_sigma_km`, `retrieval_geo_prior_min_keep`) to prevent catastrophic cross-region matches.
+    - mixed-scope stress test (`n=120`, Paris eval with Paris + open-geo indices): `mean_km` `6656.66` -> `18.82`, `within_10km_pct` `0.00` -> `40.83`
+    - replay of the reported failure seed (`1870334448`, `n=2`): `mean_km` `7408.15` -> `0.00`
+    - artifacts: `runs/geo_eval_mixed_scope_no_prior_120.json`, `runs/geo_eval_mixed_scope_hard_prior_120.json`, `runs/geo_eval_mixed_scope_no_prior_seed1870334448_2.json`, `runs/geo_eval_mixed_scope_hard_prior_seed1870334448_2.json`.
   - Retrieval query TTA with rotation ensembling (`retrieval_query_tta_degrees`, `retrieval_query_tta_reduce`) for aerial orientation robustness.
   - Multi-index retrieval support with per-index weighting (`retrieval_index_paths`, `retrieval_index_weights`, `retrieval_per_index_top_k`) for scalable dataset expansion.
   - Per-index retrieval model routing (`retrieval_index_model_ids`) so one run can mix indices built by different embedding backbones.
