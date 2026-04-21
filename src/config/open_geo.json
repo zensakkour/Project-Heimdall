@@ -72,6 +72,10 @@
     "retrieval_kde_refine_switch_radius_km": 0.0,
     "retrieval_kde_refine_max_iters": 8,
     "retrieval_kde_refine_adaptive_mass": 0.0,
+    "retrieval_geo_prior_mode": "off",
+    "retrieval_geo_prior_bbox": [],
+    "retrieval_geo_prior_sigma_km": 250.0,
+    "retrieval_geo_prior_min_keep": 0,
     "retrieval_query_tta_modes": [
       "rgb"
     ],

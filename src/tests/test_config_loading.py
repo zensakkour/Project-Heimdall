@@ -99,6 +99,10 @@ def test_load_config_spatial_consensus_defaults() -> None:
         assert cfg.geolocator.retrieval_kde_refine_switch_radius_km == 0.0
         assert cfg.geolocator.retrieval_kde_refine_max_iters == 8
         assert cfg.geolocator.retrieval_kde_refine_adaptive_mass == 0.0
+        assert cfg.geolocator.retrieval_geo_prior_mode == "off"
+        assert cfg.geolocator.retrieval_geo_prior_bbox == ()
+        assert cfg.geolocator.retrieval_geo_prior_sigma_km == 250.0
+        assert cfg.geolocator.retrieval_geo_prior_min_keep == 0
 
 
 def test_load_config_spatial_consensus_overrides() -> None:
@@ -194,6 +198,10 @@ def test_load_config_spatial_consensus_overrides() -> None:
                     "retrieval_kde_refine_switch_radius_km": 3.5,
                     "retrieval_kde_refine_max_iters": 11,
                     "retrieval_kde_refine_adaptive_mass": 0.7,
+                    "retrieval_geo_prior_mode": "hard",
+                    "retrieval_geo_prior_bbox": [48.4, 49.1, 2.05, 2.36],
+                    "retrieval_geo_prior_sigma_km": 32.0,
+                    "retrieval_geo_prior_min_keep": 3,
                 },
             },
         )
@@ -283,6 +291,10 @@ def test_load_config_spatial_consensus_overrides() -> None:
         assert cfg.geolocator.retrieval_kde_refine_switch_radius_km == 3.5
         assert cfg.geolocator.retrieval_kde_refine_max_iters == 11
         assert cfg.geolocator.retrieval_kde_refine_adaptive_mass == 0.7
+        assert cfg.geolocator.retrieval_geo_prior_mode == "hard"
+        assert cfg.geolocator.retrieval_geo_prior_bbox == (48.4, 49.1, 2.05, 2.36)
+        assert cfg.geolocator.retrieval_geo_prior_sigma_km == 32.0
+        assert cfg.geolocator.retrieval_geo_prior_min_keep == 3
 
 
 def test_load_config_invalid_retrieval_index_score_norm_falls_back_to_auto() -> None:
