@@ -1436,6 +1436,31 @@ def _apply_local_match_rerank(
     if max(valid_locals) < 0.18:
         return ordered
 
+    # Ambiguity gate: when base retrieval is already very confident, require
+    # strong geometric contradiction before allowing local-feature overrides.
+    base_gap = 1.0
+    if len(ordered) >= 2:
+        score_top1 = _score_to_unit_interval(ordered[0].retrieval_score)
+        score_top2 = _score_to_unit_interval(ordered[1].retrieval_score)
+        base_gap = max(0.0, float(score_top1 - score_top2))
+
+    if base_gap >= 0.10:
+        top_local = local_scores[0]
+        best_local_idx = 0
+        best_local_val = float(top_local) if top_local is not None else float("-inf")
+        for idx, value in enumerate(local_scores):
+            if value is None:
+                continue
+            if float(value) > best_local_val:
+                best_local_val = float(value)
+                best_local_idx = idx
+
+        if best_local_idx != 0:
+            top_local_val = float(top_local) if top_local is not None else 0.0
+            local_advantage = best_local_val - top_local_val
+            if local_advantage < 0.28:
+                return ordered
+
     updated: List[GeoCandidate] = []
     changed = False
     for idx, cand in enumerate(ordered):

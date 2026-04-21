@@ -515,6 +515,92 @@ def test_local_match_rerank_skips_when_signal_is_weak(monkeypatch: pytest.Monkey
     assert [cand.match_id for cand in out[:2]] == ["a", "b"]
 
 
+def test_local_match_rerank_skips_confident_override_without_strong_local_advantage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ranked = [
+        GeoCandidate(latitude=48.85, longitude=2.35, retrieval_score=0.99, match_id="a", image_path="a.jpg"),
+        GeoCandidate(latitude=48.86, longitude=2.36, retrieval_score=0.70, match_id="b", image_path="b.jpg"),
+    ]
+
+    class _DummyOrb:
+        def detectAndCompute(self, _img, _mask):
+            return [object() for _ in range(20)], np.ones((20, 32), dtype=np.uint8)
+
+    class _DummyMatcher:
+        pass
+
+    class _DummyCV2:
+        NORM_HAMMING = 6
+
+        def ORB_create(self, **_kwargs):
+            return _DummyOrb()
+
+        def BFMatcher(self, *_args, **_kwargs):
+            return _DummyMatcher()
+
+    monkeypatch.setattr(retrieval_mod, "cv2", _DummyCV2(), raising=False)
+    monkeypatch.setattr(retrieval_mod, "_resolve_candidate_image_path", lambda raw: Path(str(raw)))
+
+    def _fake_score(*, cand_path: Path, **_kwargs) -> float:
+        return 0.30 if cand_path.name == "a.jpg" else 0.45
+
+    monkeypatch.setattr(retrieval_mod, "_score_local_feature_match", _fake_score)
+    out = retrieval_mod._apply_local_match_rerank(
+        ranked,
+        query_gray=np.zeros((16, 16), dtype=np.uint8),
+        top_n=2,
+        weight=0.9,
+        ratio_test=0.8,
+        max_features=512,
+    )
+    assert out
+    assert [cand.match_id for cand in out[:2]] == ["a", "b"]
+
+
+def test_local_match_rerank_allows_confident_override_when_local_advantage_is_strong(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ranked = [
+        GeoCandidate(latitude=48.85, longitude=2.35, retrieval_score=0.95, match_id="a", image_path="a.jpg"),
+        GeoCandidate(latitude=48.86, longitude=2.36, retrieval_score=0.84, match_id="b", image_path="b.jpg"),
+    ]
+
+    class _DummyOrb:
+        def detectAndCompute(self, _img, _mask):
+            return [object() for _ in range(20)], np.ones((20, 32), dtype=np.uint8)
+
+    class _DummyMatcher:
+        pass
+
+    class _DummyCV2:
+        NORM_HAMMING = 6
+
+        def ORB_create(self, **_kwargs):
+            return _DummyOrb()
+
+        def BFMatcher(self, *_args, **_kwargs):
+            return _DummyMatcher()
+
+    monkeypatch.setattr(retrieval_mod, "cv2", _DummyCV2(), raising=False)
+    monkeypatch.setattr(retrieval_mod, "_resolve_candidate_image_path", lambda raw: Path(str(raw)))
+
+    def _fake_score(*, cand_path: Path, **_kwargs) -> float:
+        return 0.30 if cand_path.name == "a.jpg" else 0.95
+
+    monkeypatch.setattr(retrieval_mod, "_score_local_feature_match", _fake_score)
+    out = retrieval_mod._apply_local_match_rerank(
+        ranked,
+        query_gray=np.zeros((16, 16), dtype=np.uint8),
+        top_n=2,
+        weight=0.9,
+        ratio_test=0.8,
+        max_features=512,
+    )
+    assert out
+    assert out[0].match_id == "b"
+
+
 def test_graph_support_rerank_can_promote_dense_cluster() -> None:
     ranked = [
         GeoCandidate(latitude=10.0, longitude=10.0, retrieval_score=0.95, match_id="isolated"),

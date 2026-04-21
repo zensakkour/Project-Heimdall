@@ -371,6 +371,22 @@ Observation:
 - Adaptive-mass KDE (`0.7`) improved `within_1km_pct` on this run but regressed the primary W2 objective (`within_2km_pct`) and worsened central tendency; `0.5` regressed both close-range metrics.
 - Current default stance remains: keep fixed-mass KDE profiles and single-scale query views unless a future leakage-safe benchmark shows a consistent gain.
 
+### 7.12 Error-Driven Hard-Negative Mining Pipeline (Data-Centric Upgrade Path)
+Artifacts:
+- `runs/geo_eval_paris_profile_180_for_mining_v1.json`
+- `runs/hard_negative_triplets_paris_test_v2_scene_dedup.jsonl`
+- `runs/hard_negative_triplets_paris_test_v2_scene_dedup_summary.json`
+
+Results:
+- `total_records`: `2391`
+- `total_failures_considered`: `180`
+- `triplets_written`: `145`
+- Average tuple density: `~2.90` positives and `12.00` hard negatives per query.
+
+Observation:
+- The bottleneck is no longer only inference logic; it is lack of targeted hard-negative supervision around failure regions.
+- The new mining pipeline converts real evaluation failures into structured triplets suitable for retrieval-backbone fine-tuning, which is the highest-probability path to step-change improvements in `within_1km`/`within_2km` metrics.
+
 ## 8. Methods Tried and Practical Outcome
 ### 8.1 Changes with Clear Practical Value
 - Multi-provider candidate generation and merge controls.
@@ -382,6 +398,7 @@ Observation:
 - Benchmark governance with promotion workflow.
 - Automated aerial-backbone upgrade workflow (objective-based backbone benchmark + final-index rebuild + config patch).
 - Dual local geometric reranker (`SIFT` + `ORB` + evidence gate) as a safer local-feature ranking path than legacy local matching.
+- Error-driven hard-negative triplet mining (`src.tools.mine_hard_negative_triplets`) for retrieval fine-tuning data.
 
 ### 8.2 Changes with Conditional Value
 - Query TTA: useful in some regimes, neutral in tested subset.
@@ -391,6 +408,7 @@ Observation:
 - Aerial backbone swap to tested SigLIP candidates: no gain over CLIP on the realistic Paris split used here.
 - Graph-support reranking on current realistic split: under control baseline.
 - Adaptive-mass KDE refinement (`retrieval_kde_refine_adaptive_mass`): mixed results; did not improve `within_2km_pct` vs fixed-mass KDE-W2 baseline.
+- Ambiguity-gated local rerank override: protective behavior, but no metric uplift observed on tested local-match profiles.
 - Dual local reranker + KDE combination: improved tail metrics but did not beat best close-range (`within_1km_pct`) profile.
 
 ### 8.3 Complete Method Ledger (Keep vs Reject)
@@ -413,8 +431,10 @@ This table is the explicit decision ledger for methods tried in this project cyc
 | Multi-scale query views (`retrieval_query_tta_scales`) | Mean/p90 improved but close-range regressed (`within_1km_pct`: `10.56` -> `6.11`) | Keep as experimental; do not default |
 | Adaptive-mass KDE refinement (`retrieval_kde_refine_adaptive_mass`) | `adapt_a` raised `within_1km_pct` (`10.00` -> `11.11`) but reduced `within_2km_pct` (`20.00` -> `19.44`) | Keep as experimental; do not default |
 | Dual local reranker (`SIFT+ORB`, weak-signal gate, adaptive blend) | Large gain vs legacy local match A (`within_1km_pct`: `5.00` -> `8.89`) | Keep as optional mode |
+| Ambiguity-gated local rerank override | No measured delta on tested profiles (`localmatch_a`, `kde_e_w1_duallocal`) | Keep as safe guard; not a promoted accuracy lever |
 | KDE + dual-local combined profile | Did not beat best W1 profile (`within_1km_pct` stayed `8.89`) | Do not adopt as close-range default |
 | Profile/data mismatch guard in Lab/backend/CLI | Eliminated catastrophic profile mismatch failure mode (`~5846 km` case) and now blocks mismatched `run_geo_eval` runs by default | Keep (evaluation-integrity requirement) |
+| Error-driven hard-negative triplet miner | Produced `145` structured triplets from `180` realistic eval failures | Keep; use for backbone fine-tuning pipeline |
 
 ### 8.4 What Is Currently Kept by Default
 - Canonical Paris realistic profile remains CLIP-based retrieval with consensus refinement.
@@ -513,6 +533,13 @@ Project Heimdall demonstrates a practical path from prototype geolocation to a b
 3. Extend uncertainty outputs with conformal credible regions over candidate clusters.
 4. Expand realistic, leakage-safe global and cross-view evaluation sets with hard negatives and strict anti-duplicate checks.
 5. Integrate data quality scoring into retrieval-index curation.
+
+### 15.2 Data Required For Major Accuracy Gains
+- More dense local positives per scene: at least `5-10` geographically-near variants (small offsets, seasonal/time differences) for each hard query region.
+- Hard negatives around confusion zones: near-lookalike tiles at `2-25 km` GT distance, especially from districts repeatedly confused in evaluation.
+- Cross-sensor/domain coverage: balanced `PAN`, `RGB-PanSharpen`, and `MUL-PanSharpen` examples with explicit pair/triplet links.
+- Leakage-safe split metadata: strict scene/tile-family separation between train/val/test to avoid inflated metrics.
+- Optional but high leverage: additional city datasets beyond Paris with the same metadata contract to reduce over-specialization.
 
 ### 15.1 Possible Approaches Under Consideration (From `deep-research-report.md`)
 - `Domain-adapted embeddings` (highest priority): evaluate Remote Sensing foundation encoders as primary retrieval backbones.
