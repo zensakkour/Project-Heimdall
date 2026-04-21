@@ -148,6 +148,9 @@ Current implementation status:
     - best `within_2km_pct`: `20.00` (`runs/geo_eval_paris_profile_180_kde_refine_d_w2_v1.json`)
   - Local geometric reranking was upgraded to dual-engine matching (`SIFT` + `ORB`) with weak-signal gating and adaptive blending.
     - this materially improved legacy local-match performance (`localmatch_a`: `within_1km_pct` `5.00` -> `8.89`, `within_2km_pct` `13.33` -> `18.33`) while keeping control profile unchanged when local matching is disabled.
+  - Added projection-aware retrieval adaptation from mined hard negatives.
+    - best measured variant (`n=120`, realistic split): `within_1km_pct` `9.17` -> `12.50`, `within_2km_pct` `16.67` -> `28.33`
+    - artifacts: `runs/geo_eval_projection_baseline_120.json`, `runs/geo_eval_projection_trainref_v2_mild_120.json`.
   - Retrieval query TTA with rotation ensembling (`retrieval_query_tta_degrees`, `retrieval_query_tta_reduce`) for aerial orientation robustness.
   - Multi-index retrieval support with per-index weighting (`retrieval_index_paths`, `retrieval_index_weights`, `retrieval_per_index_top_k`) for scalable dataset expansion.
   - Per-index retrieval model routing (`retrieval_index_model_ids`) so one run can mix indices built by different embedding backbones.
@@ -426,6 +429,17 @@ Apply learned calibration directly to config:
 
 This gives you query-positive-hard-negative tuples from real failure cases (not random tuples), ready for retrieval backbone fine-tuning.
 
+### Train and apply retrieval projection from hard negatives
+
+```powershell
+.\.venv\Scripts\python -m src.tools.train_retrieval_projection --triplets runs/hard_negative_triplets_paris_test_query_train_ref_v1.jsonl --embedding-index data/geo_index/spacenet_paris_test_clip.npz --images-dir data/spacenet_paris_test/chips --output runs/retrieval_projection_paris_query_trainref_v2_mild.npz --report-output runs/retrieval_projection_paris_query_trainref_v2_mild.report.json --epochs 14 --batch-size 128 --learning-rate 3e-4 --weight-decay 1e-4 --margin 0.20 --temperature 0.07 --ce-weight 0.15 --orth-weight 0.01 --seed 42
+.\.venv\Scripts\python -m src.tools.apply_projection_to_geo_index --index data/geo_index/spacenet_paris_chips_openai_clip_vit_large_patch14.npz --projection-path runs/retrieval_projection_paris_query_trainref_v2_mild.npz --output data/geo_index/spacenet_paris_chips_openai_clip_vit_large_patch14_proj_trainref_v2_mild.npz
+```
+
+Then run eval with a config that sets:
+- `geolocator.retrieval_index_path` to the projected index.
+- `geolocator.retrieval_projection_path` to the same projection file.
+
 ### Auto-tune full geo stack (retrieval + priors + calibration)
 
 ```powershell
@@ -605,6 +619,7 @@ Useful geo quality knobs in `geolocator`:
 - `retrieval_index_paths`: optional list of extra retrieval indices to query alongside `retrieval_index_path`.
 - `retrieval_index_weights`: optional per-index score multipliers (same order as `retrieval_index_paths`).
 - `retrieval_index_model_ids`: optional per-index embedding model IDs (same order as `retrieval_index_path` + `retrieval_index_paths`) to mix different backbones in one retrieval pass.
+- `retrieval_projection_path`: optional projection file (`.npz`) applied to query embeddings for metric-adapted retrieval.
 - `retrieval_per_index_top_k`: optional per-index cap before global merge/rerank (`0` uses `retrieval_top_k`).
 - `retrieval_index_score_norm`: per-index score normalization mode (`auto`, `none`, `minmax`, `zscore_sigmoid`, `rank_exp`); `auto` uses `zscore_sigmoid` for multi-index and `none` for single-index.
 - `retrieval_source_balance_beta`: source-balancing strength for multi-index top-k selection (`0` disables balancing).

@@ -952,3 +952,68 @@ Do not delete or edit past entries. Append new work at the end.
     - avg positives `~2.90`, avg hard negatives `12.0`
 - Decision:
   - Keep and prioritize the hard-negative mining pipeline as the immediate path toward real retrieval-backbone accuracy gains.
+
+## 2026-04-21
+- Hypothesis:
+  - Hard-negative-informed embedding projection can produce a real close-range step-up (`<=1km`, `<=2km`) beyond local rerank/tuning-only changes.
+- Change:
+  - Added projection-aware retrieval plumbing end-to-end:
+    - `ClipEmbedder` now supports optional projection loading/apply (`matrix` + optional `bias`) with post-projection normalization.
+    - New config knob: `geolocator.retrieval_projection_path`.
+    - Wired projection path through CLI, batch, UI server, eval, and tuning paths.
+    - `build_geo_index` supports `--projection-path` during index construction.
+  - Added new tools:
+    - `src/tools/train_retrieval_projection.py` (train projection from hard-negative triplets)
+    - `src/tools/apply_projection_to_geo_index.py` (fast projection transform for existing index embeddings)
+  - Upgraded hard-negative miner for explicit query/reference split:
+    - `src/tools/mine_hard_negative_triplets.py` now supports `--reference-metadata`.
+  - Added/updated tests for projection training/apply, config loading, and miner query/reference behavior.
+  - Ran projection-variant evaluation cycle (baseline + V1/V2/V3) on realistic Paris retrieval-only split.
+- Files touched:
+  - `src/core/geo/retrieval_provider.py`
+  - `src/core/logic/config.py`
+  - `src/tools/build_geo_index.py`
+  - `src/tools/run_geo_eval.py`
+  - `src/tools/run_all.py`
+  - `src/tools/ui_server.py`
+  - `src/tools/tune_retrieval_geo.py`
+  - `src/cli.py`
+  - `src/batch_run.py`
+  - `src/tools/train_retrieval_projection.py`
+  - `src/tools/apply_projection_to_geo_index.py`
+  - `src/tools/mine_hard_negative_triplets.py`
+  - `src/tests/test_train_retrieval_projection.py`
+  - `src/tests/test_apply_projection_to_geo_index.py`
+  - `src/tests/test_mine_hard_negative_triplets.py`
+  - `src/tests/test_config_loading.py`
+  - `src/config/defaults.json`
+  - `src/config/paris.json`
+  - `src/config/paris_test.json`
+  - `src/config/open_geo.json`
+  - `README.md`
+  - `src/docs/RESEARCH_PAPER.md`
+  - `PROGRESS.md`
+- Validation command(s):
+  - `./.venv/Scripts/python -m pytest -q src/tests/test_mine_hard_negative_triplets.py src/tests/test_apply_projection_to_geo_index.py src/tests/test_train_retrieval_projection.py src/tests/test_config_loading.py src/tests/test_retrieval_provider_multi_index.py src/tests/test_run_geo_eval_retrieval_provider.py src/tests/test_run_geo_eval_scope_guard.py`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --config src/config/paris.json --limit 120 --seed 42 --diag-samples 120 --output runs/geo_eval_projection_baseline_120.json`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --config runs/bench_cfg/cfg_paris_projection_trainref_v1.json --limit 120 --seed 42 --diag-samples 120 --output runs/geo_eval_projection_trainref_v1_120_rerun.json`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --config runs/bench_cfg/cfg_paris_projection_trainref_v2_mild.json --limit 120 --seed 42 --diag-samples 120 --output runs/geo_eval_projection_trainref_v2_mild_120.json`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --config runs/bench_cfg/cfg_paris_projection_trainref_v3_dim256.json --limit 120 --seed 42 --diag-samples 120 --output runs/geo_eval_projection_trainref_v3_dim256_120.json`
+- Metrics (baseline -> selected V2):
+  - `mean_km`: `15.517` -> `14.925`
+  - `median_km`: `10.498` -> `4.512`
+  - `within_1km_pct`: `9.17` -> `12.50`
+  - `within_2km_pct`: `16.67` -> `28.33`
+  - `within_5km_pct`: `36.67` -> `51.67`
+  - `within_10km_pct`: `48.33` -> `61.67`
+- Artifacts:
+  - `runs/geo_eval_projection_baseline_120.json`
+  - `runs/geo_eval_projection_trainref_v1_120_rerun.json`
+  - `runs/geo_eval_projection_trainref_v2_mild_120.json`
+  - `runs/geo_eval_projection_trainref_v3_dim256_120.json`
+  - `runs/retrieval_projection_paris_query_trainref_v2_mild.npz`
+  - `runs/retrieval_projection_paris_query_trainref_v2_mild.report.json`
+  - `data/geo_index/spacenet_paris_chips_openai_clip_vit_large_patch14_proj_trainref_v2_mild.npz`
+- Decision:
+  - Keep the projection adaptation path and treat `trainref_v2_mild` as the best current retrieval adaptation direction.
+  - Use this as the base for next hard-negative data expansion + projection retraining cycle.

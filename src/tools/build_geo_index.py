@@ -79,9 +79,10 @@ def build_index(
     model_id: str,
     root_dir: Path,
     images_dir: Path,
+    projection_path: Optional[str] = None,
 ) -> int:
     device = "cuda" if __import__("torch").cuda.is_available() else "cpu"
-    embedder = ClipEmbedder(model_id, device)
+    embedder = ClipEmbedder(model_id, device, projection_path=projection_path)
 
     embeddings = []
     latitudes = []
@@ -137,9 +138,14 @@ def build_index(
     return len(embeddings)
 
 
-def build_index_from_sidecars(images: List[Path], output: Path, model_id: str) -> int:
+def build_index_from_sidecars(
+    images: List[Path],
+    output: Path,
+    model_id: str,
+    projection_path: Optional[str] = None,
+) -> int:
     device = "cuda" if __import__("torch").cuda.is_available() else "cpu"
-    embedder = ClipEmbedder(model_id, device)
+    embedder = ClipEmbedder(model_id, device, projection_path=projection_path)
 
     embeddings = []
     latitudes = []
@@ -192,6 +198,11 @@ def main() -> int:
         default="openai/clip-vit-large-patch14",
         help="Embedding model id",
     )
+    parser.add_argument(
+        "--projection-path",
+        default="",
+        help="Optional .npz projection (matrix+bias) applied to embeddings before indexing.",
+    )
     args = parser.parse_args()
 
     image_dir = Path(args.images_dir)
@@ -201,11 +212,20 @@ def main() -> int:
         return 1
 
     output = Path(args.output)
+    projection_path = str(args.projection_path).strip() or None
     if args.metadata:
         meta = _load_metadata(Path(args.metadata))
-        count = build_index(images, meta, output, args.model_id, image_dir.parent, image_dir)
+        count = build_index(
+            images,
+            meta,
+            output,
+            args.model_id,
+            image_dir.parent,
+            image_dir,
+            projection_path=projection_path,
+        )
     else:
-        count = build_index_from_sidecars(images, output, args.model_id)
+        count = build_index_from_sidecars(images, output, args.model_id, projection_path=projection_path)
     if count == 0:
         print("No embeddings written (missing metadata or sidecar).")
         return 1
