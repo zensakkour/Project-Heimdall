@@ -577,6 +577,8 @@ Config files are under `src/config/`:
 
 Each shipped profile also declares `profile_scope` at the JSON root so region intent is explicit (`PARIS` vs `US`) and easier to audit in runs.
 
+`src.tools.run_geo_eval` now validates profile/data scope alignment by default (for example, blocking `open_geo` profile on Paris datasets). Use `--allow-scope-mismatch` only for intentional cross-scope experiments.
+
 Pass a config where supported with `--config <path>`.
 
 Useful geo quality knobs in `geolocator`:
