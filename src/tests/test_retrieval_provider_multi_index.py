@@ -30,8 +30,20 @@ def _index(rows: list[list[float]], ids: list[str]) -> RetrievalIndex:
     )
 
 
-def _loaded(path: Path, source: str, idx: RetrievalIndex, model_id: str = "openai/clip-vit-large-patch14") -> LoadedRetrievalIndex:
-    return LoadedRetrievalIndex(source=source, path=path, model_id=model_id, index=idx)
+def _loaded(
+    path: Path,
+    source: str,
+    idx: RetrievalIndex,
+    model_id: str = "openai/clip-vit-large-patch14",
+    projection_path: str | None = None,
+) -> LoadedRetrievalIndex:
+    return LoadedRetrievalIndex(
+        source=source,
+        path=path,
+        model_id=model_id,
+        index=idx,
+        projection_path=projection_path,
+    )
 
 
 def _index_with_coords(
@@ -331,6 +343,65 @@ def test_multi_index_supports_per_index_model_embeddings() -> None:
         ids = {cand.match_id for cand in out}
         assert "retrieval:clip_idx:a1" in ids
         assert "retrieval:siglip_idx:b1" in ids
+
+
+def test_multi_index_supports_per_index_projection_paths_same_model() -> None:
+    class _ProjectedEmbedder:
+        def embed(self, _image: Image.Image) -> np.ndarray:
+            return np.asarray([1.0, 0.0], dtype=np.float32)
+
+    class _RawEmbedder:
+        def embed(self, _image: Image.Image) -> np.ndarray:
+            return np.asarray([0.0, 1.0], dtype=np.float32)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        image_path = root / "q.jpg"
+        Image.new("RGB", (16, 16), color=(55, 85, 35)).save(image_path)
+        first = root / "proj_idx.npz"
+        second = root / "raw_idx.npz"
+        first.write_bytes(b"ok")
+        second.write_bytes(b"ok")
+
+        idx_projected = _index([[1.0, 0.0]], ["p1"])
+        idx_raw = _index([[0.0, 1.0]], ["r1"])
+
+        provider = GeoRetrievalProvider(
+            index_path=str(first),
+            index_paths=[str(second)],
+            index_model_ids=["openai/clip-vit-large-patch14", "openai/clip-vit-large-patch14"],
+            index_projection_paths=["runs/proj_a.npz", None],
+            projection_path=None,
+            top_k=2,
+            per_index_top_k=1,
+            min_score=-1.0,
+        )
+        provider._ensure_indices = lambda: [  # type: ignore[method-assign]
+            _loaded(
+                first,
+                "proj_idx",
+                idx_projected,
+                "openai/clip-vit-large-patch14",
+                projection_path="runs/proj_a.npz",
+            ),
+            _loaded(
+                second,
+                "raw_idx",
+                idx_raw,
+                "openai/clip-vit-large-patch14",
+                projection_path=None,
+            ),
+        ]
+        provider._ensure_embedder = lambda: _RawEmbedder()  # type: ignore[method-assign]
+        provider._ensure_embedder_for_model_with_projection = (  # type: ignore[method-assign]
+            lambda model_id, projection_path: _ProjectedEmbedder()
+            if projection_path
+            else _RawEmbedder()
+        )
+        out = provider.candidates(str(image_path))
+        ids = {cand.match_id for cand in out}
+        assert "retrieval:proj_idx:p1" in ids
+        assert "retrieval:raw_idx:r1" in ids
 
 
 def test_source_fusion_mode_rrf_aggregates_cross_source_support() -> None:

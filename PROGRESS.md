@@ -1099,3 +1099,76 @@ Do not delete or edit past entries. Append new work at the end.
 - Decision:
   - Keep hard geo-prior defaults on Paris configs (`defaults`, `paris`, `paris_test`).
   - Keep `open_geo` profile geo prior disabled (`off`) because it is a broad-scope/legacy profile.
+
+## 2026-04-21
+- Hypothesis:
+  - Ensembling projected and non-projected retrieval spaces can improve close-range Paris metrics when query projection is routed per index instead of globally.
+- Change:
+  - Added per-index projection routing support:
+    - New geo config field: `retrieval_index_projection_paths`.
+    - Retrieval provider now supports per-index query projection path assignment while keeping per-index model routing.
+    - Added encoder-spec routing (`model_id` + `projection_path`) for query embeddings across multi-index retrieval.
+  - Wired new field through config-driven entrypoints:
+    - `src/cli.py`, `src/batch_run.py`, `src/tools/run_all.py`, `src/tools/run_geo_eval.py`, `src/tools/tune_retrieval_geo.py`, `src/tools/ui_server.py`.
+  - Added/updated tests:
+    - `src/tests/test_config_loading.py`
+    - `src/tests/test_retrieval_provider_multi_index.py` (new per-index projection routing test).
+  - Ran controlled `n=180` comparisons on Paris realistic retrieval-only split (seed `42`):
+    - projection V2 baseline vs projection V2 + geo-prior stack
+    - dual-space projected+raw CLIP (`rrf`) using per-index projection routing
+    - projection V3 dim-256 head
+    - projection V2 + local geometric rerank
+  - Audited dataset scope in `data/spacenet_paris_test/metadata.csv` to verify Paris-only labels.
+- Files touched:
+  - `src/core/geo/retrieval_provider.py`
+  - `src/core/logic/config.py`
+  - `src/cli.py`
+  - `src/batch_run.py`
+  - `src/tools/run_all.py`
+  - `src/tools/run_geo_eval.py`
+  - `src/tools/tune_retrieval_geo.py`
+  - `src/tools/ui_server.py`
+  - `src/tests/test_config_loading.py`
+  - `src/tests/test_retrieval_provider_multi_index.py`
+  - `src/config/defaults.json`
+  - `src/config/paris.json`
+  - `src/config/paris_test.json`
+  - `src/config/open_geo.json`
+  - `runs/bench_cfg/cfg_paris_projection_trainref_v2_mild_geo_prior.json`
+  - `runs/bench_cfg/cfg_paris_dualspace_rrf_v1.json`
+  - `runs/bench_cfg/cfg_paris_projection_trainref_v2_mild_localmatch_v1.json`
+  - `README.md`
+  - `src/docs/RESEARCH_PAPER.md`
+  - `PROGRESS.md`
+- Validation command(s):
+  - `./.venv/Scripts/python -m pytest -q src/tests/test_config_loading.py src/tests/test_retrieval_provider_multi_index.py`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config runs/bench_cfg/cfg_paris_projection_trainref_v2_mild.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 180 --seed 42 --diag-samples 180 --output runs/geo_eval_projection_trainref_v2_mild_180_baseline.json`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config runs/bench_cfg/cfg_paris_projection_trainref_v2_mild_geo_prior.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 180 --seed 42 --diag-samples 180 --output runs/geo_eval_projection_trainref_v2_mild_geo_prior_180.json`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config runs/bench_cfg/cfg_paris_dualspace_rrf_v1.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 180 --seed 42 --diag-samples 180 --output runs/geo_eval_paris_dualspace_rrf_v1_180.json`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config runs/bench_cfg/cfg_paris_projection_trainref_v3_dim256.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 180 --seed 42 --diag-samples 180 --output runs/geo_eval_projection_trainref_v3_dim256_180.json`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config runs/bench_cfg/cfg_paris_projection_trainref_v2_mild_localmatch_v1.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 180 --seed 42 --diag-samples 180 --output runs/geo_eval_projection_trainref_v2_mild_localmatch_v1_180.json`
+- Metrics:
+  - Baseline projection V2 (`n=180`):
+    - `mean_km=15.2523`, `median_km=5.5043`, `within_1km_pct=11.67`, `within_2km_pct=26.67`
+  - Projection V2 + geo prior stack (`n=180`):
+    - identical to baseline on this in-scope split (`within_1km_pct=11.67`, `within_2km_pct=26.67`)
+  - Dual-space projected+raw CLIP with `rrf` (`n=180`):
+    - `mean_km=16.0853`, `median_km=9.3245`, `within_1km_pct=8.89`, `within_2km_pct=18.89`
+  - Projection V3 dim-256 (`n=180`):
+    - `mean_km=19.9768`, `within_1km_pct=11.67`, `within_2km_pct=18.33`
+  - Projection V2 + local match (`n=180`):
+    - `mean_km=15.6061`, `within_1km_pct=10.00`, `within_2km_pct=25.56`
+  - Dataset scope audit:
+    - `2391/2391` metadata rows inside Paris bbox (`48.40..49.10`, `2.05..2.36`).
+- Artifacts:
+  - `runs/geo_eval_projection_trainref_v2_mild_180_baseline.json`
+  - `runs/geo_eval_projection_trainref_v2_mild_geo_prior_180.json`
+  - `runs/geo_eval_paris_dualspace_rrf_v1_180.json`
+  - `runs/geo_eval_projection_trainref_v3_dim256_180.json`
+  - `runs/geo_eval_projection_trainref_v2_mild_localmatch_v1_180.json`
+  - `runs/bench_cfg/cfg_paris_dualspace_rrf_v1.json`
+  - `runs/bench_cfg/cfg_paris_projection_trainref_v2_mild_localmatch_v1.json`
+- Decision:
+  - Keep per-index projection routing capability (`retrieval_index_projection_paths`) as experimental infrastructure.
+  - Keep projection V2 baseline as current best `n=180` performer among tested variants in this cycle.
+  - Geo-prior remains a critical cross-scope safety guard, but does not improve in-scope Paris close-range metrics by itself.

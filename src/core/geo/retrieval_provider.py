@@ -49,6 +49,7 @@ class LoadedRetrievalIndex:
     path: Path
     model_id: str
     index: RetrievalIndex
+    projection_path: Optional[str] = None
 
 
 def _normalize_projection_path(path: object) -> Optional[str]:
@@ -309,6 +310,31 @@ def _normalize_index_model_ids(
         if text:
             out[idx] = text
     return out
+
+
+def _normalize_index_projection_paths(
+    projection_paths: Optional[Sequence[object]],
+    *,
+    n_indices: int,
+    default_projection_path: Optional[str],
+) -> List[Optional[str]]:
+    default_path = _normalize_projection_path(default_projection_path)
+    out: List[Optional[str]] = [default_path for _ in range(n_indices)]
+    if not projection_paths:
+        return out
+    for idx in range(min(n_indices, len(projection_paths))):
+        raw = projection_paths[idx]
+        if raw is None:
+            out[idx] = None
+            continue
+        text = str(raw).strip()
+        out[idx] = text or None
+    return out
+
+
+def _query_encoder_key(model_id: str, projection_path: Optional[str]) -> str:
+    proj = _normalize_projection_path(projection_path) or "-"
+    return f"{model_id}|{proj}"
 
 
 def _normalize_index_score_norm(mode: object) -> str:
@@ -693,7 +719,7 @@ def _collect_weighted_ranked_candidates(
     *,
     loaded_indices: Sequence[LoadedRetrievalIndex],
     index_weights: Sequence[float],
-    query_mats_by_model: dict[str, np.ndarray],
+    query_mats_by_encoder: dict[str, np.ndarray],
     global_top_k: int,
     per_index_top_k: int,
     reduce_mode: str,
@@ -707,7 +733,7 @@ def _collect_weighted_ranked_candidates(
     return _collect_ranked_candidates(
         loaded_indices=loaded_indices,
         index_weights=index_weights,
-        query_mats_by_model=query_mats_by_model,
+        query_mats_by_encoder=query_mats_by_encoder,
         global_top_k=global_top_k,
         per_index_top_k=per_index_top_k,
         reduce_mode=reduce_mode,
@@ -725,7 +751,7 @@ def _collect_ranked_candidates(
     *,
     loaded_indices: Sequence[LoadedRetrievalIndex],
     index_weights: Sequence[float],
-    query_mats_by_model: dict[str, np.ndarray],
+    query_mats_by_encoder: dict[str, np.ndarray],
     global_top_k: int,
     per_index_top_k: int,
     reduce_mode: str,
@@ -738,7 +764,7 @@ def _collect_ranked_candidates(
     source_fusion_mode: str,
 ) -> Tuple[List[GeoCandidate], int]:
     merged: List[GeoCandidate] = []
-    fallback_model_id = next(iter(query_mats_by_model.keys()), "")
+    fallback_model_id = ""
     fusion_mode = _normalize_source_fusion_mode(source_fusion_mode)
     effective_norm = _normalize_index_score_norm(index_score_norm)
     if effective_norm == "auto":
@@ -749,7 +775,9 @@ def _collect_ranked_candidates(
     for idx, loaded in enumerate(loaded_indices):
         index = loaded.index
         model_id = getattr(loaded, "model_id", "") or fallback_model_id
-        query_mat = query_mats_by_model.get(model_id)
+        projection_path = _normalize_projection_path(getattr(loaded, "projection_path", None))
+        query_key = _query_encoder_key(model_id, projection_path)
+        query_mat = query_mats_by_encoder.get(query_key)
         if query_mat is None:
             raise ValueError(f"query_embedding_missing_for_model:{model_id}")
         if query_mat.shape[1] != index.embeddings.shape[1]:
@@ -911,6 +939,7 @@ class GeoRetrievalProvider:
         index_paths: Optional[Sequence[str]] = None,
         index_weights: Optional[Sequence[float]] = None,
         index_model_ids: Optional[Sequence[str]] = None,
+        index_projection_paths: Optional[Sequence[object]] = None,
         model_id: str = "openai/clip-vit-large-patch14",
         top_k: int = 10,
         per_index_top_k: int = 0,
@@ -968,6 +997,11 @@ class GeoRetrievalProvider:
             n_indices=len(self.index_paths),
             default_model_id=self.model_id,
         )
+        self.index_projection_paths = _normalize_index_projection_paths(
+            index_projection_paths,
+            n_indices=len(self.index_paths),
+            default_projection_path=self.projection_path,
+        )
         self.top_k = top_k
         self.per_index_top_k = max(0, int(per_index_top_k))
         self.index_score_norm = _normalize_index_score_norm(index_score_norm)
@@ -1022,7 +1056,7 @@ class GeoRetrievalProvider:
         self.geo_prior_min_keep = _normalize_geo_prior_min_keep(geo_prior_min_keep)
         self._indices: Optional[List[LoadedRetrievalIndex]] = None
         self._embedder: Optional[ClipEmbedder] = None
-        self._embedders_by_model: dict[str, ClipEmbedder] = {}
+        self._embedders_by_model: dict[tuple[str, Optional[str]], ClipEmbedder] = {}
         self.last_error: Optional[str] = None
 
     def candidates(self, image_path: str) -> List[GeoCandidate]:
@@ -1052,23 +1086,28 @@ class GeoRetrievalProvider:
                 base_modes=self.query_tta_modes,
                 auto_modality=self.query_tta_auto_modality,
             )
-            query_mats_by_model: dict[str, np.ndarray] = {}
-            model_ids = list(
-                dict.fromkeys((getattr(loaded, "model_id", "") or self.model_id) for loaded in loaded_indices)
-            )
-            for model_id in model_ids:
-                if model_id == self.model_id:
-                    query_mats_by_model[model_id] = _query_embeddings(
-                        embedder,
-                        image,
-                        self.query_tta_degrees,
-                        effective_tta_modes,
-                        self.query_tta_scales,
+            query_mats_by_encoder: dict[str, np.ndarray] = {}
+            encoder_specs = list(
+                dict.fromkeys(
+                    (
+                        (getattr(loaded, "model_id", "") or self.model_id),
+                        _normalize_projection_path(getattr(loaded, "projection_path", None)),
                     )
-                    continue
-                other = self._ensure_embedder_for_model(model_id)
-                query_mats_by_model[model_id] = _query_embeddings(
-                    other,
+                    for loaded in loaded_indices
+                )
+            )
+            for model_id, encoder_projection in encoder_specs:
+                if model_id == self.model_id and encoder_projection == self.projection_path:
+                    model_embedder = embedder
+                elif encoder_projection is None:
+                    model_embedder = self._ensure_embedder_for_model(model_id)
+                else:
+                    model_embedder = self._ensure_embedder_for_model_with_projection(
+                        model_id,
+                        projection_path=encoder_projection,
+                    )
+                query_mats_by_encoder[_query_encoder_key(model_id, encoder_projection)] = _query_embeddings(
+                    model_embedder,
                     image,
                     self.query_tta_degrees,
                     effective_tta_modes,
@@ -1077,7 +1116,7 @@ class GeoRetrievalProvider:
             ranked, top_k = _collect_ranked_candidates(
                 loaded_indices=loaded_indices,
                 index_weights=self.index_weights,
-                query_mats_by_model=query_mats_by_model,
+                query_mats_by_encoder=query_mats_by_encoder,
                 global_top_k=self.top_k,
                 per_index_top_k=self.per_index_top_k,
                 reduce_mode=self.query_tta_reduce,
@@ -1181,7 +1220,16 @@ class GeoRetrievalProvider:
             source = _index_source_name(path, idx)
             configured_model = self.index_model_ids[idx] if idx < len(self.index_model_ids) else ""
             model_id = configured_model or index.model_id or self.model_id
-            loaded.append(LoadedRetrievalIndex(source=source, path=path, model_id=model_id, index=index))
+            projection_path = self.index_projection_paths[idx] if idx < len(self.index_projection_paths) else None
+            loaded.append(
+                LoadedRetrievalIndex(
+                    source=source,
+                    path=path,
+                    model_id=model_id,
+                    index=index,
+                    projection_path=projection_path,
+                )
+            )
         if not loaded:
             raise FileNotFoundError("index_not_found")
         self._indices = loaded
@@ -1198,14 +1246,23 @@ class GeoRetrievalProvider:
         return self._embedder
 
     def _ensure_embedder_for_model(self, model_id: str) -> ClipEmbedder:
-        if model_id == self.model_id:
+        return self._ensure_embedder_for_model_with_projection(model_id, projection_path=None)
+
+    def _ensure_embedder_for_model_with_projection(
+        self,
+        model_id: str,
+        projection_path: Optional[str],
+    ) -> ClipEmbedder:
+        normalized_projection = _normalize_projection_path(projection_path)
+        if model_id == self.model_id and normalized_projection == self.projection_path:
             return self._ensure_embedder()
-        embedder = self._embedders_by_model.get(model_id)
+        cache_key = (model_id, normalized_projection)
+        embedder = self._embedders_by_model.get(cache_key)
         if embedder is not None:
             return embedder
         device = "cuda" if torch is not None and torch.cuda.is_available() else "cpu"
-        embedder = ClipEmbedder(model_id, device, projection_path=None)
-        self._embedders_by_model[model_id] = embedder
+        embedder = ClipEmbedder(model_id, device, projection_path=normalized_projection)
+        self._embedders_by_model[cache_key] = embedder
         return embedder
 
 
