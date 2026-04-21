@@ -420,6 +420,44 @@ Observation:
 - V1 and V3 did not offer stable full-metric gains versus baseline.
 - This validates hard-negative, data-driven representation adaptation as a stronger lever than additional local post-processing sweeps.
 
+### 7.14 Scope-Aware Retrieval Geo Prior (Hard Region Gate)
+Artifacts:
+- Configs:
+  - `runs/configs/paris_mixed_scope_no_prior.json`
+  - `runs/configs/paris_mixed_scope_hard_prior.json`
+- Eval reports:
+  - `runs/geo_eval_mixed_scope_no_prior_120.json`
+  - `runs/geo_eval_mixed_scope_hard_prior_120.json`
+  - `runs/geo_eval_mixed_scope_no_prior_seed1870334448_2.json`
+  - `runs/geo_eval_mixed_scope_hard_prior_seed1870334448_2.json`
+
+Method:
+- Added retrieval geo-prior controls:
+  - `retrieval_geo_prior_mode` (`off|soft|hard`)
+  - `retrieval_geo_prior_bbox` (`[lat_min, lat_max, lon_min, lon_max]`)
+  - `retrieval_geo_prior_sigma_km`
+  - `retrieval_geo_prior_min_keep`
+- Applied hard Paris bbox priors to Paris configs so retrieval cannot silently jump to out-of-scope continents.
+
+Mixed-scope stress benchmark (`n=120`, Paris eval set, Paris index + open-geo index):
+
+| Variant | mean_km | median_km | p90_km | within_1km_pct | within_2km_pct | within_5km_pct | within_10km_pct |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| No geo prior | 6656.6614 | 5830.1122 | 8934.4830 | 0.00 | 0.00 | 0.00 | 0.00 |
+| Hard Paris geo prior | 18.8218 | 12.3615 | 48.6208 | 5.00 | 10.00 | 22.50 | 40.83 |
+
+Targeted failure replay (`seed=1870334448`, same two chips reported in debugging):
+
+| Variant | mean_km | within_10km_pct | Worst sample distances |
+|---|---:|---:|---|
+| No geo prior | 7408.151 | 0.00 | `8970.226`, `5846.076` km |
+| Hard Paris geo prior | 0.000 | 100.00 | `0.000`, `0.000` km |
+
+Observation:
+- This is a structural safety gain, not a local tuning change: catastrophic cross-scope retrieval failures are removed under mixed-source conditions.
+- The fix directly addresses the previously observed `~5846 km` random-sample failure mode on Paris chips.
+- Paris profiles now encode explicit geographic priors by default; open-geo/legacy profile keeps geo prior disabled.
+
 ## 8. Methods Tried and Practical Outcome
 ### 8.1 Changes with Clear Practical Value
 - Multi-provider candidate generation and merge controls.
@@ -433,6 +471,7 @@ Observation:
 - Dual local geometric reranker (`SIFT` + `ORB` + evidence gate) as a safer local-feature ranking path than legacy local matching.
 - Error-driven hard-negative triplet mining (`src.tools.mine_hard_negative_triplets`) for retrieval fine-tuning data.
 - Projection-aware retrieval adaptation trained from hard negatives (query-time projection + projected index) with measured realistic-split gains.
+- Scope-aware retrieval geo prior (`off|soft|hard` + bbox gate) to prevent cross-region catastrophic errors in mixed-source retrieval.
 
 ### 8.2 Changes with Conditional Value
 - Query TTA: useful in some regimes, neutral in tested subset.
@@ -468,6 +507,7 @@ This table is the explicit decision ledger for methods tried in this project cyc
 | Ambiguity-gated local rerank override | No measured delta on tested profiles (`localmatch_a`, `kde_e_w1_duallocal`) | Keep as safe guard; not a promoted accuracy lever |
 | KDE + dual-local combined profile | Did not beat best W1 profile (`within_1km_pct` stayed `8.89`) | Do not adopt as close-range default |
 | Profile/data mismatch guard in Lab/backend/CLI | Eliminated catastrophic profile mismatch failure mode (`~5846 km` case) and now blocks mismatched `run_geo_eval` runs by default | Keep (evaluation-integrity requirement) |
+| Scope-aware retrieval geo prior (`retrieval_geo_prior_*`) | Mixed-scope stress test: `mean_km` `6656.66` -> `18.82`; replay seed case `7408.15` -> `0.00` | Keep (Paris defaults) |
 | Error-driven hard-negative triplet miner | Produced `145` structured triplets from `180` realistic eval failures | Keep; use for backbone fine-tuning pipeline |
 | Hard-negative projection adaptation (`trainref_v2_mild`) | `within_1km_pct`: `9.17` -> `12.50`, `within_2km_pct`: `16.67` -> `28.33` on `n=120` realistic eval | Keep as current best retrieval adaptation direction |
 
@@ -595,6 +635,7 @@ Project Heimdall demonstrates a practical path from prototype geolocation to a b
   - `retrieval_tta_agreement_top_n`, `retrieval_tta_agreement_weight`
   - `retrieval_index_paths`, `retrieval_index_weights`, `retrieval_per_index_top_k`
   - `retrieval_index_model_ids`, `retrieval_index_score_norm`, `retrieval_source_fusion_mode`, `retrieval_source_balance_beta`
+  - `retrieval_geo_prior_mode`, `retrieval_geo_prior_bbox`, `retrieval_geo_prior_sigma_km`, `retrieval_geo_prior_min_keep`
   - `retrieval_kde_refine_top_n`, `retrieval_kde_refine_sigma_km`, `retrieval_kde_refine_score_power`, `retrieval_kde_refine_margin_threshold`, `retrieval_kde_refine_switch_radius_km`, `retrieval_kde_refine_max_iters`, `retrieval_kde_refine_adaptive_mass`
 - Candidate merge:
   - `candidate_source_balance_beta`
@@ -652,6 +693,11 @@ Project Heimdall demonstrates a practical path from prototype geolocation to a b
 - `runs/tune_retrieval_geo_realistic_within1km_focus_v1.json`
 - `runs/tmp_paris_with_open_geo_seed1870334448.json`
 - `runs/tmp_paris_with_paris_cfg_seed1870334448.json`
+- `runs/geo_eval_mixed_scope_no_prior_120.json`
+- `runs/geo_eval_mixed_scope_hard_prior_120.json`
+- `runs/geo_eval_mixed_scope_no_prior_seed1870334448_2.json`
+- `runs/geo_eval_mixed_scope_hard_prior_seed1870334448_2.json`
+- `runs/geo_eval_paris_test_profile_with_geo_prior_40.json`
 - `runs/geo_eval_projection_baseline_120.json`
 - `runs/geo_eval_projection_trainref_v1_120_rerun.json`
 - `runs/geo_eval_projection_trainref_v2_mild_120.json`
