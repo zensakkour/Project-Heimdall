@@ -346,6 +346,7 @@ Observation:
 - Extreme errors were caused by evaluation profile/index mismatch, not label corruption.
 - This failure mode can dominate metrics and must be treated as an experimental validity issue.
 - The Lab/backend now auto-corrects legacy/open-geo profile selection when dataset paths clearly target Paris (`spacenet_paris*`), and surfaces requested/effective profile in output.
+- `src.tools.run_geo_eval` now enforces the same guardrail in CLI flows by default (`profile_scope` vs inferred dataset scope), with explicit override via `--allow-scope-mismatch`.
 
 ### 7.11 Multi-Scale Query Views and Adaptive-Mass KDE Follow-Up (n=180)
 Artifacts:
@@ -413,14 +414,14 @@ This table is the explicit decision ledger for methods tried in this project cyc
 | Adaptive-mass KDE refinement (`retrieval_kde_refine_adaptive_mass`) | `adapt_a` raised `within_1km_pct` (`10.00` -> `11.11`) but reduced `within_2km_pct` (`20.00` -> `19.44`) | Keep as experimental; do not default |
 | Dual local reranker (`SIFT+ORB`, weak-signal gate, adaptive blend) | Large gain vs legacy local match A (`within_1km_pct`: `5.00` -> `8.89`) | Keep as optional mode |
 | KDE + dual-local combined profile | Did not beat best W1 profile (`within_1km_pct` stayed `8.89`) | Do not adopt as close-range default |
-| Profile/data mismatch auto-correction in Lab/backend | Eliminated catastrophic profile mismatch failure mode (`~5846 km` case) | Keep (evaluation-integrity requirement) |
+| Profile/data mismatch guard in Lab/backend/CLI | Eliminated catastrophic profile mismatch failure mode (`~5846 km` case) and now blocks mismatched `run_geo_eval` runs by default | Keep (evaluation-integrity requirement) |
 
 ### 8.4 What Is Currently Kept by Default
 - Canonical Paris realistic profile remains CLIP-based retrieval with consensus refinement.
 - KDE and dual-local methods remain opt-in evaluation profiles for objective-specific tradeoffs.
 - RRF source fusion and alternate backbones remain research modes, not production defaults on current split.
 - Multi-scale query views and adaptive-mass KDE remain experimental toggles; defaults stay single-scale (`1.0`) and fixed adaptive mass (`0.0`).
-- Evaluation-integrity guards (profile/path auto-resolution + explicit profile reporting) are mandatory.
+- Evaluation-integrity guards (profile/path auto-resolution + explicit profile reporting + CLI scope validation) are mandatory.
 
 ## 9. Error Analysis
 Observed failure classes:

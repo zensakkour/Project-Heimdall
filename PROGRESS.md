@@ -849,3 +849,43 @@ Do not delete or edit past entries. Append new work at the end.
 - Decision:
   - Keep both features available as experimental knobs.
   - Do not promote either feature to default profile settings yet because close-range target metrics did not improve consistently (`within_2km_pct` regressed).
+
+## 2026-04-21
+- Hypothesis:
+  - Scope-integrity protection should be enforced in CLI evaluation (`run_geo_eval`) as well, not only in UI/backend random eval flows, to prevent accidental cross-scope benchmarking.
+- Change:
+  - Added scope normalization and inference helpers in `src/tools/run_geo_eval.py`:
+    - `normalize_scope`
+    - `load_profile_scope`
+    - `infer_dataset_scope`
+    - `validate_scope_alignment`
+  - Added a default-on scope guard in `run_geo_eval`:
+    - compares config `profile_scope` with inferred dataset scope from `--images-dir`/`--metadata`,
+    - raises on mismatch unless `--allow-scope-mismatch` is passed.
+  - Extended eval report payload with:
+    - `profile_scope`
+    - `dataset_scope`
+    - `scope_warning`
+    - `allow_scope_mismatch`
+  - Added regression tests in `src/tests/test_run_geo_eval_scope_guard.py` covering:
+    - scope normalization,
+    - config-profile scope resolution,
+    - dataset scope inference,
+    - mismatch raise/override behavior.
+  - Updated docs:
+    - `README.md` now documents default scope validation and override flag.
+    - `src/docs/RESEARCH_PAPER.md` now records CLI scope guard as part of evaluation-integrity requirements.
+- Files touched:
+  - `src/tools/run_geo_eval.py`
+  - `src/tests/test_run_geo_eval_scope_guard.py`
+  - `README.md`
+  - `src/docs/RESEARCH_PAPER.md`
+  - `PROGRESS.md`
+- Validation command(s):
+  - `./.venv/Scripts/python -m pytest -q src/tests/test_run_geo_eval_scope_guard.py src/tests/test_run_geo_eval_retrieval_provider.py`
+- Metrics (before -> after):
+  - No model-accuracy benchmark run in this prompt cycle (stack integrity and evaluation safety upgrade only).
+- Artifacts:
+  - No new `runs/*.json` evaluation artifact generated in this prompt cycle.
+- Decision:
+  - Keep this guard enabled by default as a reliability baseline for CLI benchmarking.
