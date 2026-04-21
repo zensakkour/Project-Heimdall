@@ -516,6 +516,53 @@ def _normalize_kde_refine_adaptive_mass(value: object) -> float:
     return max(0.0, min(1.0, mass))
 
 
+def _normalize_geo_prior_mode(mode: object) -> str:
+    text = str(mode).strip().lower()
+    if text not in {"off", "soft", "hard"}:
+        return "off"
+    return text
+
+
+def _normalize_geo_prior_bbox(raw: object) -> Optional[tuple[float, float, float, float]]:
+    if not isinstance(raw, (list, tuple)) or len(raw) != 4:
+        return None
+    try:
+        lat_a = float(raw[0])
+        lat_b = float(raw[1])
+        lon_a = float(raw[2])
+        lon_b = float(raw[3])
+    except Exception:
+        return None
+    values = (lat_a, lat_b, lon_a, lon_b)
+    if not all(math.isfinite(v) for v in values):
+        return None
+    lat_min = max(-90.0, min(90.0, min(lat_a, lat_b)))
+    lat_max = max(-90.0, min(90.0, max(lat_a, lat_b)))
+    if lat_max - lat_min < 1e-6:
+        return None
+    lon_min = _normalize_longitude(lon_a)
+    lon_max = _normalize_longitude(lon_b)
+    return (float(lat_min), float(lat_max), float(lon_min), float(lon_max))
+
+
+def _normalize_geo_prior_sigma_km(value: object) -> float:
+    try:
+        sigma = float(value)
+    except Exception:
+        return 250.0
+    if not math.isfinite(sigma):
+        return 250.0
+    return max(1.0, min(10_000.0, sigma))
+
+
+def _normalize_geo_prior_min_keep(value: object) -> int:
+    try:
+        keep = int(value)
+    except Exception:
+        return 0
+    return max(0, min(200, keep))
+
+
 def _normalize_scores_for_source(scores: np.ndarray, mode: str) -> np.ndarray:
     reduce_mode = _normalize_index_score_norm(mode)
     if reduce_mode == "none":
@@ -907,6 +954,10 @@ class GeoRetrievalProvider:
         kde_refine_adaptive_mass: float = 0.0,
         projection_path: Optional[str] = None,
         source_fusion_mode: str = "weighted_score",
+        geo_prior_mode: str = "off",
+        geo_prior_bbox: Optional[Sequence[float]] = None,
+        geo_prior_sigma_km: float = 250.0,
+        geo_prior_min_keep: int = 0,
     ) -> None:
         self.index_paths = _normalize_index_paths(index_path=index_path, index_paths=index_paths)
         self.index_weights = _normalize_index_weights(index_weights, len(self.index_paths))
@@ -965,6 +1016,10 @@ class GeoRetrievalProvider:
         )
         self.kde_refine_max_iters = _normalize_kde_refine_max_iters(kde_refine_max_iters)
         self.kde_refine_adaptive_mass = _normalize_kde_refine_adaptive_mass(kde_refine_adaptive_mass)
+        self.geo_prior_mode = _normalize_geo_prior_mode(geo_prior_mode)
+        self.geo_prior_bbox = _normalize_geo_prior_bbox(geo_prior_bbox)
+        self.geo_prior_sigma_km = _normalize_geo_prior_sigma_km(geo_prior_sigma_km)
+        self.geo_prior_min_keep = _normalize_geo_prior_min_keep(geo_prior_min_keep)
         self._indices: Optional[List[LoadedRetrievalIndex]] = None
         self._embedder: Optional[ClipEmbedder] = None
         self._embedders_by_model: dict[str, ClipEmbedder] = {}
@@ -1044,6 +1099,13 @@ class GeoRetrievalProvider:
                 weight=self.local_match_weight,
                 ratio_test=self.local_match_ratio,
                 max_features=self.local_match_max_features,
+            )
+            ranked = _apply_geo_prior_bbox(
+                ranked,
+                mode=self.geo_prior_mode,
+                bbox=self.geo_prior_bbox,
+                sigma_km=self.geo_prior_sigma_km,
+                min_keep=self.geo_prior_min_keep,
             )
             filtered = [item for item in ranked if item.retrieval_score >= self.min_score]
             min_keep = min(max(0, int(self.min_keep_topk)), top_k)
@@ -1559,6 +1621,96 @@ def _normalize_longitude(lon: float) -> float:
     if wrapped == -180.0 and lon > 0.0:
         return 180.0
     return wrapped
+
+
+def _longitude_delta_deg(a: float, b: float) -> float:
+    return abs(_normalize_longitude(float(a) - float(b)))
+
+
+def _longitude_in_interval(value: float, lo: float, hi: float) -> bool:
+    if lo <= hi:
+        return lo <= value <= hi
+    return value >= lo or value <= hi
+
+
+def _clamp_longitude_to_interval(value: float, lo: float, hi: float) -> float:
+    val = _normalize_longitude(value)
+    if _longitude_in_interval(val, lo, hi):
+        return val
+    dist_lo = _longitude_delta_deg(val, lo)
+    dist_hi = _longitude_delta_deg(val, hi)
+    return float(lo if dist_lo <= dist_hi else hi)
+
+
+def _bbox_distance_km(lat: float, lon: float, bbox: tuple[float, float, float, float]) -> float:
+    lat_min, lat_max, lon_min, lon_max = bbox
+    lat_v = float(lat)
+    lon_v = _normalize_longitude(float(lon))
+    inside_lat = lat_min <= lat_v <= lat_max
+    inside_lon = _longitude_in_interval(lon_v, lon_min, lon_max)
+    if inside_lat and inside_lon:
+        return 0.0
+    nearest_lat = min(max(lat_v, lat_min), lat_max)
+    nearest_lon = _clamp_longitude_to_interval(lon_v, lon_min, lon_max)
+    return _haversine_km(lat_v, lon_v, nearest_lat, nearest_lon)
+
+
+def _apply_geo_prior_bbox(
+    ranked: Sequence[GeoCandidate],
+    *,
+    mode: str,
+    bbox: Optional[tuple[float, float, float, float]],
+    sigma_km: float,
+    min_keep: int,
+) -> List[GeoCandidate]:
+    if not ranked:
+        return []
+    prior_mode = _normalize_geo_prior_mode(mode)
+    if prior_mode == "off" or bbox is None:
+        return list(ranked)
+
+    sigma = max(1.0, float(sigma_km))
+    keep_n = min(max(0, int(min_keep)), len(ranked))
+    staged: List[tuple[GeoCandidate, float, float]] = []
+    for cand in ranked:
+        dist_km = _bbox_distance_km(cand.latitude, cand.longitude, bbox)
+        base = _score_to_unit_interval(cand.retrieval_score)
+        prior = 1.0 if dist_km <= 1e-6 else math.exp(-dist_km / sigma)
+        if prior_mode == "hard":
+            adjusted = base if dist_km <= 1e-6 else base * prior
+        else:
+            adjusted = base * prior
+        staged.append((cand, float(dist_km), max(1e-9, float(adjusted))))
+
+    if prior_mode == "hard":
+        inside = [entry for entry in staged if entry[1] <= 1e-6]
+        if keep_n > 0 and len(inside) < keep_n:
+            outside = sorted(
+                [entry for entry in staged if entry[1] > 1e-6],
+                key=lambda item: item[2],
+                reverse=True,
+            )
+            inside.extend(outside[: max(0, keep_n - len(inside))])
+        chosen = inside
+    else:
+        chosen = staged
+
+    if not chosen:
+        return []
+
+    out: List[GeoCandidate] = []
+    for cand, _dist_km, adjusted in chosen:
+        out.append(
+            GeoCandidate(
+                latitude=cand.latitude,
+                longitude=cand.longitude,
+                retrieval_score=max(1e-6, min(1.0, float(adjusted))),
+                match_id=cand.match_id,
+                image_path=cand.image_path,
+            )
+        )
+    out.sort(key=lambda item: item.retrieval_score, reverse=True)
+    return out
 
 
 def _circular_weighted_mean_longitude(values: Sequence[float], weights: Sequence[float]) -> float:
