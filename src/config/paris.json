@@ -27,6 +27,7 @@
     "retrieval_index_weights": [],
     "retrieval_index_model_ids": [],
     "retrieval_model_id": "openai/clip-vit-large-patch14",
+    "retrieval_projection_path": null,
     "retrieval_top_k": 25,
     "retrieval_per_index_top_k": 0,
     "retrieval_index_score_norm": "auto",

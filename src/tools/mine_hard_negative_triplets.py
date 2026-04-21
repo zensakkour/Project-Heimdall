@@ -139,9 +139,10 @@ def _resolve_query_record(
 
 
 def mine_triplets(
-    records: Sequence[GeoRecord],
+    query_records: Sequence[GeoRecord],
     failures: Sequence[EvalFailure],
     *,
+    reference_records: Optional[Sequence[GeoRecord]] = None,
     min_error_km: float = 2.0,
     positive_radius_km: float = 0.35,
     negative_pred_radius_km: float = 2.0,
@@ -151,14 +152,17 @@ def mine_triplets(
     max_negatives: int = 10,
     dedupe_by_scene: bool = True,
 ) -> List[dict]:
-    if not records:
+    if not query_records:
         return []
-    rec_list = list(records)
-    by_path, by_name = _record_maps(rec_list)
+    query_list = list(query_records)
+    ref_list = list(reference_records) if reference_records else list(query_records)
+    if not ref_list:
+        return []
+    by_path, by_name = _record_maps(query_list)
 
-    lats = np.asarray([item.latitude for item in rec_list], dtype=np.float64)
-    lons = np.asarray([item.longitude for item in rec_list], dtype=np.float64)
-    paths = [item.path for item in rec_list]
+    lats = np.asarray([item.latitude for item in ref_list], dtype=np.float64)
+    lons = np.asarray([item.longitude for item in ref_list], dtype=np.float64)
+    paths = [item.path for item in ref_list]
 
     out: List[dict] = []
     for fail in failures:
@@ -323,6 +327,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Mine hard-negative triplets from eval failures.")
     parser.add_argument("--metadata", required=True, help="Metadata CSV (path, latitude, longitude).")
     parser.add_argument(
+        "--reference-metadata",
+        default="",
+        help="Optional reference metadata CSV used as the retrieval pool for positives/negatives.",
+    )
+    parser.add_argument(
         "--eval-report",
         default="",
         help="Optional run_geo_eval JSON report containing sample-level GT/pred diagnostics.",
@@ -345,6 +354,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     records = load_metadata_csv(metadata_path)
     if not records:
         raise ValueError("metadata_empty_or_invalid")
+    reference_records: Optional[List[GeoRecord]] = None
+    if str(args.reference_metadata).strip():
+        reference_records = load_metadata_csv(Path(args.reference_metadata))
+        if not reference_records:
+            raise ValueError("reference_metadata_empty_or_invalid")
 
     eval_report = args.eval_report.strip()
     if eval_report:
@@ -355,6 +369,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     triplets = mine_triplets(
         records,
         failures,
+        reference_records=reference_records,
         min_error_km=float(args.min_error_km),
         positive_radius_km=float(args.positive_radius_km),
         negative_pred_radius_km=float(args.negative_pred_radius_km),
@@ -369,8 +384,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     written = _write_jsonl(out_path, triplets)
     summary = {
         "metadata": str(metadata_path),
+        "reference_metadata": str(Path(args.reference_metadata)) if str(args.reference_metadata).strip() else None,
         "eval_report": eval_report or None,
         "total_records": len(records),
+        "total_reference_records": len(reference_records) if reference_records is not None else len(records),
         "total_failures_considered": len(failures),
         "triplets_written": written,
         "output": str(out_path),
