@@ -1172,3 +1172,18 @@ Do not delete or edit past entries. Append new work at the end.
   - Keep per-index projection routing capability (`retrieval_index_projection_paths`) as experimental infrastructure.
   - Keep projection V2 baseline as current best `n=180` performer among tested variants in this cycle.
   - Geo-prior remains a critical cross-scope safety guard, but does not improve in-scope Paris close-range metrics by itself.
+
+## 2026-04-21
+- Hypothesis:
+  - CI failure on `master` comes from a retrieval-provider fallback regression introduced by per-index projection routing.
+- Change:
+  - Fixed fallback model-id resolution in `_collect_ranked_candidates` so mocked/legacy loaded-index objects without `model_id` still map to available query embeddings.
+  - File: `src/core/geo/retrieval_provider.py`
+- Validation command(s):
+  - `./.venv/Scripts/python -m pytest -q src/tests/test_retrieval_provider_min_keep.py`
+  - `./.venv/Scripts/python -m pytest -q`
+- Metrics:
+  - `2 passed` for targeted min-keep tests.
+  - Full suite: `184 passed, 3 warnings`.
+- Decision:
+  - Keep fix; this restores CI stability without changing intended retrieval behavior.

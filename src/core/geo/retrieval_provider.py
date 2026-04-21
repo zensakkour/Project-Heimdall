@@ -765,6 +765,9 @@ def _collect_ranked_candidates(
 ) -> Tuple[List[GeoCandidate], int]:
     merged: List[GeoCandidate] = []
     fallback_model_id = ""
+    if query_mats_by_encoder:
+        first_key = next(iter(query_mats_by_encoder.keys()))
+        fallback_model_id = first_key.split("|", 1)[0].strip()
     fusion_mode = _normalize_source_fusion_mode(source_fusion_mode)
     effective_norm = _normalize_index_score_norm(index_score_norm)
     if effective_norm == "auto":
