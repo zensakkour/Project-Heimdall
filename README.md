@@ -448,6 +448,31 @@ Then run eval with a config that sets:
 - `geolocator.retrieval_index_path` to the projected index.
 - `geolocator.retrieval_projection_path` to the same projection file.
 
+### Optional: Geo-aware DBA index augmentation (close-range objective mode)
+
+```powershell
+.\.venv\Scripts\python -m src.tools.augment_geo_index_embeddings --index data/geo_index/spacenet_paris_chips_openai_clip_vit_large_patch14_proj_trainref_v2_mild.npz --output data/geo_index/spacenet_paris_chips_openai_clip_vit_large_patch14_proj_trainref_v2_mild_dba_geo2_k5.npz --neighbors 5 --self-weight 1.0 --min-similarity 0.0 --temperature 0.07 --max-geo-distance-km 2.0
+```
+
+Use this augmented index only for objective-specific close-range runs (`<=1km` / `<=2km`) and validate against the canonical benchmark before promotion.
+
+### Optional: Dual-index close-range stack (projected + geo-aware DBA with RRF)
+
+```powershell
+.\.venv\Scripts\python -m src.tools.run_geo_eval --retrieval-only --config src/config/paris_close_range_dual_rrf.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 180 --seed 42 --diag-samples 180 --output runs/geo_eval_projection_trainref_v2_mild_dual_dba_w100_100_rrf_180.json
+```
+
+Paris dual-index variants are now split by objective:
+- `src/config/paris_close_range_dual_rrf.json`: close-range default (`index_weights=[1.0,1.0]`), best overall `<=1km/<=2km` tradeoff.
+- `src/config/paris_balanced_dual_rrf.json`: balanced mode (`index_weights=[1.0,0.5]`) for better mean/median/`<=10km` while keeping `<=2km`.
+- `src/config/paris_close_range_dual_rrf_graph_kde.json`: aggressive W1 mode (graph support + KDE refinement), highest measured `<=1km` on canonical run.
+
+Canonical `n=180` snapshot (Paris test split, seed `42`):
+- Baseline projection V2 mild: `<=1km 11.67%`, `<=2km 26.67%`, `mean 15.25 km`.
+- `paris_close_range_dual_rrf`: `<=1km 12.78%`, `<=2km 31.11%`, `mean 14.84 km`.
+- `paris_balanced_dual_rrf`: `<=1km 10.56%`, `<=2km 31.11%`, `mean 14.60 km`.
+- `paris_close_range_dual_rrf_graph_kde`: `<=1km 13.89%`, `<=2km 31.11%`, `mean 15.28 km`.
+
 ### Auto-tune full geo stack (retrieval + priors + calibration)
 
 ```powershell
@@ -603,6 +628,10 @@ Config files are under `src/config/`:
 
 - `defaults.json`: default runtime profile
 - `paris.json`: SpaceNet Paris-focused profile
+- `paris_close_range_dba.json`: experimental Paris close-range profile (projection + geo-aware DBA index)
+- `paris_close_range_dual_rrf.json`: experimental Paris close-range dual-index profile (projection index + geo-aware DBA index with RRF fusion)
+- `paris_balanced_dual_rrf.json`: experimental Paris balanced dual-index profile (better mean/median/<=10km)
+- `paris_close_range_dual_rrf_graph_kde.json`: experimental Paris W1-max dual-index profile (graph support + KDE mode refinement)
 - `paris_test.json`: Paris test profile
 - `open_geo.json`: lightweight open-geo profile
 
