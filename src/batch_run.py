@@ -90,6 +90,10 @@ def build_pipeline(
             kde_refine_max_iters=geo_cfg.retrieval_kde_refine_max_iters,
             kde_refine_adaptive_mass=geo_cfg.retrieval_kde_refine_adaptive_mass,
             source_fusion_mode=geo_cfg.retrieval_source_fusion_mode,
+            geo_prior_mode=geo_cfg.retrieval_geo_prior_mode,
+            geo_prior_bbox=geo_cfg.retrieval_geo_prior_bbox,
+            geo_prior_sigma_km=geo_cfg.retrieval_geo_prior_sigma_km,
+            geo_prior_min_keep=geo_cfg.retrieval_geo_prior_min_keep,
         )
         geoclip_provider = GeoCLIPProvider(
             model_path=geo_cfg.model_path,
