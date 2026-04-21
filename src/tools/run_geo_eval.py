@@ -77,6 +77,10 @@ def build_pipeline(cfg: Optional[HeimdallConfig]) -> "HeimdallPipeline":
         kde_refine_switch_radius_km=cfg.geolocator.retrieval_kde_refine_switch_radius_km,
         kde_refine_max_iters=cfg.geolocator.retrieval_kde_refine_max_iters,
         kde_refine_adaptive_mass=cfg.geolocator.retrieval_kde_refine_adaptive_mass,
+        geo_prior_mode=cfg.geolocator.retrieval_geo_prior_mode,
+        geo_prior_bbox=cfg.geolocator.retrieval_geo_prior_bbox,
+        geo_prior_sigma_km=cfg.geolocator.retrieval_geo_prior_sigma_km,
+        geo_prior_min_keep=cfg.geolocator.retrieval_geo_prior_min_keep,
     )
     geoclip_provider = GeoCLIPProvider(
         model_path=cfg.geolocator.model_path,
@@ -192,6 +196,10 @@ def build_retrieval_provider(cfg: Optional[HeimdallConfig]) -> Optional[GeoRetri
         kde_refine_switch_radius_km=cfg.geolocator.retrieval_kde_refine_switch_radius_km,
         kde_refine_max_iters=cfg.geolocator.retrieval_kde_refine_max_iters,
         kde_refine_adaptive_mass=cfg.geolocator.retrieval_kde_refine_adaptive_mass,
+        geo_prior_mode=cfg.geolocator.retrieval_geo_prior_mode,
+        geo_prior_bbox=cfg.geolocator.retrieval_geo_prior_bbox,
+        geo_prior_sigma_km=cfg.geolocator.retrieval_geo_prior_sigma_km,
+        geo_prior_min_keep=cfg.geolocator.retrieval_geo_prior_min_keep,
     )
 
 
@@ -447,6 +455,10 @@ def main(argv: Optional[list[str]] = None) -> None:
         "retrieval_kde_refine_switch_radius_km": cfg.geolocator.retrieval_kde_refine_switch_radius_km if cfg else None,
         "retrieval_kde_refine_max_iters": cfg.geolocator.retrieval_kde_refine_max_iters if cfg else None,
         "retrieval_kde_refine_adaptive_mass": cfg.geolocator.retrieval_kde_refine_adaptive_mass if cfg else None,
+        "retrieval_geo_prior_mode": cfg.geolocator.retrieval_geo_prior_mode if cfg else None,
+        "retrieval_geo_prior_bbox": list(cfg.geolocator.retrieval_geo_prior_bbox) if cfg else None,
+        "retrieval_geo_prior_sigma_km": cfg.geolocator.retrieval_geo_prior_sigma_km if cfg else None,
+        "retrieval_geo_prior_min_keep": cfg.geolocator.retrieval_geo_prior_min_keep if cfg else None,
         "retrieval_min_keep_topk": cfg.geolocator.retrieval_min_keep_topk if cfg else None,
         "retrieval_consensus_top_n": cfg.geolocator.retrieval_consensus_top_n if cfg else None,
         "retrieval_consensus_radius_km": cfg.geolocator.retrieval_consensus_radius_km if cfg else None,
