@@ -51,12 +51,60 @@ class LoadedRetrievalIndex:
     index: RetrievalIndex
 
 
+def _normalize_projection_path(path: object) -> Optional[str]:
+    text = str(path).strip() if path is not None else ""
+    return text or None
+
+
+def _load_projection_payload(path: str) -> tuple[np.ndarray, np.ndarray]:
+    projection_path = Path(path)
+    if not projection_path.exists():
+        raise FileNotFoundError(f"projection_not_found:{projection_path}")
+
+    try:
+        with np.load(projection_path, allow_pickle=False) as data:
+            raw_weight = data.get("matrix")
+            if raw_weight is None:
+                raw_weight = data.get("weight")
+            raw_bias = data.get("bias")
+    except ValueError as exc:
+        if "Object arrays cannot be loaded when allow_pickle=False" not in str(exc):
+            raise
+        with np.load(projection_path, allow_pickle=True) as data:
+            raw_weight = data.get("matrix")
+            if raw_weight is None:
+                raw_weight = data.get("weight")
+            raw_bias = data.get("bias")
+
+    if raw_weight is None:
+        raise ValueError("projection_missing_matrix")
+
+    weight = np.asarray(raw_weight, dtype=np.float32)
+    if weight.ndim != 2 or weight.shape[0] <= 0 or weight.shape[1] <= 0:
+        raise ValueError("projection_matrix_invalid_shape")
+    if not np.isfinite(weight).all():
+        raise ValueError("projection_matrix_not_finite")
+
+    if raw_bias is None:
+        bias = np.zeros(weight.shape[0], dtype=np.float32)
+    else:
+        bias = np.asarray(raw_bias, dtype=np.float32).reshape(-1)
+    if bias.shape[0] != weight.shape[0]:
+        raise ValueError("projection_bias_dim_mismatch")
+    if not np.isfinite(bias).all():
+        raise ValueError("projection_bias_not_finite")
+    return weight, bias
+
+
 class ClipEmbedder:
-    def __init__(self, model_id: str, device: str) -> None:
+    def __init__(self, model_id: str, device: str, projection_path: Optional[str] = None) -> None:
         if torch is None:
             raise RuntimeError("transformers not available")
         self.device = device
         self.model_id = model_id
+        self.projection_path = _normalize_projection_path(projection_path)
+        self._projection_weight = None
+        self._projection_bias = None
         self.processor = None
         self.model = None
 
@@ -86,6 +134,10 @@ class ClipEmbedder:
 
         self.model.to(device)
         self.model.eval()
+        if self.projection_path:
+            weight, bias = _load_projection_payload(self.projection_path)
+            self._projection_weight = torch.from_numpy(weight).to(device=self.device, dtype=torch.float32)
+            self._projection_bias = torch.from_numpy(bias).to(device=self.device, dtype=torch.float32)
 
     def embed(self, image: Image.Image) -> np.ndarray:
         if torch is None:
@@ -99,7 +151,12 @@ class ClipEmbedder:
                 outputs = self.model(**inputs)
                 feats = _extract_tensor(outputs)
             feats = _extract_tensor(feats)
-            feats = feats / feats.norm(dim=-1, keepdim=True)
+            feats = feats / feats.norm(dim=-1, keepdim=True).clamp_min(1e-12)
+            if self._projection_weight is not None and self._projection_bias is not None:
+                if int(feats.shape[-1]) != int(self._projection_weight.shape[1]):
+                    raise ValueError("projection_input_dim_mismatch")
+                feats = feats @ self._projection_weight.transpose(0, 1) + self._projection_bias
+            feats = feats / feats.norm(dim=-1, keepdim=True).clamp_min(1e-12)
             return feats.cpu().numpy().astype(np.float32)
 
 
@@ -848,11 +905,13 @@ class GeoRetrievalProvider:
         kde_refine_switch_radius_km: float = 0.0,
         kde_refine_max_iters: int = 8,
         kde_refine_adaptive_mass: float = 0.0,
+        projection_path: Optional[str] = None,
         source_fusion_mode: str = "weighted_score",
     ) -> None:
         self.index_paths = _normalize_index_paths(index_path=index_path, index_paths=index_paths)
         self.index_weights = _normalize_index_weights(index_weights, len(self.index_paths))
         self.model_id = model_id
+        self.projection_path = _normalize_projection_path(projection_path)
         self.index_model_ids = _normalize_index_model_ids(
             index_model_ids,
             n_indices=len(self.index_paths),
@@ -1069,7 +1128,11 @@ class GeoRetrievalProvider:
     def _ensure_embedder(self) -> ClipEmbedder:
         if self._embedder is None:
             device = "cuda" if torch is not None and torch.cuda.is_available() else "cpu"
-            self._embedder = ClipEmbedder(self.model_id, device)
+            self._embedder = ClipEmbedder(
+                self.model_id,
+                device,
+                projection_path=self.projection_path,
+            )
         return self._embedder
 
     def _ensure_embedder_for_model(self, model_id: str) -> ClipEmbedder:
@@ -1079,7 +1142,7 @@ class GeoRetrievalProvider:
         if embedder is not None:
             return embedder
         device = "cuda" if torch is not None and torch.cuda.is_available() else "cpu"
-        embedder = ClipEmbedder(model_id, device)
+        embedder = ClipEmbedder(model_id, device, projection_path=None)
         self._embedders_by_model[model_id] = embedder
         return embedder
 

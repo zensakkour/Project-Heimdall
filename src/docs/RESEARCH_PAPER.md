@@ -1,7 +1,7 @@
 ﻿# Project Heimdall: Full Research Paper Draft
 
 Version: v1.0  
-Date: April 16, 2026
+Date: April 21, 2026
 
 ## Title
 Project Heimdall: Benchmark-Governed Geolocation from Imagery via Multi-Provider Retrieval, Robust Probabilistic Fusion, and Uncertainty-Aware Analysis
@@ -387,6 +387,39 @@ Observation:
 - The bottleneck is no longer only inference logic; it is lack of targeted hard-negative supervision around failure regions.
 - The new mining pipeline converts real evaluation failures into structured triplets suitable for retrieval-backbone fine-tuning, which is the highest-probability path to step-change improvements in `within_1km`/`within_2km` metrics.
 
+### 7.13 Projection-Aware Retrieval Adaptation (Hard-Negative Metric Learning)
+Artifacts:
+- Baseline:
+  - `runs/geo_eval_projection_baseline_120.json`
+- Projection variants:
+  - `runs/geo_eval_projection_trainref_v1_120_rerun.json`
+  - `runs/geo_eval_projection_trainref_v2_mild_120.json`
+  - `runs/geo_eval_projection_trainref_v3_dim256_120.json`
+- Projection training and transformed index artifacts:
+  - `runs/retrieval_projection_paris_query_trainref_v2_mild.npz`
+  - `data/geo_index/spacenet_paris_chips_openai_clip_vit_large_patch14_proj_trainref_v2_mild.npz`
+
+Method:
+- Built query-vs-reference hard-negative triplets (queries from Paris test, positives/negatives from Paris reference pool).
+- Trained a lightweight linear projection head over retrieval embeddings.
+- Applied projection to index embeddings and enabled projection at query time.
+- Evaluated multiple projection variants on the realistic retrieval-only split (`n=120`, seed `42`).
+
+| Variant | mean_km | median_km | within_1km_pct | within_2km_pct | within_5km_pct | within_10km_pct |
+|---|---:|---:|---:|---:|---:|---:|
+| Baseline (no projection) | 15.517 | 10.498 | 9.17 | 16.67 | 36.67 | 48.33 |
+| Projection V1 | 19.517 | 9.062 | 7.50 | 19.17 | 35.00 | 52.50 |
+| Projection V2 (mild, selected) | 14.925 | 4.512 | 12.50 | 28.33 | 51.67 | 61.67 |
+| Projection V3 (dim256) | 19.822 | 9.145 | 11.67 | 16.67 | 33.33 | 53.33 |
+
+Observation:
+- V2 is the first clear step-change in this cycle for close-range accuracy on the realistic Paris split:
+  - `within_1km_pct`: `9.17` -> `12.50` (`+3.33`)
+  - `within_2km_pct`: `16.67` -> `28.33` (`+11.66`)
+  - `within_5km_pct`: `36.67` -> `51.67` (`+15.00`)
+- V1 and V3 did not offer stable full-metric gains versus baseline.
+- This validates hard-negative, data-driven representation adaptation as a stronger lever than additional local post-processing sweeps.
+
 ## 8. Methods Tried and Practical Outcome
 ### 8.1 Changes with Clear Practical Value
 - Multi-provider candidate generation and merge controls.
@@ -399,6 +432,7 @@ Observation:
 - Automated aerial-backbone upgrade workflow (objective-based backbone benchmark + final-index rebuild + config patch).
 - Dual local geometric reranker (`SIFT` + `ORB` + evidence gate) as a safer local-feature ranking path than legacy local matching.
 - Error-driven hard-negative triplet mining (`src.tools.mine_hard_negative_triplets`) for retrieval fine-tuning data.
+- Projection-aware retrieval adaptation trained from hard negatives (query-time projection + projected index) with measured realistic-split gains.
 
 ### 8.2 Changes with Conditional Value
 - Query TTA: useful in some regimes, neutral in tested subset.
@@ -435,9 +469,11 @@ This table is the explicit decision ledger for methods tried in this project cyc
 | KDE + dual-local combined profile | Did not beat best W1 profile (`within_1km_pct` stayed `8.89`) | Do not adopt as close-range default |
 | Profile/data mismatch guard in Lab/backend/CLI | Eliminated catastrophic profile mismatch failure mode (`~5846 km` case) and now blocks mismatched `run_geo_eval` runs by default | Keep (evaluation-integrity requirement) |
 | Error-driven hard-negative triplet miner | Produced `145` structured triplets from `180` realistic eval failures | Keep; use for backbone fine-tuning pipeline |
+| Hard-negative projection adaptation (`trainref_v2_mild`) | `within_1km_pct`: `9.17` -> `12.50`, `within_2km_pct`: `16.67` -> `28.33` on `n=120` realistic eval | Keep as current best retrieval adaptation direction |
 
 ### 8.4 What Is Currently Kept by Default
 - Canonical Paris realistic profile remains CLIP-based retrieval with consensus refinement.
+- Projection-adapted retrieval profile (V2 mild) is the current best experimental direction and should be preferred for further Paris hard-negative training cycles.
 - KDE and dual-local methods remain opt-in evaluation profiles for objective-specific tradeoffs.
 - RRF source fusion and alternate backbones remain research modes, not production defaults on current split.
 - Multi-scale query views and adaptive-mass KDE remain experimental toggles; defaults stay single-scale (`1.0`) and fixed adaptive mass (`0.0`).
@@ -550,6 +586,7 @@ Project Heimdall demonstrates a practical path from prototype geolocation to a b
 
 ## Appendix A: Major Algorithmic Knobs (Geo)
 - Retrieval:
+  - `retrieval_projection_path`
   - `retrieval_top_k`, `retrieval_min_score`, `retrieval_min_keep_topk`
   - `retrieval_diversity_radius_km`, `retrieval_diversity_lambda`, `retrieval_diversity_min_keep`
   - `retrieval_locality_radius_km`, `retrieval_locality_weight`
@@ -615,6 +652,10 @@ Project Heimdall demonstrates a practical path from prototype geolocation to a b
 - `runs/tune_retrieval_geo_realistic_within1km_focus_v1.json`
 - `runs/tmp_paris_with_open_geo_seed1870334448.json`
 - `runs/tmp_paris_with_paris_cfg_seed1870334448.json`
+- `runs/geo_eval_projection_baseline_120.json`
+- `runs/geo_eval_projection_trainref_v1_120_rerun.json`
+- `runs/geo_eval_projection_trainref_v2_mild_120.json`
+- `runs/geo_eval_projection_trainref_v3_dim256_120.json`
 - `runs/geo_impact_latest.json`
 - `runs/geo_impact_latest.md`
 

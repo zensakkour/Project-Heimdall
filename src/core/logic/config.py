@@ -39,6 +39,7 @@ class GeoConfig:
     retrieval_index_weights: Tuple[float, ...] = ()
     retrieval_index_model_ids: Tuple[str, ...] = ()
     retrieval_model_id: Optional[str] = None
+    retrieval_projection_path: Optional[str] = None
     retrieval_top_k: int = 10
     retrieval_per_index_top_k: int = 0
     retrieval_index_score_norm: str = "auto"
@@ -190,6 +191,7 @@ def load_config(path: str) -> HeimdallConfig:
             retrieval_index_weights=_parse_float_tuple_allow_empty(geo.get("retrieval_index_weights", [])),
             retrieval_index_model_ids=_parse_str_tuple(geo.get("retrieval_index_model_ids", [])),
             retrieval_model_id=geo.get("retrieval_model_id"),
+            retrieval_projection_path=geo.get("retrieval_projection_path"),
             retrieval_top_k=geo.get("retrieval_top_k", 10),
             retrieval_per_index_top_k=geo.get("retrieval_per_index_top_k", 0),
             retrieval_index_score_norm=_parse_index_score_norm(geo.get("retrieval_index_score_norm", "auto")),
