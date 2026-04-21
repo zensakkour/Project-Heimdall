@@ -1017,3 +1017,19 @@ Do not delete or edit past entries. Append new work at the end.
 - Decision:
   - Keep the projection adaptation path and treat `trainref_v2_mild` as the best current retrieval adaptation direction.
   - Use this as the base for next hard-negative data expansion + projection retraining cycle.
+
+## 2026-04-21
+- Hypothesis:
+  - `train_retrieval_projection` should support index-only training runs in CI tests without requiring a local image directory.
+- Change:
+  - Fixed `src/tools/train_retrieval_projection.py` to check for missing embeddings first and only validate/use `--images-dir` when image embedding backfill is actually needed.
+- Files touched:
+  - `src/tools/train_retrieval_projection.py`
+  - `PROGRESS.md`
+- Validation command(s):
+  - `./.venv/Scripts/python -m pytest -q src/tests/test_train_retrieval_projection.py`
+  - `./.venv/Scripts/python -m pytest -q`
+- Metrics:
+  - Local validation after fix: `180 passed, 3 warnings`.
+- Decision:
+  - Keep this CI compatibility fix; no modeling behavior change to projection math itself.
