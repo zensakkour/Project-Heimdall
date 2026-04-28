@@ -672,6 +672,96 @@ def test_local_match_rerank_allows_confident_override_when_local_advantage_is_st
     assert out[0].match_id == "b"
 
 
+def test_structure_rerank_can_promote_corner_and_shadow_match(monkeypatch: pytest.MonkeyPatch) -> None:
+    ranked = [
+        GeoCandidate(latitude=48.85, longitude=2.35, retrieval_score=0.92, match_id="a", image_path="a.jpg"),
+        GeoCandidate(latitude=48.86, longitude=2.36, retrieval_score=0.90, match_id="b", image_path="b.jpg"),
+    ]
+
+    monkeypatch.setattr(retrieval_mod, "cv2", object(), raising=False)
+    monkeypatch.setattr(retrieval_mod, "_extract_scene_structure_signature", lambda _gray: "query")
+    monkeypatch.setattr(retrieval_mod, "_resolve_candidate_image_path", lambda raw: Path(str(raw)))
+    monkeypatch.setattr(
+        retrieval_mod,
+        "_extract_scene_structure_signature_from_path",
+        lambda cand_path, signature_cache=None: cand_path.name,
+    )
+    monkeypatch.setattr(
+        retrieval_mod,
+        "_scene_structure_similarity",
+        lambda query_sig, cand_sig: 0.56 if cand_sig == "a.jpg" else 0.93,
+    )
+
+    out = retrieval_mod._apply_structure_rerank(
+        ranked,
+        query_gray=np.zeros((32, 32), dtype=np.uint8),
+        top_n=2,
+        weight=0.8,
+    )
+    assert out
+    assert out[0].match_id == "b"
+
+
+def test_structure_rerank_skips_when_scores_are_too_weak(monkeypatch: pytest.MonkeyPatch) -> None:
+    ranked = [
+        GeoCandidate(latitude=48.85, longitude=2.35, retrieval_score=0.92, match_id="a", image_path="a.jpg"),
+        GeoCandidate(latitude=48.86, longitude=2.36, retrieval_score=0.90, match_id="b", image_path="b.jpg"),
+    ]
+
+    monkeypatch.setattr(retrieval_mod, "cv2", object(), raising=False)
+    monkeypatch.setattr(retrieval_mod, "_extract_scene_structure_signature", lambda _gray: "query")
+    monkeypatch.setattr(retrieval_mod, "_resolve_candidate_image_path", lambda raw: Path(str(raw)))
+    monkeypatch.setattr(
+        retrieval_mod,
+        "_extract_scene_structure_signature_from_path",
+        lambda cand_path, signature_cache=None: cand_path.name,
+    )
+    monkeypatch.setattr(
+        retrieval_mod,
+        "_scene_structure_similarity",
+        lambda query_sig, cand_sig: 0.51 if cand_sig == "a.jpg" else 0.52,
+    )
+
+    out = retrieval_mod._apply_structure_rerank(
+        ranked,
+        query_gray=np.zeros((32, 32), dtype=np.uint8),
+        top_n=2,
+        weight=0.8,
+    )
+    assert out
+    assert [cand.match_id for cand in out[:2]] == ["a", "b"]
+
+
+def test_structure_rerank_respects_confident_top1_guard(monkeypatch: pytest.MonkeyPatch) -> None:
+    ranked = [
+        GeoCandidate(latitude=48.85, longitude=2.35, retrieval_score=0.99, match_id="a", image_path="a.jpg"),
+        GeoCandidate(latitude=48.86, longitude=2.36, retrieval_score=0.84, match_id="b", image_path="b.jpg"),
+    ]
+
+    monkeypatch.setattr(retrieval_mod, "cv2", object(), raising=False)
+    monkeypatch.setattr(retrieval_mod, "_extract_scene_structure_signature", lambda _gray: "query")
+    monkeypatch.setattr(retrieval_mod, "_resolve_candidate_image_path", lambda raw: Path(str(raw)))
+    monkeypatch.setattr(
+        retrieval_mod,
+        "_extract_scene_structure_signature_from_path",
+        lambda cand_path, signature_cache=None: cand_path.name,
+    )
+    monkeypatch.setattr(
+        retrieval_mod,
+        "_scene_structure_similarity",
+        lambda query_sig, cand_sig: 0.60 if cand_sig == "a.jpg" else 0.68,
+    )
+
+    out = retrieval_mod._apply_structure_rerank(
+        ranked,
+        query_gray=np.zeros((32, 32), dtype=np.uint8),
+        top_n=2,
+        weight=0.8,
+    )
+    assert out
+    assert [cand.match_id for cand in out[:2]] == ["a", "b"]
+
+
 def test_graph_support_rerank_can_promote_dense_cluster() -> None:
     ranked = [
         GeoCandidate(latitude=10.0, longitude=10.0, retrieval_score=0.95, match_id="isolated"),

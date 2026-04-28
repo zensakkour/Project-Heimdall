@@ -404,6 +404,8 @@ def build_pipeline(cfg: Optional[HeimdallConfig]) -> "HeimdallPipeline":
         local_match_weight=cfg.geolocator.retrieval_local_match_weight,
         local_match_ratio=cfg.geolocator.retrieval_local_match_ratio,
         local_match_max_features=cfg.geolocator.retrieval_local_match_max_features,
+        structure_rerank_top_n=cfg.geolocator.retrieval_structure_rerank_top_n,
+        structure_rerank_weight=cfg.geolocator.retrieval_structure_rerank_weight,
         graph_rerank_top_n=cfg.geolocator.retrieval_graph_rerank_top_n,
         graph_rerank_sigma_km=cfg.geolocator.retrieval_graph_rerank_sigma_km,
         graph_rerank_score_alpha=cfg.geolocator.retrieval_graph_rerank_score_alpha,

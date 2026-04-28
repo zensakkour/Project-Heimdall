@@ -1,6 +1,6 @@
 ﻿# Geolocation + Object Localization Tech (Current)
 
-## Status Snapshot (As of April 16, 2026)
+## Status Snapshot (As of April 28, 2026)
 
 This is the current technical state of the geo stack in the development branch:
 
@@ -17,6 +17,12 @@ This is the current technical state of the geo stack in the development branch:
   - Retrieval candidate diversification (radius/lambda/min_keep)
   - Retrieval minimum-candidate keep policy to preserve top-k recall when min-score thresholds are strict
   - Retrieval locality reranking for isolated outlier suppression
+  - Structure-aware retrieval reranking over the top shortlist using:
+    - corner density
+    - edge density
+    - dominant line-orientation histogram
+    - guarded dark-mass / shadow-axis cue for weak illumination layout evidence
+    - canonical weighted single-index Paris realistic split (`n=180`): `mean_km` `15.08` -> `14.72`, `median_km` `4.89` -> `4.59`, `within_1km_pct` `13.89` -> `15.00`, `within_2km_pct` `27.22` -> `28.33`
   - Retrieval source-fusion mode control (`weighted_score` or `rrf`) for multi-index aggregation strategy
   - Retrieval consensus top-1 refinement now performs adaptive center selection (cluster centroid vs weighted geo-median) using local support gating for close-range precision and local outlier robustness
   - Retrieval KDE mode refinement can improve close-range/top-radius metrics in objective-specific profiles:
@@ -137,6 +143,8 @@ Configure retrieval in `src/config/defaults.json`:
 - `geolocator.retrieval_diversity_min_keep`
 - `geolocator.retrieval_locality_radius_km`
 - `geolocator.retrieval_locality_weight`
+- `geolocator.retrieval_structure_rerank_top_n`
+- `geolocator.retrieval_structure_rerank_weight`
 - `geolocator.retrieval_consensus_top_n`
 - `geolocator.retrieval_consensus_radius_km`
 - `geolocator.retrieval_consensus_score_power`
