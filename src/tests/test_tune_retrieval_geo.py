@@ -150,11 +150,15 @@ def test_write_best_to_config_updates_tta_reduce() -> None:
                 "retrieval_locality_radius_km": 25.0,
                 "retrieval_locality_weight": 0.8,
                 "retrieval_source_balance_beta": 0.35,
+                "retrieval_structure_rerank_top_n": 12,
+                "retrieval_structure_rerank_weight": 0.45,
                 "retrieval_query_tta_reduce": "median",
             },
         )
         payload = json.loads(path.read_text(encoding="utf-8"))
         assert payload["geolocator"]["retrieval_query_tta_reduce"] == "median"
+        assert payload["geolocator"]["retrieval_structure_rerank_top_n"] == 12
+        assert payload["geolocator"]["retrieval_structure_rerank_weight"] == 0.45
 
 
 def test_parse_rank_objective_unknown_falls_back_to_balanced() -> None:
