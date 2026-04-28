@@ -223,6 +223,8 @@ def _collect_raw_samples(
     min_score_floor: float,
     retrieval_index_path: Optional[str],
     query_tta_reduce: str,
+    structure_rerank_top_n: int,
+    structure_rerank_weight: float,
 ) -> tuple[List[RetrievalSample], int]:
     index_path = retrieval_index_path or cfg.geolocator.retrieval_index_path
     provider = GeoRetrievalProvider(
@@ -260,8 +262,8 @@ def _collect_raw_samples(
         local_match_weight=cfg.geolocator.retrieval_local_match_weight,
         local_match_ratio=cfg.geolocator.retrieval_local_match_ratio,
         local_match_max_features=cfg.geolocator.retrieval_local_match_max_features,
-        structure_rerank_top_n=cfg.geolocator.retrieval_structure_rerank_top_n,
-        structure_rerank_weight=cfg.geolocator.retrieval_structure_rerank_weight,
+        structure_rerank_top_n=structure_rerank_top_n,
+        structure_rerank_weight=structure_rerank_weight,
         graph_rerank_top_n=cfg.geolocator.retrieval_graph_rerank_top_n,
         graph_rerank_sigma_km=cfg.geolocator.retrieval_graph_rerank_sigma_km,
         graph_rerank_score_alpha=cfg.geolocator.retrieval_graph_rerank_score_alpha,
@@ -311,6 +313,10 @@ def _write_best_to_config(config_path: Path, best: dict) -> None:
     geo["retrieval_locality_radius_km"] = float(best["retrieval_locality_radius_km"])
     geo["retrieval_locality_weight"] = float(best["retrieval_locality_weight"])
     geo["retrieval_source_balance_beta"] = float(best["retrieval_source_balance_beta"])
+    if "retrieval_structure_rerank_top_n" in best:
+        geo["retrieval_structure_rerank_top_n"] = int(best["retrieval_structure_rerank_top_n"])
+    if "retrieval_structure_rerank_weight" in best:
+        geo["retrieval_structure_rerank_weight"] = float(best["retrieval_structure_rerank_weight"])
     if best.get("retrieval_query_tta_reduce"):
         geo["retrieval_query_tta_reduce"] = str(best["retrieval_query_tta_reduce"])
     config_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
@@ -336,6 +342,16 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--retrieval-locality-radius-km", default="0.0,25.0,60.0")
     parser.add_argument("--retrieval-locality-weight", default="0.0,0.8,1.2,1.8")
     parser.add_argument("--retrieval-source-balance-beta", default="0.0,0.35,0.7")
+    parser.add_argument(
+        "--retrieval-structure-rerank-top-n",
+        default="",
+        help="Comma list of structure-rerank top_n values to evaluate. Empty uses config value.",
+    )
+    parser.add_argument(
+        "--retrieval-structure-rerank-weight",
+        default="",
+        help="Comma list of structure-rerank blend weights to evaluate. Empty uses config value.",
+    )
     parser.add_argument(
         "--retrieval-query-tta-reduce",
         default="",
@@ -369,69 +385,83 @@ def main(argv: Optional[List[str]] = None) -> int:
     retrieval_locality_radius = _parse_float_list(args.retrieval_locality_radius_km)
     retrieval_locality_weight = _parse_float_list(args.retrieval_locality_weight)
     retrieval_source_balance = _parse_float_list(args.retrieval_source_balance_beta)
+    retrieval_structure_rerank_top_n = _parse_int_list(args.retrieval_structure_rerank_top_n)
+    retrieval_structure_rerank_weight = _parse_float_list(args.retrieval_structure_rerank_weight)
     tta_reduce_modes = _parse_tta_reduce_list(str(args.retrieval_query_tta_reduce))
     rank_objective = _parse_rank_objective(str(args.rank_objective))
     if not tta_reduce_modes:
         tta_reduce_modes = [str(cfg.geolocator.retrieval_query_tta_reduce).lower()]
+    if not retrieval_structure_rerank_top_n:
+        retrieval_structure_rerank_top_n = [int(cfg.geolocator.retrieval_structure_rerank_top_n)]
+    if not retrieval_structure_rerank_weight:
+        retrieval_structure_rerank_weight = [float(cfg.geolocator.retrieval_structure_rerank_weight)]
 
     max_top_k = max(retrieval_topk) if retrieval_topk else cfg.geolocator.retrieval_top_k
     min_score_floor = min(retrieval_min_score) if retrieval_min_score else cfg.geolocator.retrieval_min_score
     index_override = args.retrieval_index_path.strip() or None
 
-    samples_by_tta_mode: dict[str, List[RetrievalSample]] = {}
+    samples_by_mode: dict[tuple[str, int, float], List[RetrievalSample]] = {}
     missing_files = 0
     for tta_mode in tta_reduce_modes:
-        samples, missing = _collect_raw_samples(
-            cfg,
-            images_dir=images_dir,
-            records=records,
-            max_top_k=max_top_k,
-            min_score_floor=min_score_floor,
-            retrieval_index_path=index_override,
-            query_tta_reduce=tta_mode,
-        )
-        samples_by_tta_mode[tta_mode] = samples
-        missing_files = max(missing_files, int(missing))
+        for structure_top_n in retrieval_structure_rerank_top_n:
+            for structure_weight in retrieval_structure_rerank_weight:
+                samples, missing = _collect_raw_samples(
+                    cfg,
+                    images_dir=images_dir,
+                    records=records,
+                    max_top_k=max_top_k,
+                    min_score_floor=min_score_floor,
+                    retrieval_index_path=index_override,
+                    query_tta_reduce=tta_mode,
+                    structure_rerank_top_n=int(structure_top_n),
+                    structure_rerank_weight=float(structure_weight),
+                )
+                samples_by_mode[(tta_mode, int(structure_top_n), float(structure_weight))] = samples
+                missing_files = max(missing_files, int(missing))
 
     results = []
     for tta_mode in tta_reduce_modes:
-        samples = samples_by_tta_mode.get(tta_mode, [])
-        for top_k in retrieval_topk:
-            for min_score in retrieval_min_score:
-                for min_keep_topk in retrieval_min_keep_topk:
-                    for diversity_radius in retrieval_diversity_radius:
-                        for diversity_lambda in retrieval_diversity_lambda:
-                            for diversity_min_keep in retrieval_diversity_min_keep:
-                                for locality_radius in retrieval_locality_radius:
-                                    for locality_weight in retrieval_locality_weight:
-                                        for source_balance_beta in retrieval_source_balance:
-                                            metrics = _evaluate_samples(
-                                                samples,
-                                                top_k=top_k,
-                                                min_score=min_score,
-                                                min_keep_topk=min_keep_topk,
-                                                diversity_radius_km=diversity_radius,
-                                                diversity_lambda=diversity_lambda,
-                                                diversity_min_keep=diversity_min_keep,
-                                                locality_radius_km=locality_radius,
-                                                locality_weight=locality_weight,
-                                                source_balance_beta=source_balance_beta,
-                                            )
-                                            results.append(
-                                                {
-                                                    "retrieval_query_tta_reduce": tta_mode,
-                                                    "retrieval_top_k": top_k,
-                                                    "retrieval_min_score": min_score,
-                                                    "retrieval_min_keep_topk": min_keep_topk,
-                                                    "retrieval_diversity_radius_km": diversity_radius,
-                                                    "retrieval_diversity_lambda": diversity_lambda,
-                                                    "retrieval_diversity_min_keep": diversity_min_keep,
-                                                    "retrieval_locality_radius_km": locality_radius,
-                                                    "retrieval_locality_weight": locality_weight,
-                                                    "retrieval_source_balance_beta": source_balance_beta,
-                                                    **metrics,
-                                                }
-                                            )
+        for structure_top_n in retrieval_structure_rerank_top_n:
+            for structure_weight in retrieval_structure_rerank_weight:
+                samples = samples_by_mode.get((tta_mode, int(structure_top_n), float(structure_weight)), [])
+                for top_k in retrieval_topk:
+                    for min_score in retrieval_min_score:
+                        for min_keep_topk in retrieval_min_keep_topk:
+                            for diversity_radius in retrieval_diversity_radius:
+                                for diversity_lambda in retrieval_diversity_lambda:
+                                    for diversity_min_keep in retrieval_diversity_min_keep:
+                                        for locality_radius in retrieval_locality_radius:
+                                            for locality_weight in retrieval_locality_weight:
+                                                for source_balance_beta in retrieval_source_balance:
+                                                    metrics = _evaluate_samples(
+                                                        samples,
+                                                        top_k=top_k,
+                                                        min_score=min_score,
+                                                        min_keep_topk=min_keep_topk,
+                                                        diversity_radius_km=diversity_radius,
+                                                        diversity_lambda=diversity_lambda,
+                                                        diversity_min_keep=diversity_min_keep,
+                                                        locality_radius_km=locality_radius,
+                                                        locality_weight=locality_weight,
+                                                        source_balance_beta=source_balance_beta,
+                                                    )
+                                                    results.append(
+                                                        {
+                                                            "retrieval_query_tta_reduce": tta_mode,
+                                                            "retrieval_structure_rerank_top_n": int(structure_top_n),
+                                                            "retrieval_structure_rerank_weight": float(structure_weight),
+                                                            "retrieval_top_k": top_k,
+                                                            "retrieval_min_score": min_score,
+                                                            "retrieval_min_keep_topk": min_keep_topk,
+                                                            "retrieval_diversity_radius_km": diversity_radius,
+                                                            "retrieval_diversity_lambda": diversity_lambda,
+                                                            "retrieval_diversity_min_keep": diversity_min_keep,
+                                                            "retrieval_locality_radius_km": locality_radius,
+                                                            "retrieval_locality_weight": locality_weight,
+                                                            "retrieval_source_balance_beta": source_balance_beta,
+                                                            **metrics,
+                                                        }
+                                                    )
 
     results.sort(key=lambda row: _result_sort_key(row, rank_objective))
     best = results[0] if results else None
@@ -455,6 +485,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         "retrieval_query_tta_scales": list(cfg.geolocator.retrieval_query_tta_scales),
         "retrieval_query_tta_auto_modality": cfg.geolocator.retrieval_query_tta_auto_modality,
         "retrieval_query_tta_reduce": cfg.geolocator.retrieval_query_tta_reduce,
+        "retrieval_structure_rerank_top_n_search": retrieval_structure_rerank_top_n,
+        "retrieval_structure_rerank_weight_search": retrieval_structure_rerank_weight,
         "retrieval_query_expansion_top_n": cfg.geolocator.retrieval_query_expansion_top_n,
         "retrieval_query_expansion_beta": cfg.geolocator.retrieval_query_expansion_beta,
         "retrieval_query_expansion_alpha": cfg.geolocator.retrieval_query_expansion_alpha,
@@ -487,7 +519,14 @@ def main(argv: Optional[List[str]] = None) -> int:
         "retrieval_min_keep_topk_default": cfg.geolocator.retrieval_min_keep_topk,
         "limit": args.limit,
         "missing_files": missing_files,
-        "samples_with_candidates": {mode: len(samples_by_tta_mode.get(mode, [])) for mode in tta_reduce_modes},
+        "samples_with_candidates": {
+            f"{mode}|structure_top_n={top_n}|structure_weight={float(weight):.3f}": len(
+                samples_by_mode.get((mode, int(top_n), float(weight)), [])
+            )
+            for mode in tta_reduce_modes
+            for top_n in retrieval_structure_rerank_top_n
+            for weight in retrieval_structure_rerank_weight
+        },
         "search_space_size": len(results),
         "best": best,
         "top10": results[:10],
@@ -502,8 +541,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     print(f"Wrote {out_path}")
     if best is not None:
         print(
-            "Best tta_reduce={mode} median_km={median:.3f}, mean_km={mean:.3f}, within_5km={w5:.2f}%".format(
+            "Best tta_reduce={mode} structure_top_n={top_n} structure_weight={weight:.2f} "
+            "median_km={median:.3f}, mean_km={mean:.3f}, within_5km={w5:.2f}%".format(
                 mode=str(best.get("retrieval_query_tta_reduce", "unknown")),
+                top_n=int(best.get("retrieval_structure_rerank_top_n", 0) or 0),
+                weight=float(best.get("retrieval_structure_rerank_weight", 0.0) or 0.0),
                 median=float(best["median_km"]) if best["median_km"] is not None else float("nan"),
                 mean=float(best["mean_km"]) if best["mean_km"] is not None else float("nan"),
                 w5=float(best["within_5km_pct"]),

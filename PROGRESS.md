@@ -1622,3 +1622,240 @@ Do not delete or edit past entries. Append new work at the end.
 - Decision:
   - Keep a dedicated `plan.md` on `master`.
   - Do not reuse feature-branch plans on trunk.
+
+- Branch:
+  - `tech/structure-analysis-cues-v2`
+- Hypothesis:
+  - Extending structure reranking toward geometry-lite cues should improve retrieval quality beyond coarse corner/edge counts by comparing layout, orthogonality, and shadow shape, but the branch needs a measured setting rather than a hand-picked blend weight.
+- Change:
+  - Expanded `SceneStructureSignature` with:
+    - corner spatial layout
+    - edge spatial layout
+    - line orthogonality
+    - line anisotropy
+    - shadow elongation
+  - Updated retrieval structure similarity to blend those geometry-lite cues with the earlier line/corner/edge/shadow signals.
+  - Added focused regression coverage for the new signature fields and for geometry-aligned vs geometry-misaligned structure similarity.
+  - Extended `src.tools.tune_retrieval_geo` so it can sweep:
+    - `retrieval_structure_rerank_top_n`
+    - `retrieval_structure_rerank_weight`
+  - Benchmarked the geometry-lite branch on the canonical Paris realistic split and selected a provisional branch setting:
+    - `retrieval_structure_rerank_top_n=16`
+    - `retrieval_structure_rerank_weight=0.30`
+  - Updated `plan.md`, `README.md`, `src/docs/GEO_TECH.md`, and `src/docs/RESEARCH_PAPER.md` with the measured branch result and remaining tradeoff.
+- Files touched:
+  - `plan.md`
+  - `src/core/geo/retrieval_provider.py`
+  - `src/tools/tune_retrieval_geo.py`
+  - `src/tests/test_retrieval_provider_multi_index.py`
+  - `src/tests/test_tune_retrieval_geo.py`
+  - `README.md`
+  - `src/docs/GEO_TECH.md`
+  - `src/docs/RESEARCH_PAPER.md`
+  - `PROGRESS.md`
+  - `runs/bench_cfg/cfg_paris_projection_trainref_v2_weighted_cmp_structure_v2_geometry_b.json`
+  - `runs/bench_cfg/cfg_paris_projection_trainref_v2_weighted_cmp_structure_v2_geometry_c.json`
+- Validation command(s):
+  - `./.venv/Scripts/python -m pytest -q src/tests/test_tune_retrieval_geo.py`
+  - `./.venv/Scripts/python -m pytest -q src/tests/test_retrieval_provider_multi_index.py`
+  - `./.venv/Scripts/python -m pytest -q src/tests/test_run_geo_eval_retrieval_provider.py src/tests/test_config_loading.py`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config runs/bench_cfg/cfg_paris_projection_trainref_v2_weighted_cmp_structure_v2_geometry_b.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 180 --seed 42 --diag-samples 180 --output runs/geo_eval_projection_trainref_v2_weighted_cmp_structure_v2_geometry_b_180.json`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config runs/bench_cfg/cfg_paris_projection_trainref_v2_weighted_cmp_structure_v2_geometry_c.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 180 --seed 42 --diag-samples 180 --output runs/geo_eval_projection_trainref_v2_weighted_cmp_structure_v2_geometry_c_180.json`
+- Metrics:
+  - Focused tests: `40 passed, 9 warnings` across:
+    - `test_tune_retrieval_geo.py`
+    - `test_retrieval_provider_multi_index.py`
+    - `test_run_geo_eval_retrieval_provider.py`
+    - `test_config_loading.py`
+  - Control (`runs/geo_eval_projection_trainref_v2_weighted_cmp_180.json`):
+    - `mean_km=15.0810`
+    - `median_km=4.8877`
+    - `within_1km_pct=13.89`
+    - `within_2km_pct=27.22`
+    - `within_5km_pct=51.67`
+    - `within_10km_pct=65.00`
+  - Geometry-lite branch probe A (`top_n=12`, `weight=0.35`):
+    - `mean_km=14.9730`
+    - `median_km=4.7578`
+    - `within_1km_pct=13.89`
+    - `within_2km_pct=27.22`
+    - `within_5km_pct=52.78`
+    - `within_10km_pct=66.11`
+  - Geometry-lite branch probe B (`top_n=16`, `weight=0.25`):
+    - `mean_km=14.9548`
+    - `median_km=4.7578`
+    - `within_1km_pct=14.44`
+    - `within_2km_pct=27.22`
+    - `within_5km_pct=52.78`
+    - `within_10km_pct=65.56`
+  - Geometry-lite branch probe C (`top_n=16`, `weight=0.30`):
+    - `mean_km=14.6599`
+    - `median_km=4.7578`
+    - `within_1km_pct=14.44`
+    - `within_2km_pct=27.22`
+    - `within_5km_pct=52.78`
+    - `within_10km_pct=66.11`
+- Artifacts:
+  - `runs/geo_eval_projection_trainref_v2_weighted_cmp_180.json`
+  - `runs/geo_eval_projection_trainref_v2_weighted_cmp_structure_v2_geometry_a_180.json`
+  - `runs/geo_eval_projection_trainref_v2_weighted_cmp_structure_v2_geometry_b_180.json`
+  - `runs/geo_eval_projection_trainref_v2_weighted_cmp_structure_v2_geometry_c_180.json`
+- Decision:
+  - Keep the geometry-lite rerank on this branch as a promising bridge toward heavier geometry.
+  - Provisional branch setting is `top_n=16`, `weight=0.30`.
+  - Do not merge/promote it as a replacement for the earlier structure-rerank milestone until the close-range (`<=2km`) gap is closed or the backbone comparison changes the tradeoff.
+
+## 2026-04-28
+- Branch:
+  - `tech/structure-analysis-cues-v2`
+- Hypothesis:
+  - The geometry-lite signature is useful, but its extra layout / orthogonality / shadow-shape cues need weak-signal gating so they do not override the older structure signal on diffuse scenes.
+- Change:
+  - Reworked `_scene_structure_similarity` to:
+    - anchor on the older line/corner/edge/shadow structure score
+    - compute geometry-lite cue support from cue distinctiveness
+    - blend geometry-lite layout / orthogonality / shadow-shape only when those cues are actually informative
+  - Added regression coverage showing:
+    - strong geometry-aligned scenes still score above misaligned scenes
+    - weak geometry cues stay secondary to the legacy structure signal
+  - Benchmarked three post-gating branch settings on the canonical Paris realistic split:
+    - `top_n=12`, `weight=0.35`
+    - `top_n=16`, `weight=0.30`
+    - new midpoint config `top_n=14`, `weight=0.35`
+  - Promoted the new balanced geometry-lite checkpoint:
+    - `runs/bench_cfg/cfg_paris_projection_trainref_v2_weighted_cmp_structure_v2_geometry_d.json`
+  - Updated `plan.md`, `README.md`, `src/docs/GEO_TECH.md`, and `src/docs/RESEARCH_PAPER.md` to reflect the gated geometry-lite result.
+- Files touched:
+  - `src/core/geo/retrieval_provider.py`
+  - `src/tests/test_retrieval_provider_multi_index.py`
+  - `runs/bench_cfg/cfg_paris_projection_trainref_v2_weighted_cmp_structure_v2_geometry_d.json`
+  - `README.md`
+  - `plan.md`
+  - `src/docs/GEO_TECH.md`
+  - `src/docs/RESEARCH_PAPER.md`
+  - `PROGRESS.md`
+- Validation command(s):
+  - `./.venv/Scripts/python -m pytest -q src/tests/test_retrieval_provider_multi_index.py src/tests/test_tune_retrieval_geo.py`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config runs/bench_cfg/cfg_paris_projection_trainref_v2_weighted_cmp_structure_v2_geometry_c.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 180 --seed 42 --diag-samples 180 --output runs/geo_eval_projection_trainref_v2_weighted_cmp_structure_v2_geometry_c_gated_180.json`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config runs/bench_cfg/cfg_paris_projection_trainref_v2_weighted_cmp_structure_v1.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 180 --seed 42 --diag-samples 180 --output runs/geo_eval_projection_trainref_v2_weighted_cmp_structure_v1_gated_180.json`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config runs/bench_cfg/cfg_paris_projection_trainref_v2_weighted_cmp_structure_v2_geometry_d.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 180 --seed 42 --diag-samples 180 --output runs/geo_eval_projection_trainref_v2_weighted_cmp_structure_v2_geometry_d_180.json`
+- Metrics:
+  - Focused tests: `32 passed, 3 warnings`
+  - Weighted projection control (`runs/geo_eval_projection_trainref_v2_weighted_cmp_180.json`):
+    - `mean_km=15.0810`
+    - `median_km=4.8877`
+    - `within_1km_pct=13.89`
+    - `within_2km_pct=27.22`
+    - `within_5km_pct=51.67`
+    - `within_10km_pct=65.00`
+  - Geometry-lite gated probe C (`top_n=16`, `weight=0.30`):
+    - `mean_km=14.9308`
+    - `median_km=4.7578`
+    - `within_1km_pct=13.89`
+    - `within_2km_pct=27.22`
+    - `within_5km_pct=52.78`
+    - `within_10km_pct=65.56`
+  - Geometry-lite gated probe on legacy close-range weights (`top_n=12`, `weight=0.35`):
+    - `mean_km=14.7927`
+    - `median_km=4.7578`
+    - `within_1km_pct=14.44`
+    - `within_2km_pct=28.33`
+    - `within_5km_pct=52.78`
+    - `within_10km_pct=65.56`
+  - Geometry-lite gated probe D (`top_n=14`, `weight=0.35`):
+    - `mean_km=14.7239`
+    - `median_km=4.5903`
+    - `within_1km_pct=15.00`
+    - `within_2km_pct=28.33`
+    - `within_5km_pct=53.33`
+    - `within_10km_pct=66.11`
+- Artifacts:
+  - `runs/geo_eval_projection_trainref_v2_weighted_cmp_180.json`
+  - `runs/geo_eval_projection_trainref_v2_weighted_cmp_structure_v2_geometry_c_gated_180.json`
+  - `runs/geo_eval_projection_trainref_v2_weighted_cmp_structure_v1_gated_180.json`
+  - `runs/geo_eval_projection_trainref_v2_weighted_cmp_structure_v2_geometry_d_180.json`
+  - `runs/bench_cfg/cfg_paris_projection_trainref_v2_weighted_cmp_structure_v2_geometry_d.json`
+- Decision:
+  - Keep the geometry-lite signature on this branch with weak-signal gating.
+  - Current balanced branch checkpoint is `top_n=14`, `weight=0.35`.
+  - The close-range regression is closed; next branch work should move to the planned backbone comparison rather than more blind rerank tweaking.
+
+## 2026-04-29
+- Branch:
+  - `tech/structure-analysis-cues-v2`
+- Hypothesis:
+  - The next real accuracy step needs representation-level work, not more blind rerank layering. We need a correct encoder-fine-tuning loop, a larger hard-negative pool, and a concrete benchmarked answer to whether a tuned model should replace the serving profile or only be appended as an auxiliary retrieval branch.
+- Change:
+  - Fixed projected-backbone benchmarking so projection training uses a dedicated `projection_support` index built from the triplet reference pool instead of reusing the tiny sampled eval index.
+  - Added real CLIP-family encoder fine-tuning in `src/tools/train_retrieval_encoder.py`, saving a local `save_pretrained()` model directory usable as a retrieval model id.
+  - Added cached `visual_projection` training so frozen-vision runs build pooled image features once and reuse them across epochs.
+  - Scaled hard-negative mining in `src/tools/mine_hard_negative_triplets.py` with multi-report support and `--max-failures-per-query`.
+  - Added `src/tools/run_retrieval_finetune_loop.py` to evaluate on the fixed Paris `180` slice, mine failures, fine-tune the encoder, rebuild the index, optionally add a DBA companion, and re-evaluate.
+  - Fixed the loop evaluation so tuned-model runs are compared against a matched rebuilt baseline instead of unfairly against the full production serving config.
+  - Added auxiliary serving-config generation to the loop:
+    - keep `paris_close_range_dual_rrf` as the primary branch
+    - append tuned model index and tuned DBA index as extra sources
+    - give them their own `retrieval_index_model_ids`
+    - force `null` per-index projection routing so they do not inherit the base projection
+  - Added root `research.md` as a chronological research ledger with before/after metrics and updated `README.md` / `src/docs/RESEARCH_PAPER.md` to reference it.
+- Files touched:
+  - `src/tools/benchmark_geo_backbones.py`
+  - `src/tools/upgrade_retrieval_backbone.py`
+  - `src/tools/mine_hard_negative_triplets.py`
+  - `src/tools/train_retrieval_encoder.py`
+  - `src/tools/run_retrieval_finetune_loop.py`
+  - `src/tests/test_benchmark_geo_backbones.py`
+  - `src/tests/test_mine_hard_negative_triplets.py`
+  - `src/tests/test_train_retrieval_encoder.py`
+  - `src/tests/test_run_retrieval_finetune_loop.py`
+  - `README.md`
+  - `src/docs/RESEARCH_PAPER.md`
+  - `PROGRESS.md`
+  - `research.md`
+- Validation command(s):
+  - `./.venv/Scripts/python -m pytest -q src/tests/test_mine_hard_negative_triplets.py src/tests/test_train_retrieval_encoder.py src/tests/test_run_retrieval_finetune_loop.py src/tests/test_benchmark_geo_backbones.py`
+  - `./.venv/Scripts/python -m pytest -q src/tests/test_train_retrieval_encoder.py src/tests/test_run_retrieval_finetune_loop.py src/tests/test_run_geo_eval_retrieval_provider.py`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config runs/aux_fusion_final/aux_conservative.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 180 --seed 42 --diag-samples 180 --output runs/aux_fusion_final/aux_conservative_eval_180.json`
+- Metrics:
+  - Backbone smoke benchmark after `projection_support` fix (`train_limit=80`, `eval_limit=20`):
+    - raw CLIP: `mean_km=27.7099`, `median_km=42.9709`, `<=5km=25.0%`, `<=10km=35.0%`
+    - projected CLIP: `mean_km=29.2042`, `median_km=44.2391`, `<=5km=25.0%`, `<=10km=35.0%`
+    - raw SigLIP-base: `mean_km=25.0207`, `median_km=17.8138`, `<=5km=10.0%`, `<=10km=40.0%`
+    - projected SigLIP-base: `mean_km=27.2065`, `median_km=17.8265`, `<=5km=10.0%`, `<=10km=35.0%`
+  - Hard-negative mining scale-up from the production close-range profile:
+    - strict setup: `52` triplets
+    - looser A: `74` triplets
+    - looser B: `129` triplets
+  - Cached projection-only training behavior on `loose_b`:
+    - `1` epoch: `956` cached images, `375.85 s` cache build, `4.20 s` training, `best_weighted_hard_triplet_loss=0.1937`
+    - `10` epochs: `956` cached images, `326.14 s` cache build, `33.45 s` training, `best_weighted_hard_triplet_loss=0.1199`
+  - Fixed Paris `180` fine-tune loop (`train_limit=300`, `eval_limit=180`, `rank_objective=within_2km_pct`):
+    - production serving baseline `paris_close_range_dual_rrf`: `mean_km=14.8410`, `median_km=4.8705`, `<=1km=12.78%`, `<=2km=31.11%`, `<=5km=50.56%`, `<=10km=63.33%`
+    - matched rebuilt base model: `mean_km=23.1429`, `median_km=10.5783`, `<=1km=0.56%`, `<=2km=1.67%`, `<=5km=17.78%`, `<=10km=36.67%`
+    - tuned encoder on the same rebuilt index: `mean_km=21.5331`, `median_km=11.0497`, `<=1km=1.11%`, `<=2km=3.33%`, `<=5km=20.56%`, `<=10km=44.44%`
+    - winning round training details: `130` resolved triplets, `966` cached images, `281.40 s` cache build, `23.83 s` training, `best_weighted_triplet_satisfied_pct=0.873`
+  - Auxiliary serving candidate on the real Paris `180` benchmark:
+    - baseline `paris_close_range_dual_rrf`: `mean_km=14.8410`, `median_km=4.8705`, `<=1km=12.78%`, `<=2km=31.11%`, `<=5km=50.56%`, `<=10km=63.33%`
+    - conservative auxiliary blend (`aux_index_weight=0.15`, `aux_dba_weight=0.05`): `mean_km=15.6990`, `median_km=9.7449`, `<=1km=10.00%`, `<=2km=21.11%`, `<=5km=37.78%`, `<=10km=52.78%`
+  - Focused regression coverage:
+    - earlier workflow/test expansion: `15 passed`
+    - current focused suite: `12 passed, 3 warnings`
+- Artifacts:
+  - `runs/backbone_bench/smoke_raw_clip.json`
+  - `runs/backbone_bench/smoke_projected_clip.json`
+  - `runs/backbone_bench/smoke_raw_siglip_base.json`
+  - `runs/backbone_bench/smoke_projected_siglip_base.json`
+  - `runs/tmp_triplets_curr_summary.json`
+  - `runs/tmp_triplets_loose_a_summary.json`
+  - `runs/tmp_triplets_loose_b_summary.json`
+  - `runs/tmp_encoder_loose_b.report.json`
+  - `runs/tmp_encoder_loose_b_e10.report.json`
+  - `runs/retrieval_finetune_loop_180_looseb_e10/loop_summary.json`
+  - `runs/retrieval_finetune_loop_180_looseb_e10/round_01/encoder.report.json`
+  - `runs/aux_fusion_final/aux_conservative.json`
+  - `runs/aux_fusion_final/aux_conservative_eval_180.json`
+- Decision:
+  - Keep the encoder fine-tuning and mining infrastructure; it is the correct next research direction.
+  - Do not promote the tuned encoder as a replacement for the serving stack yet.
+  - Do not promote the auxiliary fused serving config yet; even a conservative low-weight blend regressed sharply on the real Paris `180` benchmark.
+  - Continue to serve `paris_close_range_dual_rrf` as the primary close-range branch and treat the tuned-model auxiliary source as infrastructure that still needs stronger training data before deployment.
