@@ -26,10 +26,12 @@ At the end of each user request cycle, verify and update docs as needed:
 - `src/docs/RESEARCH_PAPER.md`: keep methods tried, experiment outcomes, and conclusions current.
 - `README.md`: keep user-facing commands/links/config references accurate when behavior changes.
 - `docs/eval/*`: refresh benchmark outputs when running benchmark flows.
+- `plan.md`: review and update it every time the branch plan changes in substance, including new comparisons, dropped ideas, changed decision gates, or a different next intended move.
 
 Command-level enforcement:
 - After each meaningful command block (experiment run, config patch, benchmark, merge, or workflow change), immediately check whether docs need an update.
 - Do not defer documentation updates across multiple unrelated commands.
+- If branch intent changes during the prompt, update `plan.md` in the same prompt rather than deferring it.
 
 If no documentation changes are needed for the prompt, explicitly confirm that docs were reviewed and already up to date.
 
@@ -65,6 +67,9 @@ A performance claim should include:
 
 ## Branch and Merge Practice
 - Keep model work on dedicated branches (for example `tech/*`).
+- Every branch must carry a root-level `plan.md` that states the branch goal, planned comparisons, decision gates, and next intended move.
+- Treat `plan.md` as branch-local: update it every time the branch objective, comparison set, decision criteria, or intended next step changes, and do not reuse another branch's plan verbatim.
+- `master` must also have a `plan.md`, but its role is integration, validation, merge hygiene, and prioritization rather than unfinished feature work.
 - Before merge, run focused tests first, then broader suites when dependencies allow.
 - Keep commits scoped: one conceptual change per commit when possible.
 
