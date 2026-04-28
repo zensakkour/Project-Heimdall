@@ -1859,3 +1859,33 @@ Do not delete or edit past entries. Append new work at the end.
   - Do not promote the tuned encoder as a replacement for the serving stack yet.
   - Do not promote the auxiliary fused serving config yet; even a conservative low-weight blend regressed sharply on the real Paris `180` benchmark.
   - Continue to serve `paris_close_range_dual_rrf` as the primary close-range branch and treat the tuned-model auxiliary source as infrastructure that still needs stronger training data before deployment.
+
+## 2026-04-29 23:10 - Data Branch Kickoff: realistic Paris dataset
+
+- Branch:
+  - created `tech/paris-realistic-data-v1` from merged `master`
+- Research conclusion update:
+  - recorded the current state as a data-limited stalemate rather than a modeling-only problem
+  - documented that better street-view comparison, cross-view geolocation, and stronger model adaptation now require a realistic street-plus-aerial dataset
+- Planning work:
+  - replaced the root `plan.md` on the new branch with a branch-local roadmap
+  - captured the repo audit for:
+    - retrieval and index pipeline
+    - metadata CSV conventions
+    - hard-negative mining reuse points
+    - projection-training reuse points
+    - config implications in `src/core/logic/config.py`
+    - docs and `PROGRESS.md` policy
+  - staged the next implementation sequence:
+    - Mapillary street-image ingestion
+    - OpenAerialMap aerial pairing
+    - leakage-safe spatial splits
+    - realistic cross-view triplet mining
+    - street-to-aerial projection and evaluation
+    - orientation-aware scoring
+    - street-to-street retrieval
+    - fused street-plus-aerial evaluation
+    - later architecture-upgrade branch only after a fixed realistic baseline exists
+- Decision:
+  - stop treating more small rerank ideas as the primary path to a breakthrough
+  - move the next research cycle onto realistic data construction first
