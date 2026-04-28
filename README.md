@@ -746,6 +746,57 @@ Useful fusion knobs:
 - Typical local path: `data/geo_index/*.npz`
 - Typical local path: `data/models/*`
 - Typical local path: `data/dota_v1/*`
+- Realistic Paris street-data bootstrap from Mapillary:
+```powershell
+$env:MAPILLARY_ACCESS_TOKEN="MLY|..."
+.\.venv\Scripts\python -m src.tools.download_mapillary_paris --bbox 48.8156,2.2241,48.9022,2.4699 --out data/paris_realistic_v1/street --grid-step-m 80 --street-per-cell 3 --max-images 20000 --seed 42
+```
+- Dry-run count check for the same dataset bootstrap:
+```powershell
+.\.venv\Scripts\python -m src.tools.download_mapillary_paris --bbox 48.8156,2.2241,48.9022,2.4699 --out data/paris_realistic_v1/street --grid-step-m 80 --street-per-cell 3 --max-images 20000 --seed 42 --dry-run
+```
+- The downloader writes:
+  - `data/paris_realistic_v1/street/images/`
+  - `data/paris_realistic_v1/street/metadata.csv`
+- Current metadata contract:
+  - `image_id,path,lat,lon,heading_deg,captured_at,camera_type,width,height,quality_score,sequence,source,license_info`
+- Current behavior:
+  - prefers `computed_geometry` over `geometry`
+  - prefers `computed_compass_angle` over `compass_angle`
+  - uses `thumb_2048_url` with `thumb_1024_url` fallback
+  - dedupes by `image_id`
+  - limits near-duplicates with per-cell sampling plus per-sequence caps
+- Do not use Google Street View, Google Maps scraping, or Google Earth tiles in this dataset path.
+- OpenAerialMap pairing for the same realistic Paris dataset:
+```powershell
+.\.venv\Scripts\python -m src.tools.build_aerial_pairs --street-metadata data/paris_realistic_v1/street/metadata.csv --out data/paris_realistic_v1 --provider openaerialmap --crop-size-m 256 --crop-px 512 --allow-missing-aerial false --seed 42
+```
+- The aerial-pair builder writes:
+  - `data/paris_realistic_v1/aerial/images/`
+  - `data/paris_realistic_v1/aerial/metadata.csv`
+  - `data/paris_realistic_v1/pairs.csv`
+- Current aerial metadata contract:
+  - `aerial_id,path,lat,lon,source,provider,resolution_m,crop_size_m,crop_px,license_info,paired_street_id,status`
+- Current pair contract:
+  - `pair_id,street_id,street_path,aerial_id,aerial_path,lat,lon,heading_deg`
+- Current provider behavior:
+  - queries OAM metadata near each street point
+  - prefers the highest-resolution covering image
+  - uses the OAM TMS URL from metadata to render a centered crop
+  - marks `no_open_aerial_found` when no open aerial scene covers the point
+- Leakage-safe spatial split generation:
+```powershell
+.\.venv\Scripts\python -m src.tools.split_realistic_dataset --pairs data/paris_realistic_v1/pairs.csv --out data/paris_realistic_v1/splits --train-ratio 0.70 --val-ratio 0.15 --test-ratio 0.15 --cell-size-m 300 --seed 42
+```
+- Split sanity check:
+```powershell
+.\.venv\Scripts\python -m src.tools.split_realistic_dataset --sanity-check-dir data/paris_realistic_v1/splits
+```
+- Split outputs:
+  - `data/paris_realistic_v1/splits/train_pairs.csv`
+  - `data/paris_realistic_v1/splits/val_pairs.csv`
+  - `data/paris_realistic_v1/splits/test_pairs.csv`
+  - `data/paris_realistic_v1/splits/split_summary.json`
 - Open geo bootstrap (Wikimedia API, broader coverage):
 ```powershell
 .\.venv\Scripts\python -m src.tools.download_open_geo --mode api --limit 300 --per-anchor 25 --output data/open_geo
