@@ -1595,3 +1595,30 @@ Do not delete or edit past entries. Append new work at the end.
 - Decision:
   - Keep the stronger wording.
   - Future branch work should treat `plan.md` as a living branch contract, not a one-time stub.
+
+## 2026-04-28
+- Branch:
+  - `master`
+- Hypothesis:
+  - The branch-plan policy is incomplete unless `master` also has its own branch-local `plan.md` describing its integration role instead of borrowing a feature branch plan.
+- Change:
+  - Added a `master`-specific root `plan.md`.
+  - Reframed `master` as:
+    - integration branch
+    - validation gate
+    - merge hygiene branch
+    - prioritization branch
+- Files touched:
+  - `plan.md`
+  - `PROGRESS.md`
+- Validation command(s):
+  - `git branch -a --no-color`
+  - `Get-Content plan.md | Select-Object -First 120`
+- Metrics:
+  - Active local branches at this step: `2`
+  - Active remote branches at this step: `1`
+- Artifacts:
+  - No benchmark artifact in this branch-governance step.
+- Decision:
+  - Keep a dedicated `plan.md` on `master`.
+  - Do not reuse feature-branch plans on trunk.
