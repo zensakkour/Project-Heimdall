@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from src.tools.mine_hard_negative_triplets import EvalFailure, GeoRecord, mine_triplets, scene_key
 
 
@@ -39,6 +41,49 @@ def test_mine_triplets_from_eval_failures() -> None:
     assert row["positives"][0]["path"] == "p1.jpg"
     neg_paths = {item["path"] for item in row["hard_negatives"]}
     assert "n1.jpg" in neg_paths
+
+
+def test_mine_triplets_emits_difficulty_metadata() -> None:
+    records = [
+        GeoRecord(path="q.jpg", latitude=48.0000, longitude=2.0000),
+        GeoRecord(path="p1.jpg", latitude=48.0018, longitude=2.0000),
+        GeoRecord(path="n1.jpg", latitude=48.0180, longitude=2.0000),
+        GeoRecord(path="n2.jpg", latitude=48.0180, longitude=2.0020),
+    ]
+    failures = [
+        EvalFailure(
+            query_path="q.jpg",
+            gt_latitude=48.0000,
+            gt_longitude=2.0000,
+            pred_latitude=48.0180,
+            pred_longitude=2.0000,
+            distance_km=4.0,
+        )
+    ]
+
+    out = mine_triplets(
+        records,
+        failures,
+        min_error_km=1.0,
+        positive_radius_km=0.4,
+        negative_pred_radius_km=0.6,
+        negative_min_gt_distance_km=1.5,
+        negative_max_gt_distance_km=30.0,
+        max_positives=2,
+        max_negatives=2,
+        difficulty_mode="error_km_predmix",
+        difficulty_reference_km=2.0,
+        difficulty_max_weight=3.0,
+    )
+
+    assert out
+    row = out[0]
+    assert row["difficulty_mode"] == "error_km_predmix"
+    assert row["triplet_weight"] > 1.0
+    assert row["hard_negative_source_counts"]["pred_neighborhood"] >= 1
+    assert row["closest_positive_gt_km"] == pytest.approx(row["positives"][0]["distance_to_gt_km"])
+    assert row["closest_negative_gt_km"] == pytest.approx(2.0015086796020573, rel=1e-6)
+    assert row["closest_negative_pred_km"] == pytest.approx(0.0, abs=1e-9)
 
 
 def test_mine_triplets_skips_low_error_failures() -> None:

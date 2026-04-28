@@ -64,6 +64,7 @@ Retrieval controls explored:
 - `retrieval_min_keep_topk` fallback recall guard.
 - Diversity re-selection (`retrieval_diversity_*`).
 - Locality reranking (`retrieval_locality_*`).
+- Structure-aware top-shortlist reranking using corner density, edge density, dominant line orientation, and weak shadow-axis cues (`retrieval_structure_rerank_*`).
 - Local geometric reranking with dual feature engines (`SIFT` + `ORB`) and evidence gating.
 - Query TTA (`retrieval_query_tta_degrees`, `retrieval_query_tta_reduce`).
 - Multi-index expansion (`retrieval_index_paths`, `retrieval_index_weights`, `retrieval_per_index_top_k`).
@@ -127,6 +128,7 @@ A governance layer was added to prevent ad-hoc metric claims:
 - Added one-command retrieval backbone upgrade workflow (`src.tools.upgrade_retrieval_backbone`) that benchmarks candidate backbones, rebuilds the final index with the selected model, and patches config for reproducible rollout.
 - Added graph-support and KDE mode retrieval reranking ablations on the realistic split (`n=180`) with objective-specific profiles (`within_1km` and `within_2km`).
 - Upgraded local geometric reranking to a dual-engine method (`SIFT` + `ORB`) with weak-signal gating and adaptive blend scaling.
+- Added a structure-aware retrieval reranker that uses corners, line orientation, and guarded shadow cues to reorder the top retrieval shortlist before local matching.
 
 ## 6. Experimental Protocol
 ### 6.1 Datasets and Artifacts Used in This Document
@@ -422,7 +424,44 @@ Observation:
 - V1 and V3 did not offer stable full-metric gains versus baseline.
 - This validates hard-negative, data-driven representation adaptation as a stronger lever than additional local post-processing sweeps.
 
-### 7.14 Scope-Aware Retrieval Geo Prior (Hard Region Gate)
+Follow-up weighted training check (same 68 query-vs-reference triplets, canonical realistic split `n=180`, seed `42`):
+- Uniform weighting: `mean_km=15.252`, `median_km=5.504`, `within_1km_pct=11.67`, `within_2km_pct=26.67`, `within_5km_pct=50.00`, `within_10km_pct=64.44`.
+- Difficulty-aware weighting: `mean_km=15.081`, `median_km=4.888`, `within_1km_pct=13.89`, `within_2km_pct=27.22`, `within_5km_pct=51.67`, `within_10km_pct=65.00`.
+- Training-side weighted objective also improved (`weighted_triplet_satisfied_pct`: `27.94` -> `30.99`; `weighted_hard_triplet_loss`: `0.1016` -> `0.0994`).
+- Interpretation: emphasizing severe/confusion-rich failures is beneficial even before enlarging the triplet pool.
+
+### 7.14 Structure-Aware Retrieval Rerank (Corners, Lines, Shadow Cue)
+Artifacts:
+- Control:
+  - `runs/geo_eval_projection_trainref_v2_weighted_cmp_180.json`
+- Candidate:
+  - `runs/bench_cfg/cfg_paris_projection_trainref_v2_weighted_cmp_structure_v1.json`
+  - `runs/geo_eval_projection_trainref_v2_weighted_cmp_structure_v1_180.json`
+
+Method:
+- Added retrieval controls:
+  - `retrieval_structure_rerank_top_n`
+  - `retrieval_structure_rerank_weight`
+- For the top retrieval shortlist, extracted a coarse grayscale scene signature composed of:
+  - corner density,
+  - edge density,
+  - dominant line-orientation histogram,
+  - guarded dark-mass / shadow-axis cue as weak illumination-layout evidence.
+- Blended structure similarity with the base retrieval score only when the structure evidence was strong enough and a confident base top-1 did not already dominate.
+
+Canonical weighted single-index Paris benchmark (`n=180`, seed `42`):
+
+| Variant | mean_km | median_km | within_1km_pct | within_2km_pct | within_5km_pct | within_10km_pct |
+|---|---:|---:|---:|---:|---:|---:|
+| Weighted projection control | 15.0810 | 4.8877 | 13.89 | 27.22 | 51.67 | 65.00 |
+| + Structure-aware rerank (`top_n=12`, `weight=0.35`) | 14.7247 | 4.5903 | 15.00 | 28.33 | 53.33 | 66.11 |
+
+Observation:
+- This is the first measured gain from explicitly modeling scene layout cues rather than only embedding similarity or local keypoints.
+- Improvements were consistent across all reported distance buckets on the canonical split, with no null-output regression.
+- The method is still kept as experimental rather than default because it has only been validated on the Paris realistic split so far.
+
+### 7.15 Scope-Aware Retrieval Geo Prior (Hard Region Gate)
 Artifacts:
 - Configs:
   - `runs/configs/paris_mixed_scope_no_prior.json`
@@ -485,6 +524,7 @@ Observation:
 - Adaptive-mass KDE refinement (`retrieval_kde_refine_adaptive_mass`): mixed results; did not improve `within_2km_pct` vs fixed-mass KDE-W2 baseline.
 - Ambiguity-gated local rerank override: protective behavior, but no metric uplift observed on tested local-match profiles.
 - Dual local reranker + KDE combination: improved tail metrics but did not beat best close-range (`within_1km_pct`) profile.
+- Structure-aware retrieval rerank (`retrieval_structure_rerank_*`): promising gain on the weighted single-index Paris run, but still only validated on one city/split.
 - Geo-aware database-side descriptor augmentation (DBA): can improve close-range metrics in objective-specific settings, but current variants regressed broader tail metrics on canonical `n=180`.
 - Dual-index projected+DBA stack with `rrf` source fusion: improved close-range and central tendency on canonical `n=180`, with slight `within_10km_pct` tradeoff.
 
@@ -514,6 +554,8 @@ This table is the explicit decision ledger for methods tried in this project cyc
 | Scope-aware retrieval geo prior (`retrieval_geo_prior_*`) | Mixed-scope stress test: `mean_km` `6656.66` -> `18.82`; replay seed case `7408.15` -> `0.00` | Keep (Paris defaults) |
 | Error-driven hard-negative triplet miner | Produced `145` structured triplets from `180` realistic eval failures | Keep; use for backbone fine-tuning pipeline |
 | Hard-negative projection adaptation (`trainref_v2_mild`) | `within_1km_pct`: `9.17` -> `12.50`, `within_2km_pct`: `16.67` -> `28.33` on `n=120` realistic eval | Keep as current best retrieval adaptation direction |
+| Difficulty-aware weighting on mined query-vs-reference triplets | On canonical single-index `n=180`: `mean_km`: `15.25` -> `15.08`, `median_km`: `5.50` -> `4.89`, `within_1km_pct`: `11.67` -> `13.89`, `within_2km_pct`: `26.67` -> `27.22` versus uniform weighting | Keep; prefer over uniform weighting for future projection retraining cycles |
+| Structure-aware retrieval rerank (`top_n=12`, `weight=0.35`) | On canonical weighted single-index `n=180`: `mean_km`: `15.08` -> `14.72`, `median_km`: `4.89` -> `4.59`, `within_1km_pct`: `13.89` -> `15.00`, `within_2km_pct`: `27.22` -> `28.33`, `within_5km_pct`: `51.67` -> `53.33` | Keep as experimental single-index rerank; validate beyond Paris before defaulting |
 | Projection V2 + geo-prior stack on canonical Paris split (`n=180`) | No delta vs baseline (`within_1km_pct=11.67`, `within_2km_pct=26.67` in both) | Keep geo-prior as scope-safety guard; do not claim close-range lift on in-scope data |
 | Dual-space projected+raw CLIP fusion with per-index projection routing (`retrieval_index_projection_paths`) | Underperformed projection V2 baseline on `n=180` (`within_1km_pct`: `11.67` -> `8.89`, `within_2km_pct`: `26.67` -> `18.89`) | Keep capability as experimental infra; reject as default profile |
 | Geo-aware DBA index augmentation (`neighbors=5`, `max_geo_distance_km=2`) | On canonical `n=180`: `mean_km`: `15.25` -> `14.80`, `within_1km_pct`: `11.67` -> `13.33`, `within_2km_pct`: `26.67` -> `29.44`, but `within_5km_pct`: `50.00` -> `46.67` | Keep as objective-specific close-range profile; reject as default until tail regression is solved |
@@ -523,7 +565,8 @@ This table is the explicit decision ledger for methods tried in this project cyc
 
 ### 8.4 What Is Currently Kept by Default
 - Canonical Paris realistic profile remains CLIP-based retrieval with consensus refinement.
-- Projection-adapted retrieval profile (V2 mild) is the current best experimental direction and should be preferred for further Paris hard-negative training cycles.
+- Projection-adapted retrieval remains the best single-index experimental direction; within that path, difficulty-weighted triplet training is now preferred over uniform weighting for future Paris hard-negative cycles.
+- Structure-aware reranking of the top retrieval shortlist is the current best non-learning scene-layout add-on, but it remains experimental until it is rechecked on broader leakage-safe splits.
 - KDE and dual-local methods remain opt-in evaluation profiles for objective-specific tradeoffs.
 - RRF source fusion and alternate backbones remain research modes, not production defaults on current split.
 - Per-index projection routing is kept as infrastructure for future heterogeneous-index experiments, but current dual-space RRF profile is not promoted.
@@ -634,6 +677,8 @@ Project Heimdall demonstrates a practical path from prototype geolocation to a b
 
 ### 15.1 Possible Approaches Under Consideration (From `deep-research-report.md`)
 - `Domain-adapted embeddings` (highest priority): evaluate Remote Sensing foundation encoders as primary retrieval backbones.
+- `Difficulty-aware hard-negative weighting`: controlled Paris benchmarking is now complete and favors weighting (`within_1km_pct`: `11.67` -> `13.89`, `mean_km`: `15.25` -> `15.08` versus uniform single-index training). The remaining question is whether that gain holds on larger triplet pools and non-Paris cities.
+- `Scene-structure reranking`: coarse cues from corners, edge mass, building-line orientation, and guarded shadow direction improved the canonical weighted single-index Paris run (`within_1km_pct`: `13.89` -> `15.00`, `mean_km`: `15.08` -> `14.72`). The remaining question is whether those cues stay reliable under broader city and illumination variation.
 - `Selective abstention`: add a localizability head/policy to decide predict vs abstain before final confidence tiering.
 - `Spatially guaranteed uncertainty`: conformal prediction for region-level coverage guarantees on top of probabilistic fusion.
 - `Rank-based multi-index fusion`: RRF was implemented as an optional mode (`retrieval_source_fusion_mode=rrf`) and benchmarked.
@@ -647,6 +692,7 @@ Project Heimdall demonstrates a practical path from prototype geolocation to a b
   - `retrieval_top_k`, `retrieval_min_score`, `retrieval_min_keep_topk`
   - `retrieval_diversity_radius_km`, `retrieval_diversity_lambda`, `retrieval_diversity_min_keep`
   - `retrieval_locality_radius_km`, `retrieval_locality_weight`
+  - `retrieval_structure_rerank_top_n`, `retrieval_structure_rerank_weight`
   - `retrieval_consensus_top_n`, `retrieval_consensus_radius_km`, `retrieval_consensus_score_power`
   - `retrieval_query_tta_degrees`, `retrieval_query_tta_modes`, `retrieval_query_tta_scales`, `retrieval_query_tta_auto_modality`, `retrieval_query_tta_reduce`
   - `retrieval_tta_agreement_top_n`, `retrieval_tta_agreement_weight`
@@ -723,6 +769,9 @@ Project Heimdall demonstrates a practical path from prototype geolocation to a b
 - `runs/geo_eval_projection_trainref_v2_mild_geo_prior_180.json`
 - `runs/geo_eval_projection_trainref_v3_dim256_180.json`
 - `runs/geo_eval_projection_trainref_v2_mild_localmatch_v1_180.json`
+- `runs/geo_eval_projection_trainref_v2_weighted_cmp_180.json`
+- `runs/bench_cfg/cfg_paris_projection_trainref_v2_weighted_cmp_structure_v1.json`
+- `runs/geo_eval_projection_trainref_v2_weighted_cmp_structure_v1_180.json`
 - `runs/geo_eval_paris_dualspace_rrf_v1_180.json`
 - `runs/bench_cfg/cfg_paris_dualspace_rrf_v1.json`
 - `runs/geo_impact_latest.json`

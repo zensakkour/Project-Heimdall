@@ -88,6 +88,8 @@ def test_load_config_spatial_consensus_defaults() -> None:
         assert cfg.geolocator.retrieval_local_match_weight == 0.0
         assert cfg.geolocator.retrieval_local_match_ratio == 0.8
         assert cfg.geolocator.retrieval_local_match_max_features == 1200
+        assert cfg.geolocator.retrieval_structure_rerank_top_n == 0
+        assert cfg.geolocator.retrieval_structure_rerank_weight == 0.0
         assert cfg.geolocator.retrieval_graph_rerank_top_n == 0
         assert cfg.geolocator.retrieval_graph_rerank_sigma_km == 3.0
         assert cfg.geolocator.retrieval_graph_rerank_score_alpha == 0.4
@@ -188,6 +190,8 @@ def test_load_config_spatial_consensus_overrides() -> None:
                     "retrieval_local_match_weight": 0.45,
                     "retrieval_local_match_ratio": 0.78,
                     "retrieval_local_match_max_features": 1800,
+                    "retrieval_structure_rerank_top_n": 14,
+                    "retrieval_structure_rerank_weight": 0.35,
                     "retrieval_graph_rerank_top_n": 30,
                     "retrieval_graph_rerank_sigma_km": 2.8,
                     "retrieval_graph_rerank_score_alpha": 0.35,
@@ -285,6 +289,8 @@ def test_load_config_spatial_consensus_overrides() -> None:
         assert cfg.geolocator.retrieval_local_match_weight == 0.45
         assert cfg.geolocator.retrieval_local_match_ratio == 0.78
         assert cfg.geolocator.retrieval_local_match_max_features == 1800
+        assert cfg.geolocator.retrieval_structure_rerank_top_n == 14
+        assert cfg.geolocator.retrieval_structure_rerank_weight == 0.35
         assert cfg.geolocator.retrieval_graph_rerank_top_n == 30
         assert cfg.geolocator.retrieval_graph_rerank_sigma_km == 2.8
         assert cfg.geolocator.retrieval_graph_rerank_score_alpha == 0.35
