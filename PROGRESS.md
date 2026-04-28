@@ -1537,3 +1537,61 @@ Do not delete or edit past entries. Append new work at the end.
 - Decision:
   - Keep structure-aware reranking as a promising experimental single-index upgrade.
   - Do not promote it to default until it is replayed on additional leakage-safe splits beyond Paris.
+
+## 2026-04-28
+- Branch:
+  - `tech/structure-analysis-cues-v2`
+- Hypothesis:
+  - Branch-level planning should be explicit and mandatory so each active branch states its comparison strategy, decision gates, and intended end state before more modeling work lands.
+- Change:
+  - Added a branch-plan requirement to `AGENT.md`.
+  - Updated contributor workflow so each branch must maintain a root `plan.md`.
+  - Updated `scripts/new-branch.ps1` to scaffold `plan.md` automatically for future branches.
+  - Added a detailed `plan.md` for `tech/structure-analysis-cues-v2` covering:
+    - retrieval-backbone comparison (`CLIP` vs `RemoteCLIP` vs `GeoRSCLIP`)
+    - choose-then-adapt workflow
+    - stronger shadow / corner / footprint cues
+    - future geometry / `BEV` / `3D` work for both overhead and street-photo localization
+- Files touched:
+  - `AGENT.md`
+  - `CONTRIBUTING.md`
+  - `scripts/new-branch.ps1`
+  - `plan.md`
+  - `PROGRESS.md`
+- Validation command(s):
+  - `git fetch --all --prune`
+  - `git branch -a --no-color`
+  - `rg -n "plan.md|Branch Plan|Every branch must carry" AGENT.md CONTRIBUTING.md scripts/new-branch.ps1 plan.md`
+- Metrics:
+  - Local branches present: `2` (`master`, `tech/structure-analysis-cues-v2`)
+  - Remote branches present: `1` (`origin/master`)
+- Artifacts:
+  - No benchmark artifact in this planning/policy step.
+- Decision:
+  - Keep `plan.md` mandatory for every branch.
+  - `master` still needs its own branch-local `plan.md`; add it directly on `master` rather than reusing this feature branch plan.
+
+## 2026-04-28
+- Branch:
+  - `tech/structure-analysis-cues-v2`
+- Hypothesis:
+  - The branch-plan rule is too weak unless `AGENT.md` explicitly requires `plan.md` to be updated every time branch intent changes, not only when the file is first created.
+- Change:
+  - Tightened `AGENT.md` so `plan.md` must be reviewed and updated whenever the branch plan changes in substance:
+    - new comparisons
+    - dropped directions
+    - changed decision gates
+    - changed next intended move
+  - Added same-prompt enforcement so `plan.md` updates are not deferred after branch direction changes.
+- Files touched:
+  - `AGENT.md`
+  - `PROGRESS.md`
+- Validation command(s):
+  - `rg -n "plan.md|every time|same prompt" AGENT.md`
+- Metrics:
+  - No benchmark metrics in this policy-only step.
+- Artifacts:
+  - No run artifact.
+- Decision:
+  - Keep the stronger wording.
+  - Future branch work should treat `plan.md` as a living branch contract, not a one-time stub.
