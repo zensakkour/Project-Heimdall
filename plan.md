@@ -14,6 +14,11 @@ The current stack already benefits from weighted hard-negative retrieval adaptat
 ## Direction
 We will improve in stages instead of jumping straight to a single heavy architecture.
 
+Practical execution note:
+- This branch may advance a geometry-lite rerank probe in parallel before the full backbone decision is finished.
+- Reason: geometry-aware scene cues can be prototyped inside the current retrieval path with low integration risk, while `RemoteCLIP` / `GeoRSCLIP` require larger model-adapter and index-rebuild work.
+- Constraint: no backbone conclusion will be claimed without the planned compare/choose stage.
+
 ### Stage 1: Compare Remote-Sensing Backbones
 Goal:
 - Compare the current CLIP-based retrieval path against remote-sensing-specialized alternatives before adding more handcrafted logic.
@@ -77,6 +82,27 @@ Why:
 Goal:
 - Progress toward geometry-aware matching once retrieval and structure signals are benchmarked.
 
+Bridge step before heavy BEV / 3D:
+- add geometry-lite cues inside retrieval reranking:
+  - corner spatial layout
+  - orthogonality / rectilinear line families
+  - footprint-like occupancy layout
+  - shadow elongation and direction confidence
+- use this as a cheap test for whether explicit geometry is helping before moving to more expensive BEV / 3D pipelines
+
+Probe status on this branch:
+- Initial geometry-lite probe is implemented in the retrieval rerank.
+- Current best measured branch setting on the canonical Paris realistic split is:
+  - `retrieval_structure_rerank_top_n=14`
+  - `retrieval_structure_rerank_weight=0.35`
+- Current branch result versus the weighted single-index control:
+  - `mean_km`: `15.08` -> `14.72`
+  - `within_1km_pct`: `13.89` -> `15.00`
+  - `within_2km_pct`: `27.22` -> `28.33`
+  - `within_10km_pct`: `65.00` -> `66.11`
+- Remaining issue:
+  - Weak-signal gating fixed the close-range regression, but the geometry-lite signature is now matching the earlier structure-rerank milestone rather than clearly surpassing it.
+
 Important scope rule:
 - This is not only for ground-to-satellite geolocation.
 - Ground-to-satellite geolocation is one target feature.
@@ -103,4 +129,4 @@ Decision gate:
    - keep current CLIP
    - switch to RemoteCLIP
    - switch to GeoRSCLIP
-4. Only after choosing, extend the structure-analysis rerank with stronger shadow and corner-layout signals.
+4. After the compare/choose stage, refit retrieval adaptation and decide whether heavier BEV / 3D work is justified.

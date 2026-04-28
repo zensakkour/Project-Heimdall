@@ -21,8 +21,11 @@ This is the current technical state of the geo stack in the development branch:
     - corner density
     - edge density
     - dominant line-orientation histogram
-    - guarded dark-mass / shadow-axis cue for weak illumination layout evidence
-    - canonical weighted single-index Paris realistic split (`n=180`): `mean_km` `15.08` -> `14.72`, `median_km` `4.89` -> `4.59`, `within_1km_pct` `13.89` -> `15.00`, `within_2km_pct` `27.22` -> `28.33`
+    - corner / edge spatial layout
+    - line orthogonality / anisotropy
+    - guarded dark-mass / shadow-axis cue plus shadow elongation for weak illumination-layout evidence
+    - weak-signal gating now keeps those geometry-lite cues secondary unless the layout evidence is distinctive
+    - current branch geometry-lite benchmark (`n=180`, `top_n=14`, `weight=0.35`): `mean_km` `15.08` -> `14.72`, `median_km` `4.89` -> `4.59`, `within_1km_pct` `13.89` -> `15.00`, `within_2km_pct` `27.22` -> `28.33`
   - Retrieval source-fusion mode control (`weighted_score` or `rrf`) for multi-index aggregation strategy
   - Retrieval consensus top-1 refinement now performs adaptive center selection (cluster centroid vs weighted geo-median) using local support gating for close-range precision and local outlier robustness
   - Retrieval KDE mode refinement can improve close-range/top-radius metrics in objective-specific profiles:
@@ -151,6 +154,8 @@ Configure retrieval in `src/config/defaults.json`:
 - `geolocator.retrieval_query_tta_degrees`
 - `geolocator.retrieval_query_tta_reduce` (`mean`, `median`, `max`, or `rrf`)
 - `geolocator.candidate_source_balance_beta` (source balancing across merged retrieval/GeoCLIP/EXIF candidates)
+
+`src.tools.tune_retrieval_geo` can now sweep `retrieval_structure_rerank_top_n` and `retrieval_structure_rerank_weight` directly when structure / geometry-lite rerank settings need controlled comparison.
 
 ### UI Geo Profiles
 The analysis UI can switch between geo profiles (tabs in the Inputs section):

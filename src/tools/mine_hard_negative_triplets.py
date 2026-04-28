@@ -115,6 +115,55 @@ def load_eval_failures(eval_report: Path) -> List[EvalFailure]:
     return out
 
 
+def load_eval_failures_many(paths: Sequence[Path]) -> List[EvalFailure]:
+    out: List[EvalFailure] = []
+    for path in paths:
+        out.extend(load_eval_failures(path))
+    return out
+
+
+def merge_failures(
+    failures: Sequence[EvalFailure],
+    *,
+    max_failures_per_query: int = 0,
+) -> List[EvalFailure]:
+    grouped: Dict[str, List[EvalFailure]] = {}
+    for fail in failures:
+        key = Path(str(fail.query_path)).as_posix()
+        grouped.setdefault(key, []).append(fail)
+
+    merged: List[EvalFailure] = []
+    for query_path in sorted(grouped):
+        rows = sorted(
+            grouped[query_path],
+            key=lambda item: (
+                -float(_safe_float(item.distance_km) or 0.0),
+                -(1 if item.pred_latitude is not None and item.pred_longitude is not None else 0),
+            ),
+        )
+        seen = set()
+        kept = 0
+        for item in rows:
+            pred_lat = _safe_float(item.pred_latitude)
+            pred_lon = _safe_float(item.pred_longitude)
+            error_km = _safe_float(item.distance_km)
+            dedupe_key = (
+                round(float(item.gt_latitude), 7),
+                round(float(item.gt_longitude), 7),
+                round(pred_lat, 7) if pred_lat is not None else None,
+                round(pred_lon, 7) if pred_lon is not None else None,
+                round(error_km, 4) if error_km is not None else None,
+            )
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+            merged.append(item)
+            kept += 1
+            if max_failures_per_query > 0 and kept >= int(max_failures_per_query):
+                break
+    return merged
+
+
 def _record_maps(records: Sequence[GeoRecord]) -> tuple[Dict[str, GeoRecord], Dict[str, GeoRecord]]:
     by_path: Dict[str, GeoRecord] = {}
     by_name: Dict[str, GeoRecord] = {}
@@ -433,6 +482,22 @@ def _write_jsonl(path: Path, rows: Iterable[dict]) -> int:
     return count
 
 
+def _parse_eval_report_paths(raw_single: str, raw_multi: str) -> List[Path]:
+    ordered: List[Path] = []
+    seen = set()
+    for raw_group in (str(raw_single), str(raw_multi)):
+        for item in raw_group.split(","):
+            text = item.strip()
+            if not text:
+                continue
+            key = str(Path(text))
+            if key in seen:
+                continue
+            seen.add(key)
+            ordered.append(Path(text))
+    return ordered
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Mine hard-negative triplets from eval failures.")
     parser.add_argument("--metadata", required=True, help="Metadata CSV (path, latitude, longitude).")
@@ -445,6 +510,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         "--eval-report",
         default="",
         help="Optional run_geo_eval JSON report containing sample-level GT/pred diagnostics.",
+    )
+    parser.add_argument(
+        "--eval-reports",
+        default="",
+        help="Optional comma-separated list of run_geo_eval JSON reports merged into one mining pool.",
     )
     parser.add_argument("--output", default="runs/hard_negative_triplets.jsonl", help="Output triplet JSONL path.")
     parser.add_argument("--summary-output", default="runs/hard_negative_triplets_summary.json")
@@ -476,6 +546,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--no-scene-dedupe", action="store_true")
     parser.add_argument("--sample-count", type=int, default=800, help="Used when --eval-report is not provided.")
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--max-failures-per-query",
+        type=int,
+        default=0,
+        help="Keep only the top-N hardest failures per query after merging reports (0 keeps all).",
+    )
     args = parser.parse_args(argv)
 
     metadata_path = Path(args.metadata)
@@ -488,9 +564,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         if not reference_records:
             raise ValueError("reference_metadata_empty_or_invalid")
 
-    eval_report = args.eval_report.strip()
-    if eval_report:
-        failures = load_eval_failures(Path(eval_report))
+    eval_report_paths = _parse_eval_report_paths(args.eval_report, args.eval_reports)
+    if eval_report_paths:
+        failures = merge_failures(
+            load_eval_failures_many(eval_report_paths),
+            max_failures_per_query=int(max(0, args.max_failures_per_query)),
+        )
     else:
         failures = _synthetic_failures_from_metadata(records, sample_count=args.sample_count, seed=args.seed)
 
@@ -517,7 +596,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     summary = {
         "metadata": str(metadata_path),
         "reference_metadata": str(Path(args.reference_metadata)) if str(args.reference_metadata).strip() else None,
-        "eval_report": eval_report or None,
+        "eval_report": (str(eval_report_paths[0]) if len(eval_report_paths) == 1 else None),
+        "eval_reports": [str(path) for path in eval_report_paths],
         "total_records": len(records),
         "total_reference_records": len(reference_records) if reference_records is not None else len(records),
         "total_failures_considered": len(failures),
@@ -534,6 +614,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         "difficulty_mode": str(args.difficulty_mode),
         "difficulty_reference_km": float(args.difficulty_reference_km),
         "difficulty_max_weight": float(args.difficulty_max_weight),
+        "max_failures_per_query": int(max(0, args.max_failures_per_query)),
         **triplet_summary,
     }
     summary_path = Path(args.summary_output)
