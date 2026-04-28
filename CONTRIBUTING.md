@@ -21,10 +21,11 @@ Examples:
 
 ## Workflow
 1. Branch off `master`.
-2. Commit small, focused changes.
-3. Open a pull request using the PR template.
-4. Run local tests before merge (`python -m pytest -q`).
-5. Merge back quickly and delete the branch.
+2. Create or update the branch root `plan.md` immediately after branching. It must describe the branch goal, comparison plan, decision gates, and intended next move.
+3. Commit small, focused changes.
+4. Open a pull request using the PR template.
+5. Run local tests before merge (`python -m pytest -q`).
+6. Merge back quickly and delete the branch.
 
 ## Commit Messages
 Use Conventional Commits:
