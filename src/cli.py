@@ -74,6 +74,8 @@ def build_pipeline(
             local_match_weight=geo_cfg.retrieval_local_match_weight,
             local_match_ratio=geo_cfg.retrieval_local_match_ratio,
             local_match_max_features=geo_cfg.retrieval_local_match_max_features,
+            structure_rerank_top_n=geo_cfg.retrieval_structure_rerank_top_n,
+            structure_rerank_weight=geo_cfg.retrieval_structure_rerank_weight,
             graph_rerank_top_n=geo_cfg.retrieval_graph_rerank_top_n,
             graph_rerank_sigma_km=geo_cfg.retrieval_graph_rerank_sigma_km,
             graph_rerank_score_alpha=geo_cfg.retrieval_graph_rerank_score_alpha,

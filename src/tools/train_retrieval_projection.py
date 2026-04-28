@@ -36,6 +36,7 @@ class TripletRecord:
     query_idx: int
     positive_indices: Tuple[int, ...]
     negative_indices: Tuple[int, ...]
+    sample_weight: float = 1.0
 
 
 def _as_posix(path: str) -> str:
@@ -111,6 +112,43 @@ def _collect_requested_paths(triplets: Sequence[dict]) -> List[str]:
     return ordered
 
 
+def _safe_float(value: object) -> Optional[float]:
+    try:
+        num = float(value)
+    except Exception:
+        return None
+    if not math.isfinite(num):
+        return None
+    return num
+
+
+def _resolve_triplet_weight(
+    row: dict,
+    *,
+    sample_weight_mode: str,
+    sample_weight_power: float,
+    sample_weight_max: float,
+) -> tuple[float, bool]:
+    mode = str(sample_weight_mode).strip().lower()
+    explicit = False
+    weight = 1.0
+
+    if mode != "uniform":
+        raw = _safe_float(row.get("triplet_weight"))
+        if raw is not None and raw > 0.0:
+            weight = float(raw)
+            explicit = True
+
+    if sample_weight_max > 0.0:
+        weight = min(weight, float(sample_weight_max))
+
+    power = max(0.0, float(sample_weight_power))
+    if power != 1.0:
+        weight = weight**power
+
+    return max(1e-6, float(weight)), explicit
+
+
 def _load_index_embeddings(index_path: Path) -> tuple[Dict[str, np.ndarray], Dict[str, np.ndarray], int]:
     idx = load_index(index_path)
     by_exact: Dict[str, np.ndarray] = {}
@@ -138,6 +176,105 @@ def _lookup_embedding(
     if by_base is not None:
         by_exact[as_key] = by_base
     return by_base
+
+
+def _summarize_missing_paths_by_role(
+    triplets: Sequence[dict],
+    *,
+    by_exact: Dict[str, np.ndarray],
+    by_name: Dict[str, np.ndarray],
+    max_examples: int = 3,
+) -> dict:
+    missing_sets = {
+        "query": set(),
+        "positive": set(),
+        "negative": set(),
+    }
+    examples = {
+        "query": [],
+        "positive": [],
+        "negative": [],
+    }
+
+    def note(role: str, path: str) -> None:
+        key = _as_posix(str(path or "").strip())
+        if not key or key in missing_sets[role]:
+            return
+        if _lookup_embedding(key, by_exact=by_exact, by_name=by_name) is not None:
+            return
+        missing_sets[role].add(key)
+        if len(examples[role]) < max(0, int(max_examples)):
+            examples[role].append(key)
+
+    for row in triplets:
+        note("query", str(row.get("query_path") or ""))
+        for item in row.get("positives", []):
+            note("positive", str((item or {}).get("path") or ""))
+        for item in row.get("hard_negatives", []):
+            note("negative", str((item or {}).get("path") or ""))
+
+    return {
+        "query_missing": len(missing_sets["query"]),
+        "positive_missing": len(missing_sets["positive"]),
+        "negative_missing": len(missing_sets["negative"]),
+        "query_examples": list(examples["query"]),
+        "positive_examples": list(examples["positive"]),
+        "negative_examples": list(examples["negative"]),
+    }
+
+
+def _format_no_valid_training_records_error(
+    *,
+    triplets_loaded: int,
+    requested_unique_paths: int,
+    dataset_stats: dict,
+    missing_summary: dict,
+    embedding_index: str,
+    images_dir: str,
+) -> str:
+    query_missing = int(missing_summary.get("query_missing") or 0)
+    positive_missing = int(missing_summary.get("positive_missing") or 0)
+    negative_missing = int(missing_summary.get("negative_missing") or 0)
+
+    hint = (
+        "check that triplet paths, embedding index, and image root refer to the same dataset split."
+    )
+    if query_missing > 0 and positive_missing <= 0 and negative_missing <= 0:
+        hint = (
+            "query embeddings are missing from the chosen index; use --images-dir to backfill query images "
+            "or point --embedding-index at an index that covers the query paths."
+        )
+    elif query_missing <= 0 and (positive_missing > 0 or negative_missing > 0):
+        hint = (
+            "positive/negative embeddings are missing from the chosen index; if triplets were mined with "
+            "--reference-metadata, point --embedding-index at the reference index instead of the query index."
+        )
+    elif query_missing > 0 and (positive_missing > 0 or negative_missing > 0):
+        hint = (
+            "both query and reference embeddings are missing; ensure the reference pool is covered by "
+            "--embedding-index and any query-only images are reachable under --images-dir."
+        )
+
+    parts = [
+        "no_valid_training_records",
+        f"triplets_loaded={int(triplets_loaded)}",
+        f"requested_unique_paths={int(requested_unique_paths)}",
+        f"dropped_missing={int(dataset_stats.get('dropped_missing') or 0)}",
+        f"dropped_structure={int(dataset_stats.get('dropped_structure') or 0)}",
+        f"missing_query={query_missing}",
+        f"missing_positive={positive_missing}",
+        f"missing_negative={negative_missing}",
+    ]
+    if str(embedding_index).strip():
+        parts.append(f"embedding_index={embedding_index}")
+    if str(images_dir).strip():
+        parts.append(f"images_dir={images_dir}")
+    for role in ("query", "positive", "negative"):
+        role_examples = list(missing_summary.get(f"{role}_examples") or [])
+        if role_examples:
+            parts.append(f"{role}_examples={','.join(role_examples)}")
+    parts.append(f"hint={hint}")
+    return ": ".join([parts[0], " ".join(parts[1:])])
 
 
 def _embed_missing(
@@ -174,6 +311,9 @@ def _build_training_records(
     *,
     by_exact: Dict[str, np.ndarray],
     by_name: Dict[str, np.ndarray],
+    sample_weight_mode: str = "auto",
+    sample_weight_power: float = 1.0,
+    sample_weight_max: float = 0.0,
 ) -> tuple[np.ndarray, List[TripletRecord], dict]:
     path_to_idx: Dict[str, int] = {}
     vectors: List[np.ndarray] = []
@@ -194,6 +334,8 @@ def _build_training_records(
     used_rows: List[TripletRecord] = []
     dropped_missing = 0
     dropped_structure = 0
+    explicit_weight_rows = 0
+    sample_weights: List[float] = []
     for row in triplets:
         q_path = str(row.get("query_path") or "").strip()
         if not q_path:
@@ -229,11 +371,21 @@ def _build_training_records(
         if not pos_ids or not neg_ids:
             dropped_structure += 1
             continue
+        sample_weight, had_explicit_weight = _resolve_triplet_weight(
+            row,
+            sample_weight_mode=sample_weight_mode,
+            sample_weight_power=sample_weight_power,
+            sample_weight_max=sample_weight_max,
+        )
+        if had_explicit_weight:
+            explicit_weight_rows += 1
+        sample_weights.append(sample_weight)
         used_rows.append(
             TripletRecord(
                 query_idx=int(q_idx),
                 positive_indices=tuple(int(v) for v in pos_ids),
                 negative_indices=tuple(int(v) for v in neg_ids),
+                sample_weight=float(sample_weight),
             )
         )
 
@@ -251,6 +403,11 @@ def _build_training_records(
         "dropped_structure": dropped_structure,
         "unique_embeddings": int(mat.shape[0]),
         "embedding_dim": int(mat.shape[1]),
+        "sample_weight_mode": str(sample_weight_mode),
+        "triplets_with_explicit_weight": int(explicit_weight_rows),
+        "sample_weight_min": float(min(sample_weights)) if sample_weights else None,
+        "sample_weight_mean": float(sum(sample_weights) / len(sample_weights)) if sample_weights else None,
+        "sample_weight_max": float(max(sample_weights)) if sample_weights else None,
     }
     return mat, used_rows, stats
 
@@ -284,10 +441,14 @@ def _evaluate_margin_stats(
             "median_gap": None,
             "p90_gap": None,
             "triplet_satisfied_pct": 0.0,
+            "weighted_triplet_satisfied_pct": 0.0,
             "hard_triplet_loss": None,
+            "weighted_hard_triplet_loss": None,
+            "weighted_mean_gap": None,
         }
     gaps: List[float] = []
     losses: List[float] = []
+    weights: List[float] = []
     with torch.no_grad():
         for row in rows:
             q = model(base_embeddings[row.query_idx : row.query_idx + 1])
@@ -300,11 +461,19 @@ def _evaluate_margin_stats(
             gap = float(hard_pos.item() - hard_neg.item())
             gaps.append(gap)
             losses.append(float(F.relu(torch.tensor(float(margin), device=q.device) - (hard_pos - hard_neg)).item()))
+            weights.append(float(max(1e-6, row.sample_weight)))
     gaps_sorted = sorted(gaps)
     n = len(gaps_sorted)
+    total_weight = float(sum(weights)) if weights else 0.0
 
     def pct(v: float) -> float:
         return 100.0 * float(sum(1 for x in gaps if x >= v)) / float(n)
+
+    def weighted_pct(v: float) -> float:
+        if total_weight <= 0.0:
+            return 0.0
+        kept = sum(weight for gap, weight in zip(gaps, weights) if gap >= v)
+        return 100.0 * float(kept) / total_weight
 
     def percentile(p: float) -> float:
         idx = max(0, min(n - 1, int(round((p / 100.0) * (n - 1)))))
@@ -316,7 +485,14 @@ def _evaluate_margin_stats(
         "median_gap": percentile(50.0),
         "p90_gap": percentile(90.0),
         "triplet_satisfied_pct": pct(float(margin)),
+        "weighted_triplet_satisfied_pct": weighted_pct(float(margin)),
         "hard_triplet_loss": float(sum(losses) / n),
+        "weighted_hard_triplet_loss": (
+            float(sum(weight * loss for weight, loss in zip(weights, losses)) / total_weight) if total_weight > 0.0 else None
+        ),
+        "weighted_mean_gap": (
+            float(sum(weight * gap for weight, gap in zip(weights, gaps)) / total_weight) if total_weight > 0.0 else None
+        ),
     }
 
 
@@ -333,6 +509,9 @@ def train_projection(
     temperature: float,
     ce_weight: float,
     orth_weight: float,
+    sample_weight_mode: str,
+    sample_weight_power: float,
+    sample_weight_max: float,
     seed: int,
     device: str,
 ) -> tuple[np.ndarray, np.ndarray, dict]:
@@ -384,9 +563,10 @@ def train_projection(
                 continue
             optimizer.zero_grad(set_to_none=True)
             batch_loss = torch.tensor(0.0, dtype=torch.float32, device=torch_device)
-            valid_count = 0
+            batch_weight_total = 0.0
             for idx in batch_ids:
                 row = rows[idx]
+                row_weight = float(max(1e-6, row.sample_weight))
                 q = model(base[row.query_idx : row.query_idx + 1])
                 pos = model(base[list(row.positive_indices)])
                 neg = model(base[list(row.negative_indices)])
@@ -399,12 +579,12 @@ def train_projection(
                 logits = torch.cat([pos_logit.view(1), sim_neg], dim=0).view(1, -1) / temp
                 ce = F.cross_entropy(logits, torch.zeros(1, dtype=torch.long, device=torch_device))
                 loss = tri + float(max(0.0, ce_weight)) * ce
-                batch_loss = batch_loss + loss
-                valid_count += 1
+                batch_loss = batch_loss + (loss * row_weight)
+                batch_weight_total += row_weight
 
-            if valid_count <= 0:
+            if batch_weight_total <= 0.0:
                 continue
-            batch_loss = batch_loss / float(valid_count)
+            batch_loss = batch_loss / float(batch_weight_total)
             if orth_weight > 0.0 and input_dim == out_dim:
                 w = model.linear.weight
                 eye = torch.eye(out_dim, dtype=w.dtype, device=w.device)
@@ -441,6 +621,9 @@ def train_projection(
         "temperature": float(temp),
         "ce_weight": float(ce_weight),
         "orth_weight": float(orth_weight),
+        "sample_weight_mode": str(sample_weight_mode),
+        "sample_weight_power": float(sample_weight_power),
+        "sample_weight_max": float(sample_weight_max),
         "elapsed_sec": elapsed,
         "history": history,
     }
@@ -465,6 +648,24 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--temperature", type=float, default=0.07)
     parser.add_argument("--ce-weight", type=float, default=0.5)
     parser.add_argument("--orth-weight", type=float, default=0.01)
+    parser.add_argument(
+        "--sample-weight-mode",
+        default="auto",
+        choices=["auto", "uniform", "triplet_weight"],
+        help="Use uniform weighting or consume triplet_weight from mined JSONL rows.",
+    )
+    parser.add_argument(
+        "--sample-weight-power",
+        type=float,
+        default=1.0,
+        help="Exponent applied to triplet weights after optional clipping.",
+    )
+    parser.add_argument(
+        "--sample-weight-max",
+        type=float,
+        default=0.0,
+        help="Optional cap for triplet weights (0 disables additional clipping).",
+    )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--device", default="auto", help="auto|cpu|cuda")
     args = parser.parse_args(argv)
@@ -488,6 +689,8 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     embed_written = 0
     embed_missing = 0
+    missing_by_role_before_embed = _summarize_missing_paths_by_role(triplets, by_exact=by_exact, by_name=by_name)
+    missing_by_role_after_embed = dict(missing_by_role_before_embed)
     if requested_paths:
         missing_before_embed = [
             path
@@ -515,10 +718,27 @@ def main(argv: Optional[List[str]] = None) -> int:
                     images_dir=images_dir,
                     device=use_device,
                 )
+        missing_by_role_after_embed = _summarize_missing_paths_by_role(triplets, by_exact=by_exact, by_name=by_name)
 
-    matrix, rows, ds_stats = _build_training_records(triplets, by_exact=by_exact, by_name=by_name)
+    matrix, rows, ds_stats = _build_training_records(
+        triplets,
+        by_exact=by_exact,
+        by_name=by_name,
+        sample_weight_mode=str(args.sample_weight_mode),
+        sample_weight_power=float(max(0.0, args.sample_weight_power)),
+        sample_weight_max=float(max(0.0, args.sample_weight_max)),
+    )
     if matrix.size <= 0 or not rows:
-        raise ValueError("no_valid_training_records")
+        raise ValueError(
+            _format_no_valid_training_records_error(
+                triplets_loaded=len(triplets),
+                requested_unique_paths=len(requested_paths),
+                dataset_stats=ds_stats,
+                missing_summary=missing_by_role_after_embed,
+                embedding_index=str(args.embedding_index).strip(),
+                images_dir=str(args.images_dir).strip(),
+            )
+        )
     input_dim = int(matrix.shape[1])
     output_dim = int(args.output_dim) if int(args.output_dim) > 0 else input_dim
 
@@ -534,6 +754,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         temperature=float(max(1e-4, args.temperature)),
         ce_weight=float(max(0.0, args.ce_weight)),
         orth_weight=float(max(0.0, args.orth_weight)),
+        sample_weight_mode=str(args.sample_weight_mode),
+        sample_weight_power=float(max(0.0, args.sample_weight_power)),
+        sample_weight_max=float(max(0.0, args.sample_weight_max)),
         seed=int(args.seed),
         device=str(args.device),
     )
@@ -556,7 +779,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         "triplets_used": len(rows),
         "requested_unique_paths": len(requested_paths),
         "embedded_from_images": int(embed_written),
+        "missing_by_role_before_embed": missing_by_role_before_embed,
         "missing_after_embed": int(embed_missing),
+        "missing_by_role_after_embed": missing_by_role_after_embed,
         "dataset_stats": ds_stats,
         "training": train_report,
         "projection_path": str(output_path),

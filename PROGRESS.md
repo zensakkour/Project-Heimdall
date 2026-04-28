@@ -1358,3 +1358,182 @@ Do not delete or edit past entries. Append new work at the end.
     - `paris_close_range_dual_rrf`: best default for close-range (`<=1km`/`<=2km`) without major mean regression.
     - `paris_balanced_dual_rrf`: best balanced profile for mean/median/`<=10km` while preserving `<=2km` gain.
     - `paris_close_range_dual_rrf_graph_kde`: aggressive W1 profile with highest measured `<=1km`, accepted only when slight broader-radius regression is acceptable.
+
+## 2026-04-28
+- Hypothesis:
+  - Projection adaptation should learn faster from error-driven geo triplets if severe/confusion-rich failures contribute more weight than easy failures instead of all triplets being uniform.
+- Change:
+  - Upgraded `src/tools/mine_hard_negative_triplets.py`:
+    - emits `triplet_weight`, `hard_negative_source_counts`, and nearest positive/negative distance diagnostics per triplet.
+    - added CLI controls: `--difficulty-mode`, `--difficulty-reference-km`, `--difficulty-max-weight`.
+  - Upgraded `src/tools/train_retrieval_projection.py`:
+    - added weighted training controls: `--sample-weight-mode`, `--sample-weight-power`, `--sample-weight-max`.
+    - trainer now consumes `triplet_weight` and reports weighted triplet satisfaction/loss metrics plus dataset weight summaries.
+  - Added regression coverage for the new mining/training contract.
+  - Updated `README.md` and `src/docs/RESEARCH_PAPER.md` to document the weighted hard-negative workflow.
+- Files touched:
+  - `src/tools/mine_hard_negative_triplets.py`
+  - `src/tools/train_retrieval_projection.py`
+  - `src/tests/test_mine_hard_negative_triplets.py`
+  - `src/tests/test_train_retrieval_projection.py`
+  - `README.md`
+  - `src/docs/RESEARCH_PAPER.md`
+  - `PROGRESS.md`
+- Validation command(s):
+  - `./.venv/Scripts/python -m pytest -q src/tests/test_mine_hard_negative_triplets.py`
+  - `./.venv/Scripts/python -m pytest -q src/tests/test_train_retrieval_projection.py`
+- Metrics:
+  - Mining regression tests: `5 passed`.
+  - Projection training regression tests: `2 passed, 3 warnings`.
+  - No new leakage-safe geo benchmark artifact was produced in this prompt, so no accuracy claim is added.
+- Artifacts:
+  - No new `runs/*.json` benchmark artifact in this prompt.
+- Decision:
+  - Keep the weighted hard-negative infrastructure.
+  - Next step should be a controlled realistic-split comparison: uniform projection training vs difficulty-weighted projection training using the same triplet pool and seed.
+
+## 2026-04-28
+- Hypothesis:
+  - The branch graph should be simplified once feature work has either landed on `master` or been reduced to stale branch-sync merges, so future work is not obscured by dead refs.
+- Change:
+  - Audited every local/remote branch against `master` using ahead/behind and unique-commit checks.
+  - Confirmed there were no remaining non-merge commits outside `master`.
+  - Deleted stale local branches and matching remote branches:
+    - `feature/film-ui-operator-lab`
+    - `tech/accuracy-backbone-upgrade-v1`
+    - `tech/accuracy-rtx5060-sprint`
+    - `tech/dba-index-augmentation`
+    - `tech/eval-regression-lab`
+    - `tech/geo-prior-gating-accuracy`
+    - `tech/geo-retrieval-v3`
+    - `tech/major-accuracy-upgrade`
+    - `tech/model-hardening`
+    - `tech/projection-iter2`
+    - `tech/projection-v2-geo-prior-benchmark`
+    - `tech/retrieval-method-upgrades-v2`
+    - `tech/run-geo-eval-scope-guard`
+- Files touched:
+  - `PROGRESS.md`
+- Validation command(s):
+  - `git fetch --all --prune`
+  - `git rev-list --left-right --count master...<branch>`
+  - `git log --oneline --no-merges master..<branch>`
+  - `git branch --merged master`
+  - `git branch --no-merged master`
+  - `git push origin --delete <branch...>`
+  - `git branch -a --no-color`
+- Metrics:
+  - Remaining local branches: `1` (`master`)
+  - Remaining remote branches: `1` (`origin/master`)
+  - Branches deleted: `13`
+- Artifacts:
+  - No benchmark or modeling artifact was produced in this maintenance step.
+- Decision:
+  - Keep `master` as the only active branch until new feature work justifies new scoped topic branches.
+
+## 2026-04-28
+- Hypothesis:
+  - Difficulty-aware weighting should outperform uniform weighting when projection training reuses the same query-vs-reference hard-negative triplet pool, and split-mismatch failures should be explained directly by the trainer instead of surfacing as a generic empty-dataset error.
+- Change:
+  - Mined weighted query-vs-reference triplets from the canonical Paris realistic eval using `--reference-metadata`.
+  - Trained matched uniform and difficulty-weighted projection heads on the same `68` triplets with the same seed (`42`).
+  - Applied both projections to the same Paris reference index and evaluated both on the canonical realistic retrieval-only split (`n=180`).
+  - Improved `src/tools/train_retrieval_projection.py`:
+    - report now includes missing path counts by role before/after image backfill.
+    - `no_valid_training_records` now carries a split-aware hint when positives/negatives are missing because the wrong embedding index was chosen.
+  - Updated regression coverage and docs to reflect the corrected query/reference workflow and measured weighted-vs-uniform result.
+- Files touched:
+  - `src/tools/train_retrieval_projection.py`
+  - `src/tests/test_train_retrieval_projection.py`
+  - `README.md`
+  - `src/docs/RESEARCH_PAPER.md`
+  - `PROGRESS.md`
+- Validation command(s):
+  - `./.venv/Scripts/python -m src.tools.mine_hard_negative_triplets --metadata data/spacenet_paris_test/metadata.csv --reference-metadata data/spacenet_paris/metadata.csv --eval-report runs/geo_eval_paris_profile_180_for_mining_v1.json --output runs/hard_negative_triplets_paris_test_query_train_ref_v2_weighted.jsonl --summary-output runs/hard_negative_triplets_paris_test_query_train_ref_v2_weighted_summary.json --min-error-km 2.0 --positive-radius-km 0.35 --negative-pred-radius-km 2.0 --negative-min-gt-distance-km 2.0 --negative-max-gt-distance-km 25.0 --max-positives 3 --max-negatives 12 --difficulty-mode error_km_predmix --difficulty-reference-km 10.0 --difficulty-max-weight 3.0`
+  - `./.venv/Scripts/python -m src.tools.train_retrieval_projection --triplets runs/hard_negative_triplets_paris_test_query_train_ref_v2_weighted.jsonl --embedding-index data/geo_index/spacenet_paris_chips_openai_clip_vit_large_patch14.npz --images-dir data/spacenet_paris_test/chips --output runs/retrieval_projection_paris_query_trainref_v2_uniform_cmp.npz --report-output runs/retrieval_projection_paris_query_trainref_v2_uniform_cmp.report.json --epochs 8 --batch-size 16 --learning-rate 3e-4 --weight-decay 1e-4 --margin 0.08 --temperature 0.07 --ce-weight 0.3 --orth-weight 0.002 --sample-weight-mode uniform --seed 42 --device cpu`
+  - `./.venv/Scripts/python -m src.tools.train_retrieval_projection --triplets runs/hard_negative_triplets_paris_test_query_train_ref_v2_weighted.jsonl --embedding-index data/geo_index/spacenet_paris_chips_openai_clip_vit_large_patch14.npz --images-dir data/spacenet_paris_test/chips --output runs/retrieval_projection_paris_query_trainref_v2_weighted_cmp.npz --report-output runs/retrieval_projection_paris_query_trainref_v2_weighted_cmp.report.json --epochs 8 --batch-size 16 --learning-rate 3e-4 --weight-decay 1e-4 --margin 0.08 --temperature 0.07 --ce-weight 0.3 --orth-weight 0.002 --sample-weight-mode triplet_weight --sample-weight-max 3.0 --seed 42 --device cpu`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config runs/bench_cfg/cfg_paris_projection_trainref_v2_uniform_cmp.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 180 --seed 42 --diag-samples 180 --output runs/geo_eval_projection_trainref_v2_uniform_cmp_180.json`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config runs/bench_cfg/cfg_paris_projection_trainref_v2_weighted_cmp.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 180 --seed 42 --diag-samples 180 --output runs/geo_eval_projection_trainref_v2_weighted_cmp_180.json`
+  - `./.venv/Scripts/python -m pytest -q src/tests/test_train_retrieval_projection.py`
+- Metrics:
+  - Uniform single-index projection (`n=180`): `mean_km=15.252`, `median_km=5.504`, `within_1km_pct=11.67`, `within_2km_pct=26.67`, `within_5km_pct=50.00`, `within_10km_pct=64.44`.
+  - Difficulty-weighted single-index projection (`n=180`): `mean_km=15.081`, `median_km=4.888`, `within_1km_pct=13.89`, `within_2km_pct=27.22`, `within_5km_pct=51.67`, `within_10km_pct=65.00`.
+  - Training-side final epoch: `triplet_satisfied_pct` `27.94 -> 29.41`, `weighted_triplet_satisfied_pct` `27.94 -> 30.99`, `weighted_hard_triplet_loss` `0.1016 -> 0.0994`.
+  - Projection training regression tests: `3 passed, 3 warnings`.
+- Artifacts:
+  - `runs/hard_negative_triplets_paris_test_query_train_ref_v2_weighted.jsonl`
+  - `runs/hard_negative_triplets_paris_test_query_train_ref_v2_weighted_summary.json`
+  - `runs/retrieval_projection_paris_query_trainref_v2_uniform_cmp.npz`
+  - `runs/retrieval_projection_paris_query_trainref_v2_uniform_cmp.report.json`
+  - `runs/retrieval_projection_paris_query_trainref_v2_weighted_cmp.npz`
+  - `runs/retrieval_projection_paris_query_trainref_v2_weighted_cmp.report.json`
+  - `runs/geo_eval_projection_trainref_v2_uniform_cmp_180.json`
+  - `runs/geo_eval_projection_trainref_v2_weighted_cmp_180.json`
+- Decision:
+  - Promote difficulty-weighted triplet training over uniform weighting for the next single-index projection retraining cycle.
+  - Keep the new split-mismatch diagnostics; query-vs-reference training should use the reference index plus query-image backfill, not the query-only index.
+
+## 2026-04-28
+- Branch:
+  - `tech/structure-rerank-cues`
+- Hypothesis:
+  - Retrieval should improve if top candidates are re-ranked with coarse scene-layout evidence that CLIP similarity alone does not model well enough, especially corners, street/building line structure, and weak shadow-direction cues.
+- Change:
+  - Added a structure-aware rerank stage to `GeoRetrievalProvider` before local geometric matching.
+  - New scene signature extracts:
+    - corner density
+    - edge density
+    - dominant line-orientation histogram
+    - guarded dark-mass / shadow-axis cue
+  - Added guarded blending and safety conditions:
+    - weak-signal skip
+    - minimum score-spread gate
+    - confident-top1 protection against noisy overthrow
+  - Added config/runtime plumbing:
+    - `retrieval_structure_rerank_top_n`
+    - `retrieval_structure_rerank_weight`
+  - Added focused regression coverage for promotion, weak-signal no-op, and confident-top1 guard behavior.
+  - Benchmarked the feature on top of the current weighted single-index projection baseline and updated docs.
+- Files touched:
+  - `src/core/geo/retrieval_provider.py`
+  - `src/core/logic/config.py`
+  - `src/cli.py`
+  - `src/batch_run.py`
+  - `src/tools/run_all.py`
+  - `src/tools/run_geo_eval.py`
+  - `src/tools/tune_retrieval_geo.py`
+  - `src/tools/ui_server.py`
+  - `src/tests/test_config_loading.py`
+  - `src/tests/test_retrieval_provider_multi_index.py`
+  - `README.md`
+  - `src/docs/GEO_TECH.md`
+  - `src/docs/RESEARCH_PAPER.md`
+  - `PROGRESS.md`
+- Validation command(s):
+  - `./.venv/Scripts/python -m pytest -q src/tests/test_config_loading.py src/tests/test_retrieval_provider_multi_index.py`
+  - `./.venv/Scripts/python -m pytest -q src/tests/test_run_geo_eval_retrieval_provider.py src/tests/test_tune_retrieval_geo.py`
+  - `./.venv/Scripts/python -m src.tools.run_geo_eval --retrieval-only --config runs/bench_cfg/cfg_paris_projection_trainref_v2_weighted_cmp_structure_v1.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 180 --seed 42 --diag-samples 180 --output runs/geo_eval_projection_trainref_v2_weighted_cmp_structure_v1_180.json`
+- Metrics:
+  - Focused config/retrieval tests: `25 passed, 3 warnings`.
+  - Runtime/tuning plumbing tests: `13 passed, 3 warnings`.
+  - Canonical weighted single-index Paris realistic split (`n=180`) baseline:
+    - `mean_km=15.0810`
+    - `median_km=4.8877`
+    - `within_1km_pct=13.89`
+    - `within_2km_pct=27.22`
+    - `within_5km_pct=51.67`
+    - `within_10km_pct=65.00`
+  - Structure-aware rerank (`top_n=12`, `weight=0.35`):
+    - `mean_km=14.7247`
+    - `median_km=4.5903`
+    - `within_1km_pct=15.00`
+    - `within_2km_pct=28.33`
+    - `within_5km_pct=53.33`
+    - `within_10km_pct=66.11`
+- Artifacts:
+  - `runs/bench_cfg/cfg_paris_projection_trainref_v2_weighted_cmp_structure_v1.json`
+  - `runs/geo_eval_projection_trainref_v2_weighted_cmp_180.json`
+  - `runs/geo_eval_projection_trainref_v2_weighted_cmp_structure_v1_180.json`
+- Decision:
+  - Keep structure-aware reranking as a promising experimental single-index upgrade.
+  - Do not promote it to default until it is replayed on additional leakage-safe splits beyond Paris.
