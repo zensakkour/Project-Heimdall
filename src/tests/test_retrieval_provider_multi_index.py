@@ -8,7 +8,12 @@ import pytest
 from PIL import Image
 
 from src.core.geo import retrieval_provider as retrieval_mod
-from src.core.geo.retrieval_provider import GeoRetrievalProvider, LoadedRetrievalIndex, RetrievalIndex
+from src.core.geo.retrieval_provider import (
+    GeoRetrievalProvider,
+    LoadedRetrievalIndex,
+    RetrievalIndex,
+    SceneStructureSignature,
+)
 from src.core.logic.types import GeoCandidate
 
 
@@ -760,6 +765,310 @@ def test_structure_rerank_respects_confident_top1_guard(monkeypatch: pytest.Monk
     )
     assert out
     assert [cand.match_id for cand in out[:2]] == ["a", "b"]
+
+
+def test_scene_structure_similarity_prefers_geometry_aligned_layout() -> None:
+    query = SceneStructureSignature(
+        corner_density=0.72,
+        edge_density=0.48,
+        line_hist=(0.34, 0.06, 0.02, 0.29, 0.05, 0.02, 0.11, 0.03, 0.01, 0.04, 0.02, 0.01),
+        line_strength=0.68,
+        corner_layout=(
+            0.18, 0.07, 0.02, 0.00,
+            0.09, 0.12, 0.03, 0.01,
+            0.02, 0.05, 0.16, 0.06,
+            0.00, 0.01, 0.08, 0.10,
+        ),
+        edge_layout=(
+            0.11, 0.08, 0.04, 0.02,
+            0.09, 0.10, 0.06, 0.03,
+            0.03, 0.06, 0.12, 0.09,
+            0.01, 0.03, 0.07, 0.06,
+        ),
+        line_orthogonality=0.84,
+        line_anisotropy=0.59,
+        footprint_layout=(
+            0.16, 0.06, 0.02, 0.01,
+            0.10, 0.11, 0.03, 0.01,
+            0.02, 0.05, 0.13, 0.08,
+            0.01, 0.02, 0.08, 0.11,
+        ),
+        footprint_orientation_hist=(0.28, 0.04, 0.02, 0.25, 0.05, 0.03, 0.16, 0.04, 0.02, 0.07, 0.02, 0.02),
+        footprint_rectangularity=0.73,
+        footprint_density=0.41,
+        shadow_axis_deg=212.0,
+        shadow_strength=0.43,
+        shadow_elongation=0.64,
+        sun_shadow_axis_deg=208.0,
+        sun_shadow_strength=0.48,
+    )
+    aligned = SceneStructureSignature(
+        corner_density=0.69,
+        edge_density=0.46,
+        line_hist=(0.31, 0.07, 0.03, 0.27, 0.06, 0.03, 0.13, 0.03, 0.01, 0.04, 0.01, 0.01),
+        line_strength=0.63,
+        corner_layout=query.corner_layout,
+        edge_layout=query.edge_layout,
+        line_orthogonality=0.81,
+        line_anisotropy=0.56,
+        footprint_layout=query.footprint_layout,
+        footprint_orientation_hist=query.footprint_orientation_hist,
+        footprint_rectangularity=0.70,
+        footprint_density=0.39,
+        shadow_axis_deg=206.0,
+        shadow_strength=0.40,
+        shadow_elongation=0.60,
+        sun_shadow_axis_deg=203.0,
+        sun_shadow_strength=0.44,
+    )
+    misaligned = SceneStructureSignature(
+        corner_density=0.70,
+        edge_density=0.47,
+        line_hist=(0.31, 0.07, 0.03, 0.27, 0.06, 0.03, 0.13, 0.03, 0.01, 0.04, 0.01, 0.01),
+        line_strength=0.63,
+        corner_layout=(
+            0.00, 0.02, 0.07, 0.18,
+            0.01, 0.03, 0.12, 0.09,
+            0.06, 0.16, 0.05, 0.02,
+            0.10, 0.08, 0.01, 0.00,
+        ),
+        edge_layout=(
+            0.02, 0.04, 0.08, 0.11,
+            0.03, 0.06, 0.10, 0.09,
+            0.09, 0.12, 0.06, 0.03,
+            0.06, 0.07, 0.03, 0.01,
+        ),
+        line_orthogonality=0.42,
+        line_anisotropy=0.22,
+        footprint_layout=(
+            0.01, 0.02, 0.06, 0.15,
+            0.02, 0.04, 0.10, 0.10,
+            0.05, 0.12, 0.07, 0.04,
+            0.08, 0.07, 0.04, 0.03,
+        ),
+        footprint_orientation_hist=(0.09, 0.12, 0.09, 0.07, 0.06, 0.07, 0.11, 0.12, 0.08, 0.08, 0.06, 0.05),
+        footprint_rectangularity=0.41,
+        footprint_density=0.28,
+        shadow_axis_deg=125.0,
+        shadow_strength=0.40,
+        shadow_elongation=0.18,
+        sun_shadow_axis_deg=124.0,
+        sun_shadow_strength=0.41,
+    )
+
+    aligned_score = retrieval_mod._scene_structure_similarity(query, aligned)
+    misaligned_score = retrieval_mod._scene_structure_similarity(query, misaligned)
+
+    assert aligned_score > misaligned_score
+    assert (aligned_score - misaligned_score) >= 0.07
+
+
+def test_scene_structure_similarity_keeps_weak_geometry_secondary() -> None:
+    query = SceneStructureSignature(
+        corner_density=0.14,
+        edge_density=0.19,
+        line_hist=(0.12, 0.10, 0.08, 0.11, 0.09, 0.08, 0.10, 0.08, 0.07, 0.07, 0.05, 0.05),
+        line_strength=0.24,
+        corner_layout=(
+            0.07, 0.06, 0.06, 0.05,
+            0.06, 0.07, 0.06, 0.05,
+            0.05, 0.06, 0.07, 0.06,
+            0.05, 0.05, 0.06, 0.06,
+        ),
+        edge_layout=(
+            0.06, 0.06, 0.07, 0.06,
+            0.06, 0.07, 0.07, 0.06,
+            0.05, 0.06, 0.07, 0.07,
+            0.05, 0.05, 0.06, 0.06,
+        ),
+        line_orthogonality=0.34,
+        line_anisotropy=0.14,
+        footprint_layout=(
+            0.06, 0.06, 0.06, 0.05,
+            0.06, 0.07, 0.06, 0.05,
+            0.05, 0.06, 0.07, 0.06,
+            0.05, 0.05, 0.06, 0.07,
+        ),
+        footprint_orientation_hist=(0.10, 0.08, 0.08, 0.10, 0.08, 0.08, 0.10, 0.08, 0.08, 0.08, 0.07, 0.07),
+        footprint_rectangularity=0.22,
+        footprint_density=0.12,
+        shadow_axis_deg=210.0,
+        shadow_strength=0.16,
+        shadow_elongation=0.10,
+        sun_shadow_axis_deg=206.0,
+        sun_shadow_strength=0.12,
+    )
+    legacy_favored = SceneStructureSignature(
+        corner_density=0.16,
+        edge_density=0.21,
+        line_hist=(0.11, 0.10, 0.09, 0.10, 0.09, 0.08, 0.10, 0.08, 0.08, 0.07, 0.05, 0.05),
+        line_strength=0.23,
+        corner_layout=(
+            0.05, 0.06, 0.05, 0.07,
+            0.06, 0.05, 0.07, 0.06,
+            0.06, 0.07, 0.05, 0.05,
+            0.07, 0.06, 0.05, 0.05,
+        ),
+        edge_layout=(
+            0.07, 0.06, 0.05, 0.06,
+            0.06, 0.05, 0.06, 0.07,
+            0.06, 0.05, 0.06, 0.07,
+            0.06, 0.05, 0.06, 0.05,
+        ),
+        line_orthogonality=0.31,
+        line_anisotropy=0.12,
+        footprint_layout=(
+            0.05, 0.05, 0.06, 0.06,
+            0.06, 0.06, 0.06, 0.06,
+            0.06, 0.06, 0.06, 0.06,
+            0.06, 0.06, 0.06, 0.05,
+        ),
+        footprint_orientation_hist=(0.09, 0.08, 0.08, 0.09, 0.08, 0.08, 0.09, 0.08, 0.08, 0.08, 0.08, 0.07),
+        footprint_rectangularity=0.20,
+        footprint_density=0.11,
+        shadow_axis_deg=205.0,
+        shadow_strength=0.15,
+        shadow_elongation=0.08,
+        sun_shadow_axis_deg=201.0,
+        sun_shadow_strength=0.11,
+    )
+    geometry_favored = SceneStructureSignature(
+        corner_density=0.22,
+        edge_density=0.29,
+        line_hist=(0.19, 0.05, 0.04, 0.17, 0.05, 0.04, 0.14, 0.05, 0.04, 0.10, 0.07, 0.06),
+        line_strength=0.22,
+        corner_layout=query.corner_layout,
+        edge_layout=query.edge_layout,
+        line_orthogonality=0.34,
+        line_anisotropy=0.14,
+        footprint_layout=query.footprint_layout,
+        footprint_orientation_hist=query.footprint_orientation_hist,
+        footprint_rectangularity=0.23,
+        footprint_density=0.14,
+        shadow_axis_deg=170.0,
+        shadow_strength=0.15,
+        shadow_elongation=0.10,
+        sun_shadow_axis_deg=166.0,
+        sun_shadow_strength=0.12,
+    )
+
+    legacy_score = retrieval_mod._scene_structure_similarity(query, legacy_favored)
+    geometry_score = retrieval_mod._scene_structure_similarity(query, geometry_favored)
+
+    assert legacy_score > geometry_score
+    assert (legacy_score - geometry_score) >= 0.02
+
+
+def test_extract_scene_structure_signature_reports_geometry_fields() -> None:
+    if retrieval_mod.cv2 is None:
+        pytest.skip("opencv_not_available")
+
+    gray = np.full((96, 96), 230, dtype=np.uint8)
+    gray[18:76, 18:21] = 20
+    gray[18:21, 18:76] = 20
+    gray[73:76, 18:76] = 20
+    gray[18:76, 73:76] = 20
+    gray[55:88, 56:90] = 35
+
+    sig = retrieval_mod._extract_scene_structure_signature(gray)
+
+    assert sig is not None
+    assert len(sig.corner_layout) == 16
+    assert len(sig.edge_layout) == 16
+    assert len(sig.footprint_layout) == 16
+    assert len(sig.footprint_orientation_hist) == 12
+    assert 0.0 <= sig.line_orthogonality <= 1.0
+    assert 0.0 <= sig.line_anisotropy <= 1.0
+    assert 0.0 <= sig.footprint_rectangularity <= 1.0
+    assert 0.0 <= sig.footprint_density <= 1.0
+    assert 0.0 <= sig.shadow_elongation <= 1.0
+    assert 0.0 <= sig.sun_shadow_strength <= 1.0
+
+
+def test_scene_structure_similarity_prefers_footprint_and_sun_alignment() -> None:
+    query = SceneStructureSignature(
+        corner_density=0.52,
+        edge_density=0.44,
+        line_hist=(0.26, 0.05, 0.03, 0.24, 0.05, 0.03, 0.18, 0.05, 0.03, 0.05, 0.02, 0.01),
+        line_strength=0.58,
+        corner_layout=(
+            0.10, 0.07, 0.03, 0.02,
+            0.09, 0.11, 0.05, 0.02,
+            0.03, 0.06, 0.12, 0.08,
+            0.01, 0.03, 0.08, 0.10,
+        ),
+        edge_layout=(
+            0.09, 0.08, 0.05, 0.03,
+            0.08, 0.10, 0.07, 0.04,
+            0.04, 0.07, 0.10, 0.08,
+            0.02, 0.04, 0.06, 0.05,
+        ),
+        line_orthogonality=0.79,
+        line_anisotropy=0.54,
+        footprint_layout=(
+            0.14, 0.08, 0.03, 0.01,
+            0.08, 0.12, 0.05, 0.02,
+            0.03, 0.05, 0.12, 0.08,
+            0.01, 0.02, 0.07, 0.09,
+        ),
+        footprint_orientation_hist=(0.30, 0.03, 0.02, 0.27, 0.04, 0.03, 0.17, 0.04, 0.02, 0.05, 0.02, 0.01),
+        footprint_rectangularity=0.78,
+        footprint_density=0.37,
+        shadow_axis_deg=212.0,
+        shadow_strength=0.36,
+        shadow_elongation=0.58,
+        sun_shadow_axis_deg=208.0,
+        sun_shadow_strength=0.45,
+    )
+    aligned = SceneStructureSignature(
+        corner_density=0.50,
+        edge_density=0.42,
+        line_hist=query.line_hist,
+        line_strength=0.56,
+        corner_layout=query.corner_layout,
+        edge_layout=query.edge_layout,
+        line_orthogonality=0.77,
+        line_anisotropy=0.51,
+        footprint_layout=query.footprint_layout,
+        footprint_orientation_hist=query.footprint_orientation_hist,
+        footprint_rectangularity=0.75,
+        footprint_density=0.35,
+        shadow_axis_deg=206.0,
+        shadow_strength=0.34,
+        shadow_elongation=0.55,
+        sun_shadow_axis_deg=204.0,
+        sun_shadow_strength=0.42,
+    )
+    misaligned = SceneStructureSignature(
+        corner_density=0.51,
+        edge_density=0.43,
+        line_hist=query.line_hist,
+        line_strength=0.56,
+        corner_layout=query.corner_layout,
+        edge_layout=query.edge_layout,
+        line_orthogonality=0.77,
+        line_anisotropy=0.51,
+        footprint_layout=(
+            0.01, 0.03, 0.07, 0.14,
+            0.02, 0.05, 0.10, 0.08,
+            0.05, 0.12, 0.06, 0.04,
+            0.09, 0.08, 0.04, 0.02,
+        ),
+        footprint_orientation_hist=(0.08, 0.09, 0.11, 0.07, 0.07, 0.08, 0.10, 0.12, 0.10, 0.08, 0.06, 0.04),
+        footprint_rectangularity=0.42,
+        footprint_density=0.24,
+        shadow_axis_deg=126.0,
+        shadow_strength=0.34,
+        shadow_elongation=0.22,
+        sun_shadow_axis_deg=122.0,
+        sun_shadow_strength=0.42,
+    )
+
+    aligned_score = retrieval_mod._scene_structure_similarity(query, aligned)
+    misaligned_score = retrieval_mod._scene_structure_similarity(query, misaligned)
+
+    assert aligned_score > misaligned_score
+    assert (aligned_score - misaligned_score) >= 0.03
 
 
 def test_graph_support_rerank_can_promote_dense_cluster() -> None:

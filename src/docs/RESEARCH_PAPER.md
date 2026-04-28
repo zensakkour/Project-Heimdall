@@ -4,6 +4,7 @@ Version: v1.0
 Date: April 21, 2026
 
 Companion external landscape review: `src/docs/MARKET_RESEARCH.md`.
+Chronological experiment ledger with the latest branch-era before/after metrics: `research.md`.
 
 ## Title
 Project Heimdall: Benchmark-Governed Geolocation from Imagery via Multi-Provider Retrieval, Robust Probabilistic Fusion, and Uncertainty-Aware Analysis
@@ -434,9 +435,12 @@ Follow-up weighted training check (same 68 query-vs-reference triplets, canonica
 Artifacts:
 - Control:
   - `runs/geo_eval_projection_trainref_v2_weighted_cmp_180.json`
-- Candidate:
+- Initial structure rerank:
   - `runs/bench_cfg/cfg_paris_projection_trainref_v2_weighted_cmp_structure_v1.json`
   - `runs/geo_eval_projection_trainref_v2_weighted_cmp_structure_v1_180.json`
+- Geometry-lite gated branch probe:
+  - `src/config/paris_structure_geometry_balanced.json`
+  - `runs/geo_eval_projection_trainref_v2_weighted_cmp_structure_v2_geometry_d_180.json`
 
 Method:
 - Added retrieval controls:
@@ -447,6 +451,12 @@ Method:
   - edge density,
   - dominant line-orientation histogram,
   - guarded dark-mass / shadow-axis cue as weak illumination-layout evidence.
+- On this branch, expanded that signature with geometry-lite cues:
+  - corner spatial layout,
+  - edge spatial layout,
+  - line orthogonality / anisotropy,
+  - shadow elongation.
+- Added weak-signal gating so those extra geometry-lite cues stay secondary on diffuse scenes instead of overriding the older structure signal.
 - Blended structure similarity with the base retrieval score only when the structure evidence was strong enough and a confident base top-1 did not already dominate.
 
 Canonical weighted single-index Paris benchmark (`n=180`, seed `42`):
@@ -455,11 +465,13 @@ Canonical weighted single-index Paris benchmark (`n=180`, seed `42`):
 |---|---:|---:|---:|---:|---:|---:|
 | Weighted projection control | 15.0810 | 4.8877 | 13.89 | 27.22 | 51.67 | 65.00 |
 | + Structure-aware rerank (`top_n=12`, `weight=0.35`) | 14.7247 | 4.5903 | 15.00 | 28.33 | 53.33 | 66.11 |
+| + Geometry-lite gated rerank (`top_n=14`, `weight=0.35`) | 14.7239 | 4.5903 | 15.00 | 28.33 | 53.33 | 66.11 |
 
 Observation:
 - This is the first measured gain from explicitly modeling scene layout cues rather than only embedding similarity or local keypoints.
-- Improvements were consistent across all reported distance buckets on the canonical split, with no null-output regression.
-- The method is still kept as experimental rather than default because it has only been validated on the Paris realistic split so far.
+- Weak-signal gating recovered the earlier close-range gains while preserving the richer geometry-lite signature.
+- On the balanced branch setting, geometry-lite now matches the earlier structure-rerank milestone instead of regressing `within_2km_pct`.
+- The remaining question is whether those richer cues can beat the older structure-only result consistently enough to justify heavier geometry follow-up, or whether the backbone comparison should remain the primary next lever.
 
 ### 7.15 Scope-Aware Retrieval Geo Prior (Hard Region Gate)
 Artifacts:
@@ -678,7 +690,7 @@ Project Heimdall demonstrates a practical path from prototype geolocation to a b
 ### 15.1 Possible Approaches Under Consideration (From `deep-research-report.md`)
 - `Domain-adapted embeddings` (highest priority): evaluate Remote Sensing foundation encoders as primary retrieval backbones.
 - `Difficulty-aware hard-negative weighting`: controlled Paris benchmarking is now complete and favors weighting (`within_1km_pct`: `11.67` -> `13.89`, `mean_km`: `15.25` -> `15.08` versus uniform single-index training). The remaining question is whether that gain holds on larger triplet pools and non-Paris cities.
-- `Scene-structure reranking`: coarse cues from corners, edge mass, building-line orientation, and guarded shadow direction improved the canonical weighted single-index Paris run (`within_1km_pct`: `13.89` -> `15.00`, `mean_km`: `15.08` -> `14.72`). The remaining question is whether those cues stay reliable under broader city and illumination variation.
+- `Scene-structure reranking`: coarse cues from corners, edge mass, building-line orientation, and guarded shadow direction already improved the canonical weighted single-index Paris run (`within_1km_pct`: `13.89` -> `15.00`, `mean_km`: `15.08` -> `14.72`). The current geometry-lite branch extends that with corner/edge spatial layout, line orthogonality / anisotropy, and shadow elongation, and weak-signal gating now restores the earlier close-range gains on the same split (`within_2km_pct`: `27.22` -> `28.33`) while keeping the richer signature available for further comparison.
 - `Selective abstention`: add a localizability head/policy to decide predict vs abstain before final confidence tiering.
 - `Spatially guaranteed uncertainty`: conformal prediction for region-level coverage guarantees on top of probabilistic fusion.
 - `Rank-based multi-index fusion`: RRF was implemented as an optional mode (`retrieval_source_fusion_mode=rrf`) and benchmarked.
