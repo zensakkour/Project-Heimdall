@@ -138,6 +138,92 @@ def _resolve_query_record(
     return by_name.get(Path(as_posix).name)
 
 
+def _safe_float(value: object) -> Optional[float]:
+    try:
+        num = float(value)
+    except Exception:
+        return None
+    if not math.isfinite(num):
+        return None
+    return num
+
+
+def _distance_summary(values: Sequence[Optional[float]]) -> Optional[float]:
+    cleaned = [float(value) for value in values if value is not None]
+    if not cleaned:
+        return None
+    return float(min(cleaned))
+
+
+def _negative_source_counts(items: Sequence[dict]) -> Dict[str, int]:
+    counts: Dict[str, int] = {}
+    for item in items:
+        source = str(item.get("source") or "unknown").strip() or "unknown"
+        counts[source] = int(counts.get(source, 0)) + 1
+    return counts
+
+
+def _compute_triplet_weight(
+    *,
+    fail: EvalFailure,
+    negatives: Sequence[dict],
+    difficulty_mode: str,
+    difficulty_reference_km: float,
+    difficulty_max_weight: float,
+) -> float:
+    mode = str(difficulty_mode).strip().lower()
+    if mode == "none":
+        return 1.0
+
+    error_km = max(0.0, _safe_float(fail.distance_km) or 0.0)
+    ref_km = max(0.1, float(difficulty_reference_km))
+    max_weight = max(1.0, float(difficulty_max_weight))
+    denom = math.log1p(ref_km)
+    severity = (math.log1p(error_km) / denom) if denom > 0.0 else 0.0
+    severity = max(0.0, severity)
+    weight = 1.0 + severity
+
+    if mode == "error_km_predmix":
+        pred_count = sum(1 for item in negatives if str(item.get("source") or "") == "pred_neighborhood")
+        total = max(1, len(negatives))
+        weight = weight + (0.5 * (float(pred_count) / float(total)))
+
+    return float(min(max_weight, max(1.0, weight)))
+
+
+def _summarize_triplets(triplets: Sequence[dict]) -> dict:
+    if not triplets:
+        return {
+            "avg_positives": 0.0,
+            "avg_hard_negatives": 0.0,
+            "triplet_weight_min": None,
+            "triplet_weight_mean": None,
+            "triplet_weight_max": None,
+            "negative_source_totals": {},
+        }
+
+    pos_counts = [len(row.get("positives", [])) for row in triplets]
+    neg_counts = [len(row.get("hard_negatives", [])) for row in triplets]
+    weights = [
+        float(value)
+        for value in (_safe_float(row.get("triplet_weight")) for row in triplets)
+        if value is not None and value > 0.0
+    ]
+    source_totals: Dict[str, int] = {}
+    for row in triplets:
+        for source, count in dict(row.get("hard_negative_source_counts") or {}).items():
+            source_totals[str(source)] = int(source_totals.get(str(source), 0)) + int(count)
+
+    return {
+        "avg_positives": float(sum(pos_counts) / len(pos_counts)),
+        "avg_hard_negatives": float(sum(neg_counts) / len(neg_counts)),
+        "triplet_weight_min": float(min(weights)) if weights else None,
+        "triplet_weight_mean": float(sum(weights) / len(weights)) if weights else None,
+        "triplet_weight_max": float(max(weights)) if weights else None,
+        "negative_source_totals": source_totals,
+    }
+
+
 def mine_triplets(
     query_records: Sequence[GeoRecord],
     failures: Sequence[EvalFailure],
@@ -151,6 +237,9 @@ def mine_triplets(
     max_positives: int = 3,
     max_negatives: int = 10,
     dedupe_by_scene: bool = True,
+    difficulty_mode: str = "error_km_predmix",
+    difficulty_reference_km: float = 10.0,
+    difficulty_max_weight: float = 3.0,
 ) -> List[dict]:
     if not query_records:
         return []
@@ -271,6 +360,15 @@ def mine_triplets(
         if not negatives:
             continue
 
+        source_counts = _negative_source_counts(negatives)
+        triplet_weight = _compute_triplet_weight(
+            fail=fail,
+            negatives=negatives,
+            difficulty_mode=difficulty_mode,
+            difficulty_reference_km=difficulty_reference_km,
+            difficulty_max_weight=difficulty_max_weight,
+        )
+
         out.append(
             {
                 "query_path": query_rec.path,
@@ -281,6 +379,18 @@ def mine_triplets(
                 "eval_error_km": fail.distance_km,
                 "positives": positives,
                 "hard_negatives": negatives,
+                "triplet_weight": triplet_weight,
+                "difficulty_mode": str(difficulty_mode),
+                "hard_negative_source_counts": source_counts,
+                "closest_positive_gt_km": _distance_summary(
+                    [_safe_float(item.get("distance_to_gt_km")) for item in positives]
+                ),
+                "closest_negative_gt_km": _distance_summary(
+                    [_safe_float(item.get("distance_to_gt_km")) for item in negatives]
+                ),
+                "closest_negative_pred_km": _distance_summary(
+                    [_safe_float(item.get("distance_to_pred_km")) for item in negatives]
+                ),
             }
         )
     return out
@@ -345,6 +455,24 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--negative-max-gt-distance-km", type=float, default=25.0)
     parser.add_argument("--max-positives", type=int, default=3)
     parser.add_argument("--max-negatives", type=int, default=10)
+    parser.add_argument(
+        "--difficulty-mode",
+        default="error_km_predmix",
+        choices=["none", "error_km", "error_km_predmix"],
+        help="How to compute triplet_weight metadata for downstream training.",
+    )
+    parser.add_argument(
+        "--difficulty-reference-km",
+        type=float,
+        default=10.0,
+        help="Reference error scale used by weighted triplet mining.",
+    )
+    parser.add_argument(
+        "--difficulty-max-weight",
+        type=float,
+        default=3.0,
+        help="Upper bound for emitted triplet_weight values.",
+    )
     parser.add_argument("--no-scene-dedupe", action="store_true")
     parser.add_argument("--sample-count", type=int, default=800, help="Used when --eval-report is not provided.")
     parser.add_argument("--seed", type=int, default=42)
@@ -378,10 +506,14 @@ def main(argv: Optional[List[str]] = None) -> int:
         max_positives=int(args.max_positives),
         max_negatives=int(args.max_negatives),
         dedupe_by_scene=not bool(args.no_scene_dedupe),
+        difficulty_mode=str(args.difficulty_mode),
+        difficulty_reference_km=float(args.difficulty_reference_km),
+        difficulty_max_weight=float(args.difficulty_max_weight),
     )
 
     out_path = Path(args.output)
     written = _write_jsonl(out_path, triplets)
+    triplet_summary = _summarize_triplets(triplets)
     summary = {
         "metadata": str(metadata_path),
         "reference_metadata": str(Path(args.reference_metadata)) if str(args.reference_metadata).strip() else None,
@@ -399,6 +531,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         "max_positives": int(args.max_positives),
         "max_negatives": int(args.max_negatives),
         "dedupe_by_scene": not bool(args.no_scene_dedupe),
+        "difficulty_mode": str(args.difficulty_mode),
+        "difficulty_reference_km": float(args.difficulty_reference_km),
+        "difficulty_max_weight": float(args.difficulty_max_weight),
+        **triplet_summary,
     }
     summary_path = Path(args.summary_output)
     summary_path.parent.mkdir(parents=True, exist_ok=True)
