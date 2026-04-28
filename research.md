@@ -26,7 +26,8 @@ Current hard conclusion:
 - Heuristics helped, but only incrementally.
 - Geometry-lite reranking is real and worth keeping as an experimental branch result.
 - The best close-range gains came from multi-index projection + geo-aware DBA, not from more handcrafted scene cues alone.
-- The path toward a major jump is model/data work: larger hard-negative sets and encoder adaptation, not more blind rerank knobs.
+- The current stack is in a data-limited stalemate: the repo now has enough retrieval, projection, and eval machinery to measure progress honestly, but not enough realistic street-to-aerial supervision to unlock a major accuracy jump.
+- The path toward a major jump is model/data work: larger hard-negative sets, realistic street-view versus aerial pairs, and encoder adaptation, not more blind rerank knobs.
 
 ## Timeline
 
@@ -477,6 +478,9 @@ Artifacts:
    - fixed-loop evaluation on Paris-180
    - auxiliary serving-branch fusion support
 
+5. The next bottleneck is realistic data, not another round of scene heuristics.
+   Better street-view comparisons, cross-view geolocation, and stronger models now depend on building a leakage-safe Paris street-plus-aerial dataset with enough coverage to train and test on the same problem we actually care about.
+
 ## Current Best Artifacts To Reuse
 
 - Best close-range serving profile:
@@ -490,7 +494,8 @@ Artifacts:
 
 ## Next Recommended Work
 
-1. Run the auxiliary tuned-model branch against the full Paris-180 benchmark and compare it directly to `paris_close_range_dual_rrf`.
-2. Increase the training index beyond the current sampled `300` image rebuild so the tuned encoder is not bottlenecked by a tiny train pool.
-3. Expand hard-negative mining beyond one city once the Paris loop is stable.
-4. Benchmark stronger remote-sensing-native encoders only under the fixed, leakage-safe protocol.
+1. Build a realistic Paris street-image dataset from an allowed source with GPS, heading, capture metadata, and sequence information.
+2. Pair those street images with open aerial imagery and create leakage-safe spatial train, validation, and test splits.
+3. Mine realistic cross-view hard negatives from that dataset and retrain the street-to-aerial projection under the fixed benchmark protocol.
+4. Stand up realistic baseline evaluations for street-to-aerial, street-to-street, and fused retrieval before any new architecture claims.
+5. Only after those baselines exist, benchmark stronger remote-sensing-native encoders and other architecture upgrades on the same fixed realistic split.
