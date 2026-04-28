@@ -70,6 +70,8 @@ class GeoConfig:
     retrieval_local_match_weight: float = 0.0
     retrieval_local_match_ratio: float = 0.8
     retrieval_local_match_max_features: int = 1200
+    retrieval_structure_rerank_top_n: int = 0
+    retrieval_structure_rerank_weight: float = 0.0
     retrieval_graph_rerank_top_n: int = 0
     retrieval_graph_rerank_sigma_km: float = 3.0
     retrieval_graph_rerank_score_alpha: float = 0.4
@@ -231,6 +233,8 @@ def load_config(path: str) -> HeimdallConfig:
             retrieval_local_match_weight=geo.get("retrieval_local_match_weight", 0.0),
             retrieval_local_match_ratio=geo.get("retrieval_local_match_ratio", 0.8),
             retrieval_local_match_max_features=geo.get("retrieval_local_match_max_features", 1200),
+            retrieval_structure_rerank_top_n=geo.get("retrieval_structure_rerank_top_n", 0),
+            retrieval_structure_rerank_weight=geo.get("retrieval_structure_rerank_weight", 0.0),
             retrieval_graph_rerank_top_n=geo.get("retrieval_graph_rerank_top_n", 0),
             retrieval_graph_rerank_sigma_km=geo.get("retrieval_graph_rerank_sigma_km", 3.0),
             retrieval_graph_rerank_score_alpha=geo.get("retrieval_graph_rerank_score_alpha", 0.4),

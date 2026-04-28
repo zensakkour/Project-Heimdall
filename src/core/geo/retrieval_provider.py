@@ -52,6 +52,16 @@ class LoadedRetrievalIndex:
     projection_path: Optional[str] = None
 
 
+@dataclass(frozen=True)
+class SceneStructureSignature:
+    corner_density: float
+    edge_density: float
+    line_hist: tuple[float, ...]
+    line_strength: float
+    shadow_axis_deg: Optional[float]
+    shadow_strength: float
+
+
 def _normalize_projection_path(path: object) -> Optional[str]:
     text = str(path).strip() if path is not None else ""
     return text or None
@@ -428,6 +438,23 @@ def _normalize_local_match_max_features(value: object) -> int:
     except Exception:
         return 1200
     return max(128, min(5000, count))
+
+
+def _normalize_structure_rerank_top_n(value: object) -> int:
+    try:
+        return max(0, int(value))
+    except Exception:
+        return 0
+
+
+def _normalize_structure_rerank_weight(value: object) -> float:
+    try:
+        weight = float(value)
+    except Exception:
+        return 0.0
+    if not math.isfinite(weight):
+        return 0.0
+    return max(0.0, min(1.0, weight))
 
 
 def _normalize_graph_rerank_top_n(value: object) -> int:
@@ -972,6 +999,8 @@ class GeoRetrievalProvider:
         local_match_weight: float = 0.0,
         local_match_ratio: float = 0.8,
         local_match_max_features: int = 1200,
+        structure_rerank_top_n: int = 0,
+        structure_rerank_weight: float = 0.0,
         graph_rerank_top_n: int = 0,
         graph_rerank_sigma_km: float = 3.0,
         graph_rerank_score_alpha: float = 0.4,
@@ -1037,6 +1066,8 @@ class GeoRetrievalProvider:
         self.local_match_weight = _normalize_local_match_weight(local_match_weight)
         self.local_match_ratio = _normalize_local_match_ratio(local_match_ratio)
         self.local_match_max_features = _normalize_local_match_max_features(local_match_max_features)
+        self.structure_rerank_top_n = _normalize_structure_rerank_top_n(structure_rerank_top_n)
+        self.structure_rerank_weight = _normalize_structure_rerank_weight(structure_rerank_weight)
         self.graph_rerank_top_n = _normalize_graph_rerank_top_n(graph_rerank_top_n)
         self.graph_rerank_sigma_km = _normalize_graph_rerank_sigma_km(graph_rerank_sigma_km)
         self.graph_rerank_score_alpha = _normalize_graph_rerank_score_alpha(graph_rerank_score_alpha)
@@ -1060,6 +1091,7 @@ class GeoRetrievalProvider:
         self._indices: Optional[List[LoadedRetrievalIndex]] = None
         self._embedder: Optional[ClipEmbedder] = None
         self._embedders_by_model: dict[tuple[str, Optional[str]], ClipEmbedder] = {}
+        self._scene_structure_cache: dict[str, Optional[SceneStructureSignature]] = {}
         self.last_error: Optional[str] = None
 
     def candidates(self, image_path: str) -> List[GeoCandidate]:
@@ -1081,7 +1113,16 @@ class GeoRetrievalProvider:
             with Image.open(image_path) as img:
                 image = img.convert("RGB")
             query_gray = None
-            if self.local_match_top_n > 0 and self.local_match_weight > 0.0 and cv2 is not None:
+            if (
+                (
+                    self.local_match_top_n > 0
+                    and self.local_match_weight > 0.0
+                )
+                or (
+                    self.structure_rerank_top_n > 0
+                    and self.structure_rerank_weight > 0.0
+                )
+            ) and cv2 is not None:
                 query_gray = np.asarray(image.convert("L"), dtype=np.uint8)
             effective_tta_modes = _select_query_tta_modes(
                 image_path=image_path,
@@ -1134,6 +1175,13 @@ class GeoRetrievalProvider:
             if not ranked:
                 self.last_error = "index_empty"
                 return []
+            ranked = _apply_structure_rerank(
+                ranked,
+                query_gray=query_gray,
+                top_n=self.structure_rerank_top_n,
+                weight=self.structure_rerank_weight,
+                signature_cache=self._scene_structure_cache,
+            )
             ranked = _apply_local_match_rerank(
                 ranked,
                 query_gray=query_gray,
@@ -1474,6 +1522,286 @@ def _resolve_candidate_image_path(raw_path: Optional[str]) -> Optional[Path]:
     if candidate.exists():
         return candidate
     return None
+
+
+def _extract_scene_structure_signature(gray: np.ndarray) -> Optional[SceneStructureSignature]:
+    if cv2 is None:
+        return None
+    if gray is None or getattr(gray, "ndim", 0) != 2:
+        return None
+    height = int(gray.shape[0]) if gray.shape else 0
+    width = int(gray.shape[1]) if len(gray.shape) >= 2 else 0
+    if height < 24 or width < 24:
+        return None
+
+    image = np.asarray(gray, dtype=np.uint8)
+    max_dim = max(height, width)
+    if max_dim > 256 and hasattr(cv2, "resize"):
+        scale = 256.0 / float(max_dim)
+        new_w = max(24, int(round(width * scale)))
+        new_h = max(24, int(round(height * scale)))
+        image = cv2.resize(image, (new_w, new_h), interpolation=getattr(cv2, "INTER_AREA", 3))
+        height, width = int(image.shape[0]), int(image.shape[1])
+
+    try:
+        equalized = cv2.equalizeHist(image) if hasattr(cv2, "equalizeHist") else image
+    except Exception:
+        equalized = image
+
+    try:
+        edges = cv2.Canny(equalized, 64, 160) if hasattr(cv2, "Canny") else None
+    except Exception:
+        edges = None
+    if edges is None:
+        return None
+
+    edge_density = float(np.count_nonzero(edges)) / float(max(1, edges.size))
+    edge_density = max(0.0, min(1.0, edge_density / 0.22))
+
+    corner_density = 0.0
+    if hasattr(cv2, "goodFeaturesToTrack"):
+        try:
+            corners = cv2.goodFeaturesToTrack(
+                equalized,
+                maxCorners=96,
+                qualityLevel=0.01,
+                minDistance=max(4, min(height, width) // 20),
+                blockSize=3,
+                useHarrisDetector=False,
+            )
+        except Exception:
+            corners = None
+        corner_count = int(len(corners)) if corners is not None else 0
+        corner_density = max(0.0, min(1.0, float(corner_count) / 72.0))
+
+    line_hist = np.zeros(12, dtype=np.float32)
+    line_strength = 0.0
+    if hasattr(cv2, "HoughLinesP"):
+        try:
+            lines = cv2.HoughLinesP(
+                edges,
+                1,
+                np.pi / 180.0,
+                threshold=max(12, int(round(0.05 * min(height, width)))),
+                minLineLength=max(10, int(round(0.12 * min(height, width)))),
+                maxLineGap=max(4, int(round(0.04 * min(height, width)))),
+            )
+        except Exception:
+            lines = None
+        total_length = 0.0
+        if lines is not None:
+            flat = np.asarray(lines).reshape(-1, 4)
+            for x1, y1, x2, y2 in flat:
+                dx = float(x2) - float(x1)
+                dy = float(y2) - float(y1)
+                seg_len = math.hypot(dx, dy)
+                if seg_len < 6.0:
+                    continue
+                angle_deg = math.degrees(math.atan2(dy, dx)) % 180.0
+                bin_idx = min(line_hist.shape[0] - 1, int((angle_deg / 180.0) * line_hist.shape[0]))
+                line_hist[bin_idx] += float(seg_len)
+                total_length += float(seg_len)
+        if total_length > 1e-6:
+            line_hist /= float(total_length)
+            diag = math.hypot(float(width), float(height))
+            line_strength = max(0.0, min(1.0, float(total_length) / max(1.0, 4.0 * diag)))
+
+    shadow_axis_deg: Optional[float] = None
+    shadow_strength = 0.0
+    try:
+        smooth = cv2.GaussianBlur(equalized, (5, 5), 0) if hasattr(cv2, "GaussianBlur") else equalized
+    except Exception:
+        smooth = equalized
+    try:
+        dark_threshold = float(np.percentile(smooth, 18.0))
+    except Exception:
+        dark_threshold = 0.0
+    dark_mask = np.asarray(smooth <= dark_threshold, dtype=bool)
+    dark_ratio = float(np.count_nonzero(dark_mask)) / float(max(1, dark_mask.size))
+    if 0.03 <= dark_ratio <= 0.35:
+        ys, xs = np.nonzero(dark_mask)
+        if xs.size >= 24:
+            weights = (dark_threshold - smooth[ys, xs].astype(np.float32)) + 1.0
+            total_w = float(np.sum(weights))
+            if total_w > 1e-6:
+                cx = 0.5 * float(width - 1)
+                cy = 0.5 * float(height - 1)
+                mean_x = float(np.sum(xs.astype(np.float32) * weights) / total_w)
+                mean_y = float(np.sum(ys.astype(np.float32) * weights) / total_w)
+                dx = mean_x - cx
+                dy = mean_y - cy
+                dist = math.hypot(dx, dy)
+                norm_dist = dist / max(1.0, 0.5 * math.hypot(float(width), float(height)))
+                if norm_dist >= 0.10:
+                    shadow_axis_deg = math.degrees(math.atan2(dy, dx)) % 360.0
+                    shadow_strength = max(0.0, min(1.0, norm_dist * min(1.0, dark_ratio / 0.12)))
+
+    return SceneStructureSignature(
+        corner_density=float(corner_density),
+        edge_density=float(edge_density),
+        line_hist=tuple(float(x) for x in line_hist.tolist()),
+        line_strength=float(line_strength),
+        shadow_axis_deg=(float(shadow_axis_deg) if shadow_axis_deg is not None else None),
+        shadow_strength=float(shadow_strength),
+    )
+
+
+def _extract_scene_structure_signature_from_path(
+    cand_path: Path,
+    *,
+    signature_cache: Optional[dict[str, Optional[SceneStructureSignature]]] = None,
+) -> Optional[SceneStructureSignature]:
+    cache_key = str(cand_path)
+    if signature_cache is not None and cache_key in signature_cache:
+        return signature_cache[cache_key]
+    if cv2 is None:
+        return None
+    image = cv2.imread(str(cand_path), cv2.IMREAD_GRAYSCALE)
+    if image is None:
+        if signature_cache is not None:
+            signature_cache[cache_key] = None
+        return None
+    signature = _extract_scene_structure_signature(np.asarray(image, dtype=np.uint8))
+    if signature_cache is not None:
+        signature_cache[cache_key] = signature
+    return signature
+
+
+def _histogram_cosine_similarity(a: Sequence[float], b: Sequence[float]) -> float:
+    vec_a = np.asarray(list(a), dtype=np.float32)
+    vec_b = np.asarray(list(b), dtype=np.float32)
+    if vec_a.size <= 0 or vec_b.size <= 0 or vec_a.shape != vec_b.shape:
+        return 0.5
+    norm_a = float(np.linalg.norm(vec_a))
+    norm_b = float(np.linalg.norm(vec_b))
+    if norm_a <= 1e-12 and norm_b <= 1e-12:
+        return 0.5
+    if norm_a <= 1e-12 or norm_b <= 1e-12:
+        return 0.25
+    score = float(np.dot(vec_a, vec_b) / max(1e-12, norm_a * norm_b))
+    return max(0.0, min(1.0, 0.5 * (score + 1.0)))
+
+
+def _circular_similarity_deg(a: Optional[float], b: Optional[float]) -> float:
+    if a is None or b is None:
+        return 0.5
+    delta = abs(((float(a) - float(b) + 180.0) % 360.0) - 180.0)
+    return max(0.0, min(1.0, 0.5 * (1.0 + math.cos(math.radians(delta)))))
+
+
+def _scene_structure_similarity(query_sig: SceneStructureSignature, cand_sig: SceneStructureSignature) -> float:
+    line_sim = _histogram_cosine_similarity(query_sig.line_hist, cand_sig.line_hist)
+    edge_sim = max(0.0, min(1.0, 1.0 - abs(query_sig.edge_density - cand_sig.edge_density)))
+    corner_sim = max(0.0, min(1.0, 1.0 - abs(query_sig.corner_density - cand_sig.corner_density)))
+    line_weight = 0.50 * min(max(0.0, query_sig.line_strength), max(0.0, cand_sig.line_strength))
+    corner_weight = 0.22
+    edge_weight = 0.13
+    shadow_weight = 0.15 * min(max(0.0, query_sig.shadow_strength), max(0.0, cand_sig.shadow_strength))
+    shadow_sim = _circular_similarity_deg(query_sig.shadow_axis_deg, cand_sig.shadow_axis_deg)
+    total = line_weight + corner_weight + edge_weight + shadow_weight
+    if total <= 1e-9:
+        return 0.5
+    score = (
+        (line_weight * line_sim)
+        + (corner_weight * corner_sim)
+        + (edge_weight * edge_sim)
+        + (shadow_weight * shadow_sim)
+    ) / total
+    return max(0.0, min(1.0, float(score)))
+
+
+def _apply_structure_rerank(
+    ranked: Sequence[GeoCandidate],
+    *,
+    query_gray: Optional[np.ndarray],
+    top_n: int,
+    weight: float,
+    signature_cache: Optional[dict[str, Optional[SceneStructureSignature]]] = None,
+) -> List[GeoCandidate]:
+    if not ranked:
+        return []
+    if cv2 is None:
+        return list(ranked)
+    keep_n = min(max(0, int(top_n)), len(ranked))
+    blend = _normalize_structure_rerank_weight(weight)
+    if keep_n <= 0 or blend <= 1e-9:
+        return list(ranked)
+    if query_gray is None or query_gray.ndim != 2:
+        return list(ranked)
+
+    query_sig = _extract_scene_structure_signature(query_gray)
+    if query_sig is None:
+        return list(ranked)
+
+    ordered = sorted(ranked, key=lambda item: item.retrieval_score, reverse=True)
+    structure_scores: List[Optional[float]] = []
+    for cand in ordered[:keep_n]:
+        cand_path = _resolve_candidate_image_path(cand.image_path)
+        if cand_path is None:
+            structure_scores.append(None)
+            continue
+        cand_sig = _extract_scene_structure_signature_from_path(cand_path, signature_cache=signature_cache)
+        if cand_sig is None:
+            structure_scores.append(None)
+            continue
+        structure_scores.append(_scene_structure_similarity(query_sig, cand_sig))
+
+    valid_scores = [score for score in structure_scores if score is not None]
+    if not valid_scores:
+        return ordered
+    if max(valid_scores) < 0.52:
+        return ordered
+    if (max(valid_scores) - min(valid_scores)) < 0.05:
+        return ordered
+
+    base_gap = 1.0
+    if len(ordered) >= 2:
+        score_top1 = _score_to_unit_interval(ordered[0].retrieval_score)
+        score_top2 = _score_to_unit_interval(ordered[1].retrieval_score)
+        base_gap = max(0.0, float(score_top1 - score_top2))
+    if base_gap >= 0.10:
+        top_structure = structure_scores[0]
+        best_idx = 0
+        best_val = float(top_structure) if top_structure is not None else float("-inf")
+        for idx, value in enumerate(structure_scores):
+            if value is None:
+                continue
+            if float(value) > best_val:
+                best_val = float(value)
+                best_idx = idx
+        if best_idx != 0:
+            top_val = float(top_structure) if top_structure is not None else 0.0
+            if (best_val - top_val) < 0.10:
+                return ordered
+
+    updated: List[GeoCandidate] = []
+    changed = False
+    for idx, cand in enumerate(ordered):
+        if idx >= keep_n:
+            updated.append(cand)
+            continue
+        structure_score = structure_scores[idx] if idx < len(structure_scores) else None
+        if structure_score is None:
+            updated.append(cand)
+            continue
+        base = _score_to_unit_interval(cand.retrieval_score)
+        structure_strength = max(0.0, min(1.0, (float(structure_score) - 0.45) / 0.55))
+        effective_blend = blend * structure_strength
+        fused = ((1.0 - effective_blend) * base) + (effective_blend * float(structure_score))
+        updated.append(
+            GeoCandidate(
+                latitude=cand.latitude,
+                longitude=cand.longitude,
+                retrieval_score=max(1e-6, min(1.0, float(fused))),
+                match_id=cand.match_id,
+                image_path=cand.image_path,
+            )
+        )
+        changed = True
+    if not changed:
+        return ordered
+    updated.sort(key=lambda item: item.retrieval_score, reverse=True)
+    return updated
 
 
 def _build_local_match_engines(max_features: int):

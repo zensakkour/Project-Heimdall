@@ -124,7 +124,7 @@ The platform is organized as a modular pipeline:
 - API server: `src/tools/ui_server.py` (FastAPI).
 - Analysis frontend: `src/dashboard/analysis/`.
 
-## Technology Status (As of April 16, 2026)
+## Technology Status (As of April 28, 2026)
 
 Current implementation status:
 
@@ -144,6 +144,12 @@ Current implementation status:
   - Retrieval minimum-candidate keep policy (`retrieval_min_keep_topk`) to avoid null geo outputs in low-similarity scenes.
   - Retrieval locality reranking (`retrieval_locality_radius_km`, `retrieval_locality_weight`) to suppress geographically isolated false matches.
   - Retrieval consensus refinement (`retrieval_consensus_top_n`, `retrieval_consensus_radius_km`, `retrieval_consensus_score_power`) with adaptive center selection (centroid vs weighted geo-median) for local outlier robustness without forcing unnecessary top-1 shifts.
+  - Added structure-aware retrieval reranking (`retrieval_structure_rerank_top_n`, `retrieval_structure_rerank_weight`) to exploit coarse scene cues before local matching:
+    - corner density and edge density
+    - dominant line-orientation histogram (building/street-grid shape)
+    - guarded dark-mass / shadow-axis cue as a weak sun-position proxy
+    - canonical single-index Paris realistic split (`n=180`): `mean_km` `15.08` -> `14.72`, `median_km` `4.89` -> `4.59`, `within_1km_pct` `13.89` -> `15.00`, `within_2km_pct` `27.22` -> `28.33`
+    - artifacts: `runs/geo_eval_projection_trainref_v2_weighted_cmp_180.json`, `runs/geo_eval_projection_trainref_v2_weighted_cmp_structure_v1_180.json`.
   - Retrieval KDE mode refinement profiles are now benchmarked on the realistic split (`n=180`):
     - best `within_1km_pct`: `11.11` (`runs/geo_eval_paris_profile_180_kde_refine_c_w1_v1.json`)
     - best `within_2km_pct`: `20.00` (`runs/geo_eval_paris_profile_180_kde_refine_d_w2_v1.json`)
@@ -191,6 +197,7 @@ Current implementation status:
 Current technical focus:
 
 - Expanding retrieval coverage quality (more diverse geo references and hard negatives).
+- Converting scene-layout cues (corners, line structure, shadow direction) into reliable rerank signals without hurting tail robustness.
 - Calibrating confidence and source priors from benchmark outputs instead of static defaults.
 - Iterating on benchmark-driven plausibility reranking.
 
@@ -432,21 +439,36 @@ Apply learned calibration directly to config:
 
 ```powershell
 .\.venv\Scripts\python -m src.tools.run_geo_eval --retrieval-only --config src/config/paris.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 180 --seed 42 --diag-samples 180 --output runs/geo_eval_paris_profile_180_for_mining_v1.json
-.\.venv\Scripts\python -m src.tools.mine_hard_negative_triplets --metadata data/spacenet_paris_test/metadata.csv --eval-report runs/geo_eval_paris_profile_180_for_mining_v1.json --output runs/hard_negative_triplets_paris_test_v2_scene_dedup.jsonl --summary-output runs/hard_negative_triplets_paris_test_v2_scene_dedup_summary.json --min-error-km 2.0 --positive-radius-km 0.35 --negative-pred-radius-km 2.0 --negative-min-gt-distance-km 2.0 --negative-max-gt-distance-km 25.0 --max-positives 3 --max-negatives 12
+.\.venv\Scripts\python -m src.tools.mine_hard_negative_triplets --metadata data/spacenet_paris_test/metadata.csv --reference-metadata data/spacenet_paris/metadata.csv --eval-report runs/geo_eval_paris_profile_180_for_mining_v1.json --output runs/hard_negative_triplets_paris_test_query_train_ref_v2_weighted.jsonl --summary-output runs/hard_negative_triplets_paris_test_query_train_ref_v2_weighted_summary.json --min-error-km 2.0 --positive-radius-km 0.35 --negative-pred-radius-km 2.0 --negative-min-gt-distance-km 2.0 --negative-max-gt-distance-km 25.0 --max-positives 3 --max-negatives 12 --difficulty-mode error_km_predmix --difficulty-reference-km 10.0 --difficulty-max-weight 3.0
 ```
 
 This gives you query-positive-hard-negative tuples from real failure cases (not random tuples), ready for retrieval backbone fine-tuning.
+With `--reference-metadata`, the query stays on the eval split while positives and hard negatives are pulled from the train/reference pool.
+Each triplet now includes `triplet_weight`, per-source hard-negative counts, and nearest positive/negative distance diagnostics so downstream training can emphasize more severe/confusion-rich failures.
 
 ### Train and apply retrieval projection from hard negatives
 
 ```powershell
-.\.venv\Scripts\python -m src.tools.train_retrieval_projection --triplets runs/hard_negative_triplets_paris_test_query_train_ref_v1.jsonl --embedding-index data/geo_index/spacenet_paris_test_clip.npz --images-dir data/spacenet_paris_test/chips --output runs/retrieval_projection_paris_query_trainref_v2_mild.npz --report-output runs/retrieval_projection_paris_query_trainref_v2_mild.report.json --epochs 14 --batch-size 128 --learning-rate 3e-4 --weight-decay 1e-4 --margin 0.20 --temperature 0.07 --ce-weight 0.15 --orth-weight 0.01 --seed 42
-.\.venv\Scripts\python -m src.tools.apply_projection_to_geo_index --index data/geo_index/spacenet_paris_chips_openai_clip_vit_large_patch14.npz --projection-path runs/retrieval_projection_paris_query_trainref_v2_mild.npz --output data/geo_index/spacenet_paris_chips_openai_clip_vit_large_patch14_proj_trainref_v2_mild.npz
+.\.venv\Scripts\python -m src.tools.train_retrieval_projection --triplets runs/hard_negative_triplets_paris_test_query_train_ref_v2_weighted.jsonl --embedding-index data/geo_index/spacenet_paris_chips_openai_clip_vit_large_patch14.npz --images-dir data/spacenet_paris_test/chips --output runs/retrieval_projection_paris_query_trainref_v2_weighted_cmp.npz --report-output runs/retrieval_projection_paris_query_trainref_v2_weighted_cmp.report.json --epochs 8 --batch-size 16 --learning-rate 3e-4 --weight-decay 1e-4 --margin 0.08 --temperature 0.07 --ce-weight 0.3 --orth-weight 0.002 --sample-weight-mode triplet_weight --sample-weight-max 3.0 --seed 42 --device cpu
+.\.venv\Scripts\python -m src.tools.apply_projection_to_geo_index --index data/geo_index/spacenet_paris_chips_openai_clip_vit_large_patch14.npz --projection-path runs/retrieval_projection_paris_query_trainref_v2_weighted_cmp.npz --output data/geo_index/spacenet_paris_chips_openai_clip_vit_large_patch14_proj_trainref_v2_weighted_cmp.npz
 ```
 
 Then run eval with a config that sets:
 - `geolocator.retrieval_index_path` to the projected index.
 - `geolocator.retrieval_projection_path` to the same projection file.
+
+For query-vs-reference triplets, `--embedding-index` should point at the reference index, not the query-only eval index. Missing query embeddings are backfilled from `--images-dir`, and the trainer now reports missing path counts by role with an explicit split-mismatch hint if the wrong index is selected.
+The projection training report now includes sample-weight stats plus weighted triplet satisfaction/loss metrics, so you can compare uniform vs difficulty-aware runs without re-parsing raw JSONL.
+Controlled Paris realistic-split comparison (`n=180`, seed `42`, same 68 triplets): uniform single-index projection reached `<=1km 11.67%`, `<=2km 26.67%`, `<=5km 50.00%`, `<=10km 64.44%`, `mean 15.25 km`; difficulty-weighted training improved that to `<=1km 13.89%`, `<=2km 27.22%`, `<=5km 51.67%`, `<=10km 65.00%`, `mean 15.08 km`.
+
+### Optional: Structure-aware rerank (corners, edges, line orientation, shadow cue)
+
+```powershell
+.\.venv\Scripts\python -m src.tools.run_geo_eval --retrieval-only --config runs/bench_cfg/cfg_paris_projection_trainref_v2_weighted_cmp_structure_v1.json --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --limit 180 --seed 42 --diag-samples 180 --output runs/geo_eval_projection_trainref_v2_weighted_cmp_structure_v1_180.json
+```
+
+This rerank stays inside the retrieval stage and only reorders the top retrieval shortlist before local geometric matching. It uses coarse scene structure rather than semantic labels: corner density, edge density, dominant line histogram, and a guarded shadow-axis estimate from dark-mass layout.
+On the canonical weighted single-index Paris run (`n=180`), enabling `retrieval_structure_rerank_top_n=12` and `retrieval_structure_rerank_weight=0.35` improved `mean_km` `15.08` -> `14.72`, `median_km` `4.89` -> `4.59`, `<=1km` `13.89%` -> `15.00%`, `<=2km` `27.22%` -> `28.33%`, `<=5km` `51.67%` -> `53.33%`, and `<=10km` `65.00%` -> `66.11%`.
 
 ### Optional: Geo-aware DBA index augmentation (close-range objective mode)
 
@@ -651,6 +673,8 @@ Useful geo quality knobs in `geolocator`:
 - `retrieval_min_keep_topk`: minimum candidates to keep from top-k even if `retrieval_min_score` is too strict.
 - `retrieval_locality_radius_km`: distance scale for locality support reranking.
 - `retrieval_locality_weight`: strength of locality reranking (higher penalizes isolated candidates more).
+- `retrieval_structure_rerank_top_n`: number of highest-scoring retrieval candidates eligible for scene-structure reranking (`0` disables).
+- `retrieval_structure_rerank_weight`: blend strength for structure similarity vs base retrieval score.
 - `retrieval_query_tta_degrees`: query-time rotation ensemble angles in degrees.
 - `retrieval_query_tta_reduce`: how augmented similarity scores are merged (`mean`, `median`, `max`, or `rrf`).
 - `retrieval_index_paths`: optional list of extra retrieval indices to query alongside `retrieval_index_path`.
