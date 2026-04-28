@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.tools.mine_hard_negative_triplets import EvalFailure, GeoRecord, mine_triplets, scene_key
+from src.tools.mine_hard_negative_triplets import EvalFailure, GeoRecord, merge_failures, mine_triplets, scene_key
 
 
 def test_mine_triplets_from_eval_failures() -> None:
@@ -160,3 +160,46 @@ def test_mine_triplets_with_separate_reference_pool() -> None:
     assert row["positives"][0]["path"] == "ref_pos.jpg"
     neg_paths = {item["path"] for item in row["hard_negatives"]}
     assert "ref_neg.jpg" in neg_paths
+
+
+def test_merge_failures_keeps_hardest_per_query_and_dedupes() -> None:
+    failures = [
+        EvalFailure(
+            query_path="q.jpg",
+            gt_latitude=48.0,
+            gt_longitude=2.0,
+            pred_latitude=48.01,
+            pred_longitude=2.01,
+            distance_km=5.0,
+        ),
+        EvalFailure(
+            query_path="q.jpg",
+            gt_latitude=48.0,
+            gt_longitude=2.0,
+            pred_latitude=48.01,
+            pred_longitude=2.01,
+            distance_km=5.0,
+        ),
+        EvalFailure(
+            query_path="q.jpg",
+            gt_latitude=48.0,
+            gt_longitude=2.0,
+            pred_latitude=48.02,
+            pred_longitude=2.02,
+            distance_km=3.0,
+        ),
+        EvalFailure(
+            query_path="other.jpg",
+            gt_latitude=48.1,
+            gt_longitude=2.1,
+            pred_latitude=48.11,
+            pred_longitude=2.11,
+            distance_km=4.0,
+        ),
+    ]
+
+    merged = merge_failures(failures, max_failures_per_query=1)
+    assert len(merged) == 2
+    assert merged[0].query_path == "other.jpg"
+    assert merged[1].query_path == "q.jpg"
+    assert merged[1].distance_km == pytest.approx(5.0)

@@ -111,6 +111,7 @@ def _patch_config(
     config_path: Path,
     best_model: str,
     final_index_path: Path,
+    final_projection_path: Path | None,
     query_expansion_top_n: int,
     query_expansion_beta: float,
     query_expansion_alpha: float,
@@ -135,6 +136,9 @@ def _patch_config(
     geolocator = raw.setdefault("geolocator", {})
     geolocator["retrieval_model_id"] = str(best_model)
     geolocator["retrieval_index_path"] = _norm_path(final_index_path)
+    geolocator["retrieval_projection_path"] = (
+        _norm_path(final_projection_path) if final_projection_path is not None else None
+    )
     geolocator["retrieval_query_expansion_top_n"] = int(max(0, int(query_expansion_top_n)))
     geolocator["retrieval_query_expansion_beta"] = float(max(0.0, min(1.0, float(query_expansion_beta))))
     geolocator["retrieval_query_expansion_alpha"] = float(max(0.0, min(1.0, float(query_expansion_alpha))))
@@ -218,6 +222,40 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--kde-refine-margin-threshold", type=float, default=0.0)
     parser.add_argument("--kde-refine-switch-radius-km", type=float, default=0.0)
     parser.add_argument("--kde-refine-max-iters", type=int, default=8)
+    parser.add_argument("--projection-triplets", default="", help="Optional hard-negative triplet JSONL for per-model projection training.")
+    parser.add_argument(
+        "--projection-images-dir",
+        default="",
+        help="Optional image root for triplet query embedding backfill. Defaults to --eval-images-dir.",
+    )
+    parser.add_argument(
+        "--projection-reference-images-dir",
+        default="",
+        help="Optional image root for projection reference embeddings. Defaults to --train-images-dir.",
+    )
+    parser.add_argument(
+        "--projection-reference-metadata",
+        default="",
+        help="Optional metadata for projection reference embeddings. Defaults to --train-metadata.",
+    )
+    parser.add_argument("--projection-max-triplets", type=int, default=0)
+    parser.add_argument("--projection-output-dim", type=int, default=0)
+    parser.add_argument("--projection-epochs", type=int, default=8)
+    parser.add_argument("--projection-batch-size", type=int, default=16)
+    parser.add_argument("--projection-learning-rate", type=float, default=3e-4)
+    parser.add_argument("--projection-weight-decay", type=float, default=1e-4)
+    parser.add_argument("--projection-margin", type=float, default=0.08)
+    parser.add_argument("--projection-temperature", type=float, default=0.07)
+    parser.add_argument("--projection-ce-weight", type=float, default=0.3)
+    parser.add_argument("--projection-orth-weight", type=float, default=0.002)
+    parser.add_argument(
+        "--projection-sample-weight-mode",
+        default="triplet_weight",
+        choices=["auto", "uniform", "triplet_weight"],
+    )
+    parser.add_argument("--projection-sample-weight-power", type=float, default=1.0)
+    parser.add_argument("--projection-sample-weight-max", type=float, default=3.0)
+    parser.add_argument("--projection-device", default="auto", help="auto|cpu|cuda")
     parser.add_argument("--reuse-indices", action="store_true")
     parser.add_argument("--final-index-output", default="")
     parser.add_argument("--preserve-multi-index", action="store_true")
@@ -318,6 +356,46 @@ def main(argv: list[str] | None = None) -> int:
         benchmark_argv.extend(["--model-preset", str(args.model_preset)])
     if args.reuse_indices:
         benchmark_argv.append("--reuse-indices")
+    if str(args.projection_triplets).strip():
+        benchmark_argv.extend(["--projection-triplets", str(args.projection_triplets)])
+        if str(args.projection_images_dir).strip():
+            benchmark_argv.extend(["--projection-images-dir", str(args.projection_images_dir)])
+        if str(args.projection_reference_images_dir).strip():
+            benchmark_argv.extend(["--projection-reference-images-dir", str(args.projection_reference_images_dir)])
+        if str(args.projection_reference_metadata).strip():
+            benchmark_argv.extend(["--projection-reference-metadata", str(args.projection_reference_metadata)])
+        benchmark_argv.extend(
+            [
+                "--projection-max-triplets",
+                str(int(args.projection_max_triplets)),
+                "--projection-output-dim",
+                str(int(args.projection_output_dim)),
+                "--projection-epochs",
+                str(int(args.projection_epochs)),
+                "--projection-batch-size",
+                str(int(args.projection_batch_size)),
+                "--projection-learning-rate",
+                str(float(args.projection_learning_rate)),
+                "--projection-weight-decay",
+                str(float(args.projection_weight_decay)),
+                "--projection-margin",
+                str(float(args.projection_margin)),
+                "--projection-temperature",
+                str(float(args.projection_temperature)),
+                "--projection-ce-weight",
+                str(float(args.projection_ce_weight)),
+                "--projection-orth-weight",
+                str(float(args.projection_orth_weight)),
+                "--projection-sample-weight-mode",
+                str(args.projection_sample_weight_mode),
+                "--projection-sample-weight-power",
+                str(float(args.projection_sample_weight_power)),
+                "--projection-sample-weight-max",
+                str(float(args.projection_sample_weight_max)),
+                "--projection-device",
+                str(args.projection_device),
+            ]
+        )
 
     bench_code = bench.main(benchmark_argv)
     if bench_code != 0:
@@ -329,6 +407,14 @@ def main(argv: list[str] | None = None) -> int:
     if not best_model:
         print(f"No best model found in {benchmark_output}")
         return 1
+    best_row = next(
+        (
+            row
+            for row in (bench_payload.get("models") or [])
+            if isinstance(row, dict) and str(row.get("model_id") or "").strip() == best_model and row.get("status") == "ok"
+        ),
+        None,
+    )
 
     final_index_path = _resolve_final_index_path(args, best_model)
     final_index_path.parent.mkdir(parents=True, exist_ok=True)
@@ -339,10 +425,15 @@ def main(argv: list[str] | None = None) -> int:
         print("No train rows available for final index build.")
         return 1
 
+    raw_final_index_path = final_index_path
+    final_projection_path: Path | None = None
+    if best_row and best_row.get("projection_enabled"):
+        raw_final_index_path = final_index_path.with_name(f"{final_index_path.stem}_raw{final_index_path.suffix}")
+
     count = build_index(
         images=[],
         meta=final_rows,
-        output=final_index_path,
+        output=raw_final_index_path,
         model_id=best_model,
         root_dir=Path(args.train_images_dir).parent,
         images_dir=Path(args.train_images_dir),
@@ -351,11 +442,100 @@ def main(argv: list[str] | None = None) -> int:
         print("Final index build wrote no embeddings.")
         return 1
 
+    final_projected_count = None
+    projection_support_index_path: Path | None = None
+    projection_support_rows_count: int | None = None
+    if best_row and best_row.get("projection_enabled"):
+        if not str(args.projection_triplets).strip():
+            print("Best benchmark row used a projection, but --projection-triplets was not provided for final rebuild.")
+            return 1
+        final_projection_path = output_dir / f"{final_index_path.stem}.projection.npz"
+        final_projection_report_path = output_dir / f"{final_index_path.stem}.projection.report.json"
+        projection_images_dir = (
+            Path(str(args.projection_images_dir).strip())
+            if str(args.projection_images_dir).strip()
+            else Path(args.eval_images_dir)
+        )
+        projection_reference_images_dir = (
+            Path(str(args.projection_reference_images_dir).strip())
+            if str(args.projection_reference_images_dir).strip()
+            else Path(args.train_images_dir)
+        )
+        projection_reference_meta_path = (
+            Path(str(args.projection_reference_metadata).strip())
+            if str(args.projection_reference_metadata).strip()
+            else Path(args.train_metadata)
+        )
+        if not projection_reference_meta_path.exists():
+            raise FileNotFoundError(f"projection_reference_metadata_not_found:{projection_reference_meta_path}")
+        projection_triplets = bench.projection_tools._load_triplets(
+            Path(str(args.projection_triplets)),
+            max_triplets=max(0, int(args.projection_max_triplets)),
+        )
+        if not projection_triplets:
+            raise ValueError("projection_triplets_empty_or_invalid")
+        projection_reference_rows_all = _load_rows(projection_reference_meta_path)
+        projection_support_rows = bench._filter_rows_by_paths(
+            projection_reference_rows_all,
+            bench._collect_reference_paths(projection_triplets),
+        )
+        if not projection_support_rows:
+            raise ValueError("projection_reference_rows_empty_for_triplets")
+        projection_support_index_path = output_dir / f"{final_index_path.stem}.projection_support.npz"
+        projection_support_rows_count = len(projection_support_rows)
+        support_count = build_index(
+            images=[],
+            meta=projection_support_rows,
+            output=projection_support_index_path,
+            model_id=best_model,
+            root_dir=projection_reference_images_dir.parent,
+            images_dir=projection_reference_images_dir,
+        )
+        if support_count <= 0:
+            print("Projection support index build wrote no embeddings.")
+            return 1
+        bench._fit_projection_for_index(
+            model_id=best_model,
+            raw_index_path=projection_support_index_path,
+            triplet_path=Path(str(args.projection_triplets)),
+            projection_images_dir=projection_images_dir,
+            projection_path=final_projection_path,
+            projection_report_path=final_projection_report_path,
+            max_triplets=int(args.projection_max_triplets),
+            output_dim=int(args.projection_output_dim),
+            epochs=int(args.projection_epochs),
+            batch_size=int(args.projection_batch_size),
+            learning_rate=float(args.projection_learning_rate),
+            weight_decay=float(args.projection_weight_decay),
+            margin=float(args.projection_margin),
+            temperature=float(args.projection_temperature),
+            ce_weight=float(args.projection_ce_weight),
+            orth_weight=float(args.projection_orth_weight),
+            sample_weight_mode=str(args.projection_sample_weight_mode),
+            sample_weight_power=float(args.projection_sample_weight_power),
+            sample_weight_max=float(args.projection_sample_weight_max),
+            seed=int(args.seed),
+            device=str(args.projection_device),
+        )
+        final_projected_count = build_index(
+            images=[],
+            meta=final_rows,
+            output=final_index_path,
+            model_id=best_model,
+            root_dir=Path(args.train_images_dir).parent,
+            images_dir=Path(args.train_images_dir),
+            projection_path=str(final_projection_path),
+        )
+        if final_projected_count <= 0:
+            print("Final projected index build wrote no embeddings.")
+            return 1
+
     if not args.dry_run:
         _patch_config(
             config_path=config_path,
             best_model=best_model,
             final_index_path=final_index_path,
+            final_projection_path=final_projection_path,
             query_expansion_top_n=int(args.query_expansion_top_n),
             query_expansion_beta=float(args.query_expansion_beta),
             query_expansion_alpha=float(args.query_expansion_alpha),
@@ -383,6 +563,13 @@ def main(argv: list[str] | None = None) -> int:
         "best_model": best_model,
         "final_index_path": _norm_path(final_index_path),
         "final_index_rows": int(count),
+        "final_raw_index_path": _norm_path(raw_final_index_path),
+        "final_projected_index_rows": int(final_projected_count) if final_projected_count is not None else None,
+        "final_projection_path": _norm_path(final_projection_path) if final_projection_path is not None else None,
+        "final_projection_support_index_path": (
+            _norm_path(projection_support_index_path) if projection_support_index_path is not None else None
+        ),
+        "final_projection_support_rows": int(projection_support_rows_count) if projection_support_rows_count is not None else None,
         "config_path": _norm_path(config_path),
         "config_patched": not bool(args.dry_run),
         "query_expansion_top_n": int(args.query_expansion_top_n),

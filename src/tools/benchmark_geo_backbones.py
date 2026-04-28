@@ -13,9 +13,11 @@ import time
 from pathlib import Path
 from typing import List, Optional, Sequence
 
+import numpy as np
 from src.core.geo import GeoRetrievalProvider
 from src.tools.build_geo_index import build_index
 from src.tools.run_geo_eval import haversine_km, resolve_image_path
+from src.tools import train_retrieval_projection as projection_tools
 
 
 MODEL_PRESETS: dict[str, list[str]] = {
@@ -194,6 +196,165 @@ def _sort_rows_for_objective(rows: Sequence[dict], objective: str) -> List[dict]
     )
 
 
+def _resolve_projection_device(device: str) -> str:
+    raw = str(device).strip().lower()
+    if raw == "auto":
+        if getattr(projection_tools, "torch", None) is not None and projection_tools.torch.cuda.is_available():
+            return "cuda"
+        return "cpu"
+    if raw.startswith("cuda") and getattr(projection_tools, "torch", None) is not None:
+        if not projection_tools.torch.cuda.is_available():
+            return "cpu"
+    return raw or "cpu"
+
+
+def _collect_reference_paths(triplets: Sequence[dict]) -> List[str]:
+    ordered: List[str] = []
+    seen = set()
+    for row in triplets:
+        for item in row.get("positives", []):
+            path = str((item or {}).get("path") or "").strip()
+            if not path:
+                continue
+            key = projection_tools._as_posix(path)
+            if key in seen:
+                continue
+            seen.add(key)
+            ordered.append(key)
+        for item in row.get("hard_negatives", []):
+            path = str((item or {}).get("path") or "").strip()
+            if not path:
+                continue
+            key = projection_tools._as_posix(path)
+            if key in seen:
+                continue
+            seen.add(key)
+            ordered.append(key)
+    return ordered
+
+
+def _filter_rows_by_paths(rows: Sequence[dict], include_paths: Sequence[str]) -> List[dict]:
+    wanted = {projection_tools._as_posix(path) for path in include_paths if str(path).strip()}
+    if not wanted:
+        return []
+    filtered: List[dict] = []
+    for row in rows:
+        key = projection_tools._as_posix(str(row.get("path") or row.get("image") or "").strip())
+        if key and key in wanted:
+            filtered.append(dict(row))
+    return filtered
+
+
+def _fit_projection_for_index(
+    *,
+    model_id: str,
+    raw_index_path: Path,
+    triplet_path: Path,
+    projection_images_dir: Path,
+    projection_path: Path,
+    projection_report_path: Path,
+    max_triplets: int,
+    output_dim: int,
+    epochs: int,
+    batch_size: int,
+    learning_rate: float,
+    weight_decay: float,
+    margin: float,
+    temperature: float,
+    ce_weight: float,
+    orth_weight: float,
+    sample_weight_mode: str,
+    sample_weight_power: float,
+    sample_weight_max: float,
+    seed: int,
+    device: str,
+) -> dict:
+    resolved_device = _resolve_projection_device(device)
+    triplets = projection_tools._load_triplets(triplet_path, max_triplets=max(0, int(max_triplets)))
+    if not triplets:
+        raise ValueError("projection_triplets_empty_or_invalid")
+    requested_paths = projection_tools._collect_requested_paths(triplets)
+    by_exact, by_name, _ = projection_tools._load_index_embeddings(raw_index_path)
+    embed_written, embed_missing = projection_tools._embed_missing(
+        requested_paths=requested_paths,
+        by_exact=by_exact,
+        by_name=by_name,
+        model_id=model_id,
+        images_dir=projection_images_dir,
+        device=resolved_device,
+    )
+    missing_summary = projection_tools._summarize_missing_paths_by_role(
+        triplets,
+        by_exact=by_exact,
+        by_name=by_name,
+    )
+    embeddings, rows, dataset_stats = projection_tools._build_training_records(
+        triplets,
+        by_exact=by_exact,
+        by_name=by_name,
+        sample_weight_mode=sample_weight_mode,
+        sample_weight_power=float(sample_weight_power),
+        sample_weight_max=float(sample_weight_max),
+    )
+    if not rows:
+        raise ValueError(
+            projection_tools._format_no_valid_training_records_error(
+                triplets_loaded=len(triplets),
+                requested_unique_paths=len(requested_paths),
+                dataset_stats=dataset_stats,
+                missing_summary=missing_summary,
+                embedding_index=str(raw_index_path),
+                images_dir=str(projection_images_dir),
+            )
+        )
+
+    weight, bias, train_report = projection_tools.train_projection(
+        embeddings=embeddings,
+        rows=rows,
+        output_dim=int(output_dim),
+        epochs=int(epochs),
+        batch_size=int(batch_size),
+        learning_rate=float(learning_rate),
+        weight_decay=float(weight_decay),
+        margin=float(margin),
+        temperature=float(temperature),
+        ce_weight=float(ce_weight),
+        orth_weight=float(orth_weight),
+        sample_weight_mode=str(sample_weight_mode),
+        sample_weight_power=float(sample_weight_power),
+        sample_weight_max=float(sample_weight_max),
+        seed=int(seed),
+        device=resolved_device,
+    )
+
+    projection_path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez(
+        projection_path,
+        matrix=np.asarray(weight, dtype=np.float32),
+        bias=np.asarray(bias, dtype=np.float32),
+        model_id=np.asarray(str(model_id), dtype=np.str_),
+        source_index=np.asarray(str(raw_index_path).replace("\\", "/"), dtype=np.str_),
+        triplets_path=np.asarray(str(triplet_path).replace("\\", "/"), dtype=np.str_),
+    )
+    projection_payload = {
+        "model_id": str(model_id),
+        "raw_index_path": str(raw_index_path),
+        "projection_path": str(projection_path),
+        "triplets_path": str(triplet_path),
+        "triplets_loaded": len(triplets),
+        "triplets_used": len(rows),
+        "requested_unique_paths": len(requested_paths),
+        "embed_written": int(embed_written),
+        "embed_missing": int(embed_missing),
+        "missing_summary": missing_summary,
+        "dataset_stats": dataset_stats,
+        "train_report": train_report,
+    }
+    projection_report_path.parent.mkdir(parents=True, exist_ok=True)
+    projection_report_path.write_text(json.dumps(projection_payload, indent=2), encoding="utf-8")
+    return projection_payload
+
+
 def _evaluate_top1(
     provider: GeoRetrievalProvider,
     rows: List[dict],
@@ -298,6 +459,40 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--kde-refine-switch-radius-km", type=float, default=0.0)
     parser.add_argument("--kde-refine-max-iters", type=int, default=8)
     parser.add_argument("--kde-refine-adaptive-mass", type=float, default=0.0)
+    parser.add_argument("--projection-triplets", default="", help="Optional hard-negative triplet JSONL for per-model projection training.")
+    parser.add_argument(
+        "--projection-images-dir",
+        default="",
+        help="Optional image root for triplet query embedding backfill. Defaults to --eval-images-dir.",
+    )
+    parser.add_argument(
+        "--projection-reference-images-dir",
+        default="",
+        help="Optional image root for projection reference embeddings. Defaults to --train-images-dir.",
+    )
+    parser.add_argument(
+        "--projection-reference-metadata",
+        default="",
+        help="Optional metadata for projection reference embeddings. Defaults to --train-metadata.",
+    )
+    parser.add_argument("--projection-max-triplets", type=int, default=0)
+    parser.add_argument("--projection-output-dim", type=int, default=0)
+    parser.add_argument("--projection-epochs", type=int, default=8)
+    parser.add_argument("--projection-batch-size", type=int, default=16)
+    parser.add_argument("--projection-learning-rate", type=float, default=3e-4)
+    parser.add_argument("--projection-weight-decay", type=float, default=1e-4)
+    parser.add_argument("--projection-margin", type=float, default=0.08)
+    parser.add_argument("--projection-temperature", type=float, default=0.07)
+    parser.add_argument("--projection-ce-weight", type=float, default=0.3)
+    parser.add_argument("--projection-orth-weight", type=float, default=0.002)
+    parser.add_argument(
+        "--projection-sample-weight-mode",
+        default="triplet_weight",
+        choices=["auto", "uniform", "triplet_weight"],
+    )
+    parser.add_argument("--projection-sample-weight-power", type=float, default=1.0)
+    parser.add_argument("--projection-sample-weight-max", type=float, default=3.0)
+    parser.add_argument("--projection-device", default="auto", help="auto|cpu|cuda")
     parser.add_argument("--output", default="runs/backbone_bench/backbone_benchmark.json")
     parser.add_argument("--reuse-indices", action="store_true")
     args = parser.parse_args(argv)
@@ -315,6 +510,24 @@ def main(argv: Optional[List[str]] = None) -> int:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     index_dir = output_path.parent / "indices"
     index_dir.mkdir(parents=True, exist_ok=True)
+    projection_dir = output_path.parent / "projections"
+    projection_requested = bool(str(args.projection_triplets).strip())
+    projection_triplet_path = Path(str(args.projection_triplets).strip()) if projection_requested else None
+    if projection_requested and (projection_triplet_path is None or not projection_triplet_path.exists()):
+        raise FileNotFoundError(f"projection_triplets_not_found:{projection_triplet_path}")
+    projection_images_dir = Path(str(args.projection_images_dir).strip()) if str(args.projection_images_dir).strip() else eval_images_dir
+    projection_reference_images_dir = (
+        Path(str(args.projection_reference_images_dir).strip())
+        if str(args.projection_reference_images_dir).strip()
+        else train_images_dir
+    )
+    projection_reference_meta_path = (
+        Path(str(args.projection_reference_metadata).strip())
+        if str(args.projection_reference_metadata).strip()
+        else train_meta_path
+    )
+    if projection_requested and not projection_reference_meta_path.exists():
+        raise FileNotFoundError(f"projection_reference_metadata_not_found:{projection_reference_meta_path}")
 
     model_ids = _resolve_model_ids(args.model_ids, args.model_preset)
     if not model_ids:
@@ -331,20 +544,41 @@ def main(argv: Optional[List[str]] = None) -> int:
     eval_rows_all = _load_rows(eval_meta_path)
     train_rows = _sample_rows(train_rows_all, int(args.train_limit), int(args.seed))
     eval_rows = _sample_rows(eval_rows_all, int(args.eval_limit), int(args.seed))
+    projection_triplets = (
+        projection_tools._load_triplets(projection_triplet_path, max_triplets=max(0, int(args.projection_max_triplets)))
+        if projection_requested and projection_triplet_path is not None
+        else []
+    )
+    projection_reference_rows_all = _load_rows(projection_reference_meta_path) if projection_requested else []
+    projection_reference_rows = (
+        _filter_rows_by_paths(projection_reference_rows_all, _collect_reference_paths(projection_triplets))
+        if projection_requested
+        else []
+    )
 
     results = []
     for model_id in model_ids:
         slug = _slug(model_id)
-        index_path = index_dir / f"{slug}.npz"
+        raw_index_path = index_dir / f"{slug}.npz"
+        projected_index_path = index_dir / f"{slug}_projected.npz"
+        projection_support_index_path = index_dir / f"{slug}_projection_support.npz"
+        projection_path = projection_dir / f"{slug}.projection.npz"
+        projection_report_path = projection_dir / f"{slug}.projection.report.json"
+        index_path = raw_index_path
+        query_projection_path: Optional[str] = None
         build_sec = 0.0
+        projection_train_sec = 0.0
+        projection_index_sec = 0.0
+        projection_support_build_sec = 0.0
+        projection_summary = None
 
         try:
             build_start = time.perf_counter()
-            if not args.reuse_indices or not index_path.exists():
+            if not args.reuse_indices or not raw_index_path.exists():
                 count = build_index(
                     images=[],
                     meta=train_rows,
-                    output=index_path,
+                    output=raw_index_path,
                     model_id=model_id,
                     root_dir=train_images_dir.parent,
                     images_dir=train_images_dir,
@@ -355,7 +589,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                             "model_id": model_id,
                             "status": "failed",
                             "details": "no_embeddings_written",
-                            "index_path": str(index_path),
+                            "index_path": str(raw_index_path),
                         }
                     )
                     continue
@@ -366,17 +600,99 @@ def main(argv: Optional[List[str]] = None) -> int:
                     "model_id": model_id,
                     "status": "failed",
                     "details": f"build_failed:{_error_text(exc)}",
-                    "index_path": str(index_path),
+                    "index_path": str(raw_index_path),
                     "build_seconds": build_sec,
                 }
             )
             continue
+
+        if projection_requested and projection_triplet_path is not None:
+            try:
+                if not projection_triplets:
+                    raise ValueError("projection_triplets_empty_or_invalid")
+                if not projection_reference_rows:
+                    raise ValueError("projection_reference_rows_empty_for_triplets")
+                projection_support_build_start = time.perf_counter()
+                if not args.reuse_indices or not projection_support_index_path.exists():
+                    projection_support_count = build_index(
+                        images=[],
+                        meta=projection_reference_rows,
+                        output=projection_support_index_path,
+                        model_id=model_id,
+                        root_dir=projection_reference_images_dir.parent,
+                        images_dir=projection_reference_images_dir,
+                    )
+                    if projection_support_count <= 0:
+                        raise ValueError("projection_support_index_no_embeddings_written")
+                projection_support_build_sec = float(time.perf_counter() - projection_support_build_start)
+                projection_train_start = time.perf_counter()
+                if not args.reuse_indices or not projection_path.exists() or not projection_report_path.exists():
+                    projection_summary = _fit_projection_for_index(
+                        model_id=model_id,
+                        raw_index_path=projection_support_index_path,
+                        triplet_path=projection_triplet_path,
+                        projection_images_dir=projection_images_dir,
+                        projection_path=projection_path,
+                        projection_report_path=projection_report_path,
+                        max_triplets=int(args.projection_max_triplets),
+                        output_dim=int(args.projection_output_dim),
+                        epochs=int(args.projection_epochs),
+                        batch_size=int(args.projection_batch_size),
+                        learning_rate=float(args.projection_learning_rate),
+                        weight_decay=float(args.projection_weight_decay),
+                        margin=float(args.projection_margin),
+                        temperature=float(args.projection_temperature),
+                        ce_weight=float(args.projection_ce_weight),
+                        orth_weight=float(args.projection_orth_weight),
+                        sample_weight_mode=str(args.projection_sample_weight_mode),
+                        sample_weight_power=float(args.projection_sample_weight_power),
+                        sample_weight_max=float(args.projection_sample_weight_max),
+                        seed=int(args.seed),
+                        device=str(args.projection_device),
+                    )
+                projection_train_sec = float(time.perf_counter() - projection_train_start)
+
+                projection_index_start = time.perf_counter()
+                if not args.reuse_indices or not projected_index_path.exists():
+                    projected_count = build_index(
+                        images=[],
+                        meta=train_rows,
+                        output=projected_index_path,
+                        model_id=model_id,
+                        root_dir=train_images_dir.parent,
+                        images_dir=train_images_dir,
+                        projection_path=str(projection_path),
+                    )
+                    if projected_count <= 0:
+                        raise ValueError("projected_index_no_embeddings_written")
+                projection_index_sec = float(time.perf_counter() - projection_index_start)
+                index_path = projected_index_path
+                query_projection_path = str(projection_path)
+            except Exception as exc:
+                results.append(
+                    {
+                        "model_id": model_id,
+                        "status": "failed",
+                        "details": f"projection_failed:{_error_text(exc)}",
+                        "index_path": str(raw_index_path),
+                        "raw_index_path": str(raw_index_path),
+                        "projection_support_index_path": str(projection_support_index_path),
+                        "projection_path": str(projection_path),
+                        "projection_report_path": str(projection_report_path),
+                        "build_seconds": build_sec,
+                        "projection_support_build_seconds": projection_support_build_sec,
+                        "projection_train_seconds": projection_train_sec,
+                        "projection_index_seconds": projection_index_sec,
+                    }
+                )
+                continue
 
         try:
             eval_start = time.perf_counter()
             provider = GeoRetrievalProvider(
                 index_path=str(index_path),
                 model_id=model_id,
+                projection_path=query_projection_path,
                 top_k=int(args.retrieval_top_k),
                 min_score=float(args.retrieval_min_score),
                 min_keep_topk=int(args.retrieval_min_keep_topk),
@@ -414,8 +730,19 @@ def main(argv: Optional[List[str]] = None) -> int:
                     "model_id": model_id,
                     "status": "ok",
                     "index_path": str(index_path),
+                    "raw_index_path": str(raw_index_path),
+                    "projection_support_index_path": (str(projection_support_index_path) if query_projection_path else None),
+                    "projection_path": query_projection_path,
+                    "projection_report_path": (str(projection_report_path) if query_projection_path else None),
+                    "projection_enabled": bool(query_projection_path),
                     "build_seconds": build_sec,
+                    "projection_support_build_seconds": projection_support_build_sec,
+                    "projection_train_seconds": projection_train_sec,
+                    "projection_index_seconds": projection_index_sec,
                     "eval_seconds": eval_sec,
+                    "projection_triplets_used": (
+                        int(projection_summary.get("triplets_used")) if isinstance(projection_summary, dict) else None
+                    ),
                     **metrics,
                 }
             )
@@ -426,7 +753,13 @@ def main(argv: Optional[List[str]] = None) -> int:
                     "status": "failed",
                     "details": f"eval_failed:{_error_text(exc)}",
                     "index_path": str(index_path),
+                    "raw_index_path": str(raw_index_path),
+                    "projection_support_index_path": (str(projection_support_index_path) if query_projection_path else None),
+                    "projection_path": query_projection_path,
                     "build_seconds": build_sec,
+                    "projection_support_build_seconds": projection_support_build_sec,
+                    "projection_train_seconds": projection_train_sec,
+                    "projection_index_seconds": projection_index_sec,
                 }
             )
 
@@ -445,6 +778,24 @@ def main(argv: Optional[List[str]] = None) -> int:
         "model_preset": str(args.model_preset),
         "model_ids": list(model_ids),
         "rank_objective": str(args.rank_objective),
+        "projection_triplets": (str(projection_triplet_path) if projection_triplet_path is not None else None),
+        "projection_images_dir": (str(projection_images_dir) if projection_requested else None),
+        "projection_reference_images_dir": (str(projection_reference_images_dir) if projection_requested else None),
+        "projection_reference_metadata": (str(projection_reference_meta_path) if projection_requested else None),
+        "projection_max_triplets": int(args.projection_max_triplets),
+        "projection_output_dim": int(args.projection_output_dim),
+        "projection_epochs": int(args.projection_epochs),
+        "projection_batch_size": int(args.projection_batch_size),
+        "projection_learning_rate": float(args.projection_learning_rate),
+        "projection_weight_decay": float(args.projection_weight_decay),
+        "projection_margin": float(args.projection_margin),
+        "projection_temperature": float(args.projection_temperature),
+        "projection_ce_weight": float(args.projection_ce_weight),
+        "projection_orth_weight": float(args.projection_orth_weight),
+        "projection_sample_weight_mode": str(args.projection_sample_weight_mode),
+        "projection_sample_weight_power": float(args.projection_sample_weight_power),
+        "projection_sample_weight_max": float(args.projection_sample_weight_max),
+        "projection_device": str(args.projection_device),
         "query_tta_degrees": tta_degrees,
         "query_tta_modes": tta_modes,
         "query_tta_scales": tta_scales,
