@@ -58,8 +58,19 @@ class SceneStructureSignature:
     edge_density: float
     line_hist: tuple[float, ...]
     line_strength: float
+    corner_layout: tuple[float, ...]
+    edge_layout: tuple[float, ...]
+    line_orthogonality: float
+    line_anisotropy: float
+    footprint_layout: tuple[float, ...]
+    footprint_orientation_hist: tuple[float, ...]
+    footprint_rectangularity: float
+    footprint_density: float
     shadow_axis_deg: Optional[float]
     shadow_strength: float
+    shadow_elongation: float
+    sun_shadow_axis_deg: Optional[float]
+    sun_shadow_strength: float
 
 
 def _normalize_projection_path(path: object) -> Optional[str]:
@@ -1524,6 +1535,141 @@ def _resolve_candidate_image_path(raw_path: Optional[str]) -> Optional[Path]:
     return None
 
 
+def _spatial_histogram_from_points(
+    xs: np.ndarray,
+    ys: np.ndarray,
+    *,
+    width: int,
+    height: int,
+    bins: int = 4,
+    weights: Optional[np.ndarray] = None,
+) -> np.ndarray:
+    if bins <= 0:
+        return np.zeros(0, dtype=np.float32)
+    hist = np.zeros((bins, bins), dtype=np.float32)
+    if xs.size <= 0 or ys.size <= 0 or width <= 0 or height <= 0:
+        return hist.reshape(-1)
+    xs_f = np.asarray(xs, dtype=np.float32).reshape(-1)
+    ys_f = np.asarray(ys, dtype=np.float32).reshape(-1)
+    if xs_f.size != ys_f.size:
+        size = min(xs_f.size, ys_f.size)
+        xs_f = xs_f[:size]
+        ys_f = ys_f[:size]
+    weights_f = None
+    if weights is not None:
+        weights_f = np.asarray(weights, dtype=np.float32).reshape(-1)
+        if weights_f.size != xs_f.size:
+            weights_f = weights_f[: xs_f.size]
+    x_idx = np.clip((xs_f / max(1.0, float(width))) * float(bins), 0.0, float(bins) - 1e-6).astype(np.int32)
+    y_idx = np.clip((ys_f / max(1.0, float(height))) * float(bins), 0.0, float(bins) - 1e-6).astype(np.int32)
+    for idx in range(xs_f.size):
+        value = 1.0 if weights_f is None else float(max(0.0, weights_f[idx]))
+        hist[int(y_idx[idx]), int(x_idx[idx])] += value
+    total = float(np.sum(hist))
+    if total > 1e-6:
+        hist /= total
+    return hist.reshape(-1)
+
+
+def _spatial_histogram_from_mask(mask: np.ndarray, *, bins: int = 4) -> np.ndarray:
+    array = np.asarray(mask, dtype=bool)
+    if array.ndim != 2:
+        return np.zeros(bins * bins, dtype=np.float32)
+    ys, xs = np.nonzero(array)
+    return _spatial_histogram_from_points(
+        xs.astype(np.float32),
+        ys.astype(np.float32),
+        width=int(array.shape[1]),
+        height=int(array.shape[0]),
+        bins=bins,
+    )
+
+
+def _normalized_hist_entropy(values: Sequence[float]) -> float:
+    hist = np.asarray(list(values), dtype=np.float32)
+    if hist.size <= 0:
+        return 1.0
+    total = float(np.sum(hist))
+    if total <= 1e-12:
+        return 1.0
+    probs = hist / total
+    probs = probs[probs > 1e-12]
+    if probs.size <= 0:
+        return 1.0
+    entropy = float(-np.sum(probs * np.log(probs)))
+    max_entropy = math.log(float(hist.size))
+    if max_entropy <= 1e-12:
+        return 0.0
+    return max(0.0, min(1.0, entropy / max_entropy))
+
+
+def _normalized_hist_concentration(values: Sequence[float]) -> float:
+    return max(0.0, min(1.0, 1.0 - _normalized_hist_entropy(values)))
+
+
+def _line_orthogonality_score(hist: Sequence[float]) -> float:
+    values = np.asarray(list(hist), dtype=np.float32)
+    if values.size < 4:
+        return 0.0
+    total = float(np.sum(values))
+    if total <= 1e-12:
+        return 0.0
+    n_bins = int(values.size)
+    quarter = max(1, n_bins // 4)
+    best = 0.0
+    for idx in range(n_bins):
+        orth = (idx + quarter) % n_bins
+        primary = float(values[idx]) + 0.5 * float(values[(idx - 1) % n_bins]) + 0.5 * float(values[(idx + 1) % n_bins])
+        secondary = (
+            float(values[orth])
+            + 0.5 * float(values[(orth - 1) % n_bins])
+            + 0.5 * float(values[(orth + 1) % n_bins])
+        )
+        pair_total = max(0.0, min(1.0, primary + secondary))
+        pair_balance = min(primary, secondary) / max(1e-12, max(primary, secondary))
+        best = max(best, pair_total * math.sqrt(max(0.0, pair_balance)))
+    return max(0.0, min(1.0, float(best)))
+
+
+def _normalize_angle_180(angle_deg: float) -> float:
+    return float(angle_deg) % 180.0
+
+
+def _extract_weighted_centroid(mask: np.ndarray, weights: Optional[np.ndarray] = None) -> Optional[tuple[float, float, float]]:
+    ys, xs = np.nonzero(mask)
+    if xs.size <= 0:
+        return None
+    if weights is None:
+        weights_f = np.ones(xs.size, dtype=np.float32)
+    else:
+        weights_f = np.asarray(weights, dtype=np.float32).reshape(-1)
+        if weights_f.size != xs.size:
+            size = min(xs.size, weights_f.size)
+            xs = xs[:size]
+            ys = ys[:size]
+            weights_f = weights_f[:size]
+    total_w = float(np.sum(weights_f))
+    if total_w <= 1e-9:
+        return None
+    mean_x = float(np.sum(xs.astype(np.float32) * weights_f) / total_w)
+    mean_y = float(np.sum(ys.astype(np.float32) * weights_f) / total_w)
+    return mean_x, mean_y, total_w
+
+
+def _find_external_contours(mask: np.ndarray):
+    if cv2 is None or not hasattr(cv2, "findContours"):
+        return []
+    try:
+        result = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    except Exception:
+        return []
+    if isinstance(result, tuple) and len(result) == 3:
+        return result[1] or []
+    if isinstance(result, tuple) and len(result) >= 1:
+        return result[0] or []
+    return []
+
+
 def _extract_scene_structure_signature(gray: np.ndarray) -> Optional[SceneStructureSignature]:
     if cv2 is None:
         return None
@@ -1557,8 +1703,10 @@ def _extract_scene_structure_signature(gray: np.ndarray) -> Optional[SceneStruct
 
     edge_density = float(np.count_nonzero(edges)) / float(max(1, edges.size))
     edge_density = max(0.0, min(1.0, edge_density / 0.22))
+    edge_layout = _spatial_histogram_from_mask(edges > 0, bins=4)
 
     corner_density = 0.0
+    corner_layout = np.zeros(16, dtype=np.float32)
     if hasattr(cv2, "goodFeaturesToTrack"):
         try:
             corners = cv2.goodFeaturesToTrack(
@@ -1573,6 +1721,15 @@ def _extract_scene_structure_signature(gray: np.ndarray) -> Optional[SceneStruct
             corners = None
         corner_count = int(len(corners)) if corners is not None else 0
         corner_density = max(0.0, min(1.0, float(corner_count) / 72.0))
+        if corners is not None and corner_count > 0:
+            flat_corners = np.asarray(corners, dtype=np.float32).reshape(-1, 2)
+            corner_layout = _spatial_histogram_from_points(
+                flat_corners[:, 0],
+                flat_corners[:, 1],
+                width=width,
+                height=height,
+                bins=4,
+            )
 
     line_hist = np.zeros(12, dtype=np.float32)
     line_strength = 0.0
@@ -1605,9 +1762,81 @@ def _extract_scene_structure_signature(gray: np.ndarray) -> Optional[SceneStruct
             line_hist /= float(total_length)
             diag = math.hypot(float(width), float(height))
             line_strength = max(0.0, min(1.0, float(total_length) / max(1.0, 4.0 * diag)))
+    line_orthogonality = _line_orthogonality_score(line_hist.tolist())
+    line_anisotropy = max(0.0, min(1.0, 1.0 - _normalized_hist_entropy(line_hist.tolist())))
+
+    footprint_layout = np.zeros(16, dtype=np.float32)
+    footprint_orientation_hist = np.zeros(12, dtype=np.float32)
+    footprint_rectangularity = 0.0
+    footprint_density = 0.0
+    try:
+        kernel_small = np.ones((3, 3), dtype=np.uint8)
+        kernel_large = np.ones((5, 5), dtype=np.uint8)
+        dilated = cv2.dilate(edges, kernel_small, iterations=1) if hasattr(cv2, "dilate") else edges
+        closed = (
+            cv2.morphologyEx(dilated, cv2.MORPH_CLOSE, kernel_large, iterations=2)
+            if hasattr(cv2, "morphologyEx")
+            else dilated
+        )
+        contours = _find_external_contours(np.asarray(closed, dtype=np.uint8))
+    except Exception:
+        contours = []
+    if contours:
+        footprint_mask = np.zeros((height, width), dtype=np.uint8)
+        image_area = float(max(1, height * width))
+        total_area = 0.0
+        weighted_rect_sum = 0.0
+        weighted_angle_sum = 0.0
+        for contour in contours:
+            try:
+                area = float(cv2.contourArea(contour))
+            except Exception:
+                continue
+            if area < max(18.0, 0.0012 * image_area):
+                continue
+            rectangularity = 0.0
+            angle_deg = 0.0
+            if hasattr(cv2, "minAreaRect"):
+                try:
+                    rect = cv2.minAreaRect(contour)
+                    (_, _), (w_rect, h_rect), rect_angle = rect
+                    box_area = float(max(1e-6, w_rect * h_rect))
+                    rectangularity = max(0.0, min(1.0, area / box_area))
+                    if w_rect < h_rect:
+                        rect_angle += 90.0
+                    angle_deg = _normalize_angle_180(rect_angle)
+                except Exception:
+                    rectangularity = 0.0
+                    angle_deg = 0.0
+            if rectangularity < 0.35:
+                continue
+            if hasattr(cv2, "drawContours"):
+                try:
+                    cv2.drawContours(footprint_mask, [contour], -1, 255, thickness=-1)
+                except Exception:
+                    pass
+            weight = area * (0.35 + (0.65 * rectangularity))
+            total_area += area
+            weighted_rect_sum += weight * rectangularity
+            weighted_angle_sum += weight
+            bin_idx = min(
+                footprint_orientation_hist.shape[0] - 1,
+                int((_normalize_angle_180(angle_deg) / 180.0) * footprint_orientation_hist.shape[0]),
+            )
+            footprint_orientation_hist[bin_idx] += float(weight)
+        if total_area > 1e-6:
+            footprint_density = max(0.0, min(1.0, (total_area / image_area) / 0.38))
+        if weighted_angle_sum > 1e-6:
+            footprint_rectangularity = max(0.0, min(1.0, weighted_rect_sum / weighted_angle_sum))
+            footprint_orientation_hist /= float(weighted_angle_sum)
+        if np.count_nonzero(footprint_mask) > 0:
+            footprint_layout = _spatial_histogram_from_mask(footprint_mask > 0, bins=4)
 
     shadow_axis_deg: Optional[float] = None
     shadow_strength = 0.0
+    shadow_elongation = 0.0
+    sun_shadow_axis_deg: Optional[float] = None
+    sun_shadow_strength = 0.0
     try:
         smooth = cv2.GaussianBlur(equalized, (5, 5), 0) if hasattr(cv2, "GaussianBlur") else equalized
     except Exception:
@@ -1618,6 +1847,12 @@ def _extract_scene_structure_signature(gray: np.ndarray) -> Optional[SceneStruct
         dark_threshold = 0.0
     dark_mask = np.asarray(smooth <= dark_threshold, dtype=bool)
     dark_ratio = float(np.count_nonzero(dark_mask)) / float(max(1, dark_mask.size))
+    try:
+        bright_threshold = float(np.percentile(smooth, 84.0))
+    except Exception:
+        bright_threshold = 255.0
+    bright_mask = np.asarray(smooth >= bright_threshold, dtype=bool)
+    bright_ratio = float(np.count_nonzero(bright_mask)) / float(max(1, bright_mask.size))
     if 0.03 <= dark_ratio <= 0.35:
         ys, xs = np.nonzero(dark_mask)
         if xs.size >= 24:
@@ -1635,14 +1870,58 @@ def _extract_scene_structure_signature(gray: np.ndarray) -> Optional[SceneStruct
                 if norm_dist >= 0.10:
                     shadow_axis_deg = math.degrees(math.atan2(dy, dx)) % 360.0
                     shadow_strength = max(0.0, min(1.0, norm_dist * min(1.0, dark_ratio / 0.12)))
+                centered_x = xs.astype(np.float32) - mean_x
+                centered_y = ys.astype(np.float32) - mean_y
+                cov_xx = float(np.sum(weights * centered_x * centered_x) / total_w)
+                cov_yy = float(np.sum(weights * centered_y * centered_y) / total_w)
+                cov_xy = float(np.sum(weights * centered_x * centered_y) / total_w)
+                cov = np.asarray([[cov_xx, cov_xy], [cov_xy, cov_yy]], dtype=np.float32)
+                try:
+                    eigvals = np.linalg.eigvalsh(cov)
+                except np.linalg.LinAlgError:
+                    eigvals = np.asarray([0.0, 0.0], dtype=np.float32)
+                major = float(max(0.0, eigvals[-1] if eigvals.size > 0 else 0.0))
+                minor = float(max(0.0, eigvals[0] if eigvals.size > 0 else 0.0))
+                if major > 1e-9:
+                    shadow_elongation = max(0.0, min(1.0, 1.0 - math.sqrt(minor / major)))
+                if 0.03 <= bright_ratio <= 0.35:
+                    bright_ys, bright_xs = np.nonzero(bright_mask)
+                    if bright_xs.size >= 24:
+                        bright_weights = smooth[bright_ys, bright_xs].astype(np.float32) - float(bright_threshold) + 1.0
+                        bright_centroid = _extract_weighted_centroid(bright_mask, bright_weights)
+                        if bright_centroid is not None:
+                            bright_x, bright_y, bright_total = bright_centroid
+                            axis_dx = mean_x - bright_x
+                            axis_dy = mean_y - bright_y
+                            axis_dist = math.hypot(axis_dx, axis_dy)
+                            norm_axis_dist = axis_dist / max(1.0, 0.5 * math.hypot(float(width), float(height)))
+                            if norm_axis_dist >= 0.08:
+                                sun_shadow_axis_deg = math.degrees(math.atan2(axis_dy, axis_dx)) % 360.0
+                                density_support = min(1.0, min(dark_ratio, bright_ratio) / 0.10)
+                                bright_support = min(1.0, bright_total / max(1.0, 0.06 * float(width * height)))
+                                sun_shadow_strength = max(
+                                    0.0,
+                                    min(1.0, norm_axis_dist * density_support * math.sqrt(max(0.0, bright_support))),
+                                )
 
     return SceneStructureSignature(
         corner_density=float(corner_density),
         edge_density=float(edge_density),
         line_hist=tuple(float(x) for x in line_hist.tolist()),
         line_strength=float(line_strength),
+        corner_layout=tuple(float(x) for x in corner_layout.tolist()),
+        edge_layout=tuple(float(x) for x in edge_layout.tolist()),
+        line_orthogonality=float(line_orthogonality),
+        line_anisotropy=float(line_anisotropy),
+        footprint_layout=tuple(float(x) for x in footprint_layout.tolist()),
+        footprint_orientation_hist=tuple(float(x) for x in footprint_orientation_hist.tolist()),
+        footprint_rectangularity=float(footprint_rectangularity),
+        footprint_density=float(footprint_density),
         shadow_axis_deg=(float(shadow_axis_deg) if shadow_axis_deg is not None else None),
         shadow_strength=float(shadow_strength),
+        shadow_elongation=float(shadow_elongation),
+        sun_shadow_axis_deg=(float(sun_shadow_axis_deg) if sun_shadow_axis_deg is not None else None),
+        sun_shadow_strength=float(sun_shadow_strength),
     )
 
 
@@ -1693,20 +1972,160 @@ def _scene_structure_similarity(query_sig: SceneStructureSignature, cand_sig: Sc
     line_sim = _histogram_cosine_similarity(query_sig.line_hist, cand_sig.line_hist)
     edge_sim = max(0.0, min(1.0, 1.0 - abs(query_sig.edge_density - cand_sig.edge_density)))
     corner_sim = max(0.0, min(1.0, 1.0 - abs(query_sig.corner_density - cand_sig.corner_density)))
-    line_weight = 0.50 * min(max(0.0, query_sig.line_strength), max(0.0, cand_sig.line_strength))
-    corner_weight = 0.22
-    edge_weight = 0.13
-    shadow_weight = 0.15 * min(max(0.0, query_sig.shadow_strength), max(0.0, cand_sig.shadow_strength))
+    corner_layout_sim = _histogram_cosine_similarity(query_sig.corner_layout, cand_sig.corner_layout)
+    edge_layout_sim = _histogram_cosine_similarity(query_sig.edge_layout, cand_sig.edge_layout)
+    ortho_sim = max(
+        0.0,
+        min(1.0, 1.0 - abs(float(query_sig.line_orthogonality) - float(cand_sig.line_orthogonality))),
+    )
+    anisotropy_sim = max(
+        0.0,
+        min(1.0, 1.0 - abs(float(query_sig.line_anisotropy) - float(cand_sig.line_anisotropy))),
+    )
+    footprint_layout_sim = _histogram_cosine_similarity(query_sig.footprint_layout, cand_sig.footprint_layout)
+    footprint_orientation_sim = _histogram_cosine_similarity(
+        query_sig.footprint_orientation_hist,
+        cand_sig.footprint_orientation_hist,
+    )
+    footprint_rectangularity_sim = max(
+        0.0,
+        min(
+            1.0,
+            1.0 - abs(float(query_sig.footprint_rectangularity) - float(cand_sig.footprint_rectangularity)),
+        ),
+    )
+    footprint_density_sim = max(
+        0.0,
+        min(1.0, 1.0 - abs(float(query_sig.footprint_density) - float(cand_sig.footprint_density))),
+    )
+    line_support = min(max(0.0, query_sig.line_strength), max(0.0, cand_sig.line_strength))
+    shadow_support = min(max(0.0, query_sig.shadow_strength), max(0.0, cand_sig.shadow_strength))
     shadow_sim = _circular_similarity_deg(query_sig.shadow_axis_deg, cand_sig.shadow_axis_deg)
-    total = line_weight + corner_weight + edge_weight + shadow_weight
-    if total <= 1e-9:
-        return 0.5
-    score = (
-        (line_weight * line_sim)
-        + (corner_weight * corner_sim)
-        + (edge_weight * edge_sim)
-        + (shadow_weight * shadow_sim)
-    ) / total
+    shadow_shape_sim = max(
+        0.0,
+        min(1.0, 1.0 - abs(float(query_sig.shadow_elongation) - float(cand_sig.shadow_elongation))),
+    )
+    sun_shadow_axis_sim = _circular_similarity_deg(query_sig.sun_shadow_axis_deg, cand_sig.sun_shadow_axis_deg)
+
+    # Keep the older structure signal as the anchor and let geometry-lite cues
+    # influence the score only when their evidence is distinctive enough.
+    legacy_line_weight = 0.50 * line_support
+    legacy_corner_weight = 0.22
+    legacy_edge_weight = 0.13
+    legacy_shadow_weight = 0.15 * shadow_support
+    legacy_total = legacy_line_weight + legacy_corner_weight + legacy_edge_weight + legacy_shadow_weight
+    if legacy_total <= 1e-9:
+        legacy_score = 0.5
+    else:
+        legacy_score = (
+            (legacy_line_weight * line_sim)
+            + (legacy_corner_weight * corner_sim)
+            + (legacy_edge_weight * edge_sim)
+            + (legacy_shadow_weight * shadow_sim)
+        ) / legacy_total
+
+    corner_layout_concentration = min(
+        _normalized_hist_concentration(query_sig.corner_layout),
+        _normalized_hist_concentration(cand_sig.corner_layout),
+    )
+    edge_layout_concentration = min(
+        _normalized_hist_concentration(query_sig.edge_layout),
+        _normalized_hist_concentration(cand_sig.edge_layout),
+    )
+    corner_layout_support = min(
+        1.0,
+        min(max(0.0, query_sig.corner_density), max(0.0, cand_sig.corner_density))
+        * (0.35 + (0.65 * corner_layout_concentration)),
+    )
+    edge_layout_support = min(
+        1.0,
+        min(max(0.0, query_sig.edge_density), max(0.0, cand_sig.edge_density))
+        * (0.40 + (0.60 * edge_layout_concentration)),
+    )
+    directional_support = line_support * min(max(0.0, query_sig.line_anisotropy), max(0.0, cand_sig.line_anisotropy))
+    ortho_support = directional_support * min(
+        max(0.0, query_sig.line_orthogonality),
+        max(0.0, cand_sig.line_orthogonality),
+    )
+    footprint_layout_concentration = min(
+        _normalized_hist_concentration(query_sig.footprint_layout),
+        _normalized_hist_concentration(cand_sig.footprint_layout),
+    )
+    footprint_orientation_concentration = min(
+        _normalized_hist_concentration(query_sig.footprint_orientation_hist),
+        _normalized_hist_concentration(cand_sig.footprint_orientation_hist),
+    )
+    footprint_support = min(
+        1.0,
+        min(max(0.0, query_sig.footprint_density), max(0.0, cand_sig.footprint_density))
+        * (0.35 + (0.65 * footprint_layout_concentration)),
+    )
+    footprint_orientation_support = footprint_support * (
+        0.35
+        + (
+            0.65
+            * min(
+                max(0.0, query_sig.footprint_rectangularity),
+                max(0.0, cand_sig.footprint_rectangularity),
+            )
+            * footprint_orientation_concentration
+        )
+    )
+    shadow_shape_support = shadow_support * min(
+        max(0.0, query_sig.shadow_elongation),
+        max(0.0, cand_sig.shadow_elongation),
+    )
+    sun_shadow_support = min(
+        max(0.0, query_sig.sun_shadow_strength),
+        max(0.0, cand_sig.sun_shadow_strength),
+    )
+
+    corner_layout_weight = 0.36 * corner_layout_support
+    edge_layout_weight = 0.24 * edge_layout_support
+    ortho_weight = 0.24 * ortho_support
+    anisotropy_weight = 0.10 * directional_support
+    footprint_layout_weight = 0.12 * footprint_support
+    footprint_orientation_weight = 0.06 * footprint_orientation_support
+    footprint_shape_weight = 0.04 * footprint_support
+    shadow_shape_weight = 0.06 * shadow_shape_support
+    sun_shadow_weight = 0.04 * sun_shadow_support
+    geometry_total = (
+        corner_layout_weight
+        + edge_layout_weight
+        + ortho_weight
+        + anisotropy_weight
+        + footprint_layout_weight
+        + footprint_orientation_weight
+        + footprint_shape_weight
+        + shadow_shape_weight
+        + sun_shadow_weight
+    )
+    if geometry_total <= 1e-9:
+        return max(0.0, min(1.0, float(legacy_score)))
+
+    geometry_score = (
+        (corner_layout_weight * corner_layout_sim)
+        + (edge_layout_weight * edge_layout_sim)
+        + (ortho_weight * ortho_sim)
+        + (anisotropy_weight * anisotropy_sim)
+        + (footprint_layout_weight * footprint_layout_sim)
+        + (footprint_orientation_weight * footprint_orientation_sim)
+        + (footprint_shape_weight * (0.55 * footprint_rectangularity_sim + 0.45 * footprint_density_sim))
+        + (shadow_shape_weight * shadow_shape_sim)
+        + (sun_shadow_weight * sun_shadow_axis_sim)
+    ) / geometry_total
+    geometry_mix = min(
+        0.46,
+        (0.24 * corner_layout_support)
+        + (0.16 * edge_layout_support)
+        + (0.18 * ortho_support)
+        + (0.10 * directional_support)
+        + (0.06 * footprint_support)
+        + (0.04 * footprint_orientation_support)
+        + (0.06 * shadow_shape_support)
+        + (0.03 * sun_shadow_support)
+    )
+    score = ((1.0 - geometry_mix) * float(legacy_score)) + (geometry_mix * float(geometry_score))
     return max(0.0, min(1.0, float(score)))
 
 
