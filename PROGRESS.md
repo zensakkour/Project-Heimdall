@@ -1889,3 +1889,58 @@ Do not delete or edit past entries. Append new work at the end.
 - Decision:
   - stop treating more small rerank ideas as the primary path to a breakthrough
   - move the next research cycle onto realistic data construction first
+
+## 2026-04-29 23:45 - Mapillary Paris street-data ingestion tool
+
+- Added:
+  - `src/tools/download_mapillary_paris.py`
+  - `src/tests/test_download_mapillary_paris.py`
+- Implemented a first realistic street-image ingestion tool for the new Paris data branch:
+  - reads `MAPILLARY_ACCESS_TOKEN` from environment
+  - splits the requested Paris bbox into safe smaller query cells using meter-based grid steps
+  - queries `graph.mapillary.com/images` with the required fields
+  - prefers `computed_geometry` over `geometry`
+  - prefers `computed_compass_angle` over `compass_angle`
+  - uses `thumb_2048_url` with `thumb_1024_url` fallback
+  - writes `data/paris_realistic_v1/street/images/` plus `metadata.csv`
+  - dedupes by `image_id`
+  - limits near-duplicates by cell sampling and per-sequence caps
+  - supports `--dry-run` for expected-count checks without writing files
+  - includes retry and backoff for API and download reads
+- Documentation:
+  - updated `README.md` with the new realistic Paris street-data bootstrap command and metadata contract
+- Decision:
+  - start the realistic data pipeline with a controlled, reproducible street-image bootstrap before moving to aerial pairing and split generation
+
+## 2026-04-30 00:15 - OpenAerialMap aerial pairing tool
+
+- Added:
+  - `src/tools/build_aerial_pairs.py`
+  - `src/tests/test_build_aerial_pairs.py`
+- Implemented the first aerial-pair generation step for the realistic Paris branch:
+  - reads `street/metadata.csv`
+  - queries OpenAerialMap metadata near each street coordinate
+  - selects the highest-resolution scene covering the point
+  - reads the OAM TMS URL from scene metadata and renders a centered aerial crop
+  - writes `aerial/images/`, `aerial/metadata.csv`, and `pairs.csv`
+  - marks `no_open_aerial_found` when no OAM scene covers the point
+  - supports `--allow-missing-aerial` for explicit missing-pair rows
+- Documentation:
+  - updated `README.md` with the OAM pairing command and output contracts
+- Decision:
+  - keep the provider abstraction minimal for now: one open provider, explicit contracts, and TMS-based centered crops before adding more imagery sources
+
+## 2026-04-30 00:35 - Leakage-safe realistic split builder
+
+- Added:
+  - `src/tools/split_realistic_dataset.py`
+  - `src/tests/test_split_realistic_dataset.py`
+- Implemented spatial splitting for the realistic Paris dataset:
+  - groups pairs by geographic cells instead of random rows
+  - writes `train_pairs.csv`, `val_pairs.csv`, `test_pairs.csv`
+  - writes `split_summary.json` with pair counts, cell counts, bbox, seed, cell size, and minimum cross-split distance
+  - added a `--sanity-check-dir` mode to report minimum cross-split distance from an existing split folder
+- Documentation:
+  - updated `README.md` with split generation and sanity-check commands
+- Decision:
+  - keep the fixed realistic branch benchmark leakage-safe from the start rather than fixing split contamination later
