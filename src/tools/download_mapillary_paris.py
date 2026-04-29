@@ -426,16 +426,22 @@ def download_mapillary_dataset(
     seen_image_ids: set[str] = set()
     sequence_counts: Dict[str, int] = {}
     images_dir = out_dir / "images"
+    failed_cells = 0
+    failed_downloads = 0
 
     for cell in cells:
         if len(selected_rows) >= int(max_images):
             break
-        candidates = fetch_mapillary_cell_images(
-            cell,
-            token=access_token,
-            limit=MAX_MAPILLARY_LIMIT,
-            fetch_json_fn=fetch_json_fn,
-        )
+        try:
+            candidates = fetch_mapillary_cell_images(
+                cell,
+                token=access_token,
+                limit=MAX_MAPILLARY_LIMIT,
+                fetch_json_fn=fetch_json_fn,
+            )
+        except Exception:
+            failed_cells += 1
+            continue
         picked = select_cell_images(
             candidates,
             street_per_cell=street_per_cell,
@@ -452,7 +458,11 @@ def download_mapillary_dataset(
                 images_dir.mkdir(parents=True, exist_ok=True)
                 out_path = out_dir / rel_path
                 if not out_path.exists():
-                    out_path.write_bytes(download_bytes_fn(image.thumb_url))
+                    try:
+                        out_path.write_bytes(download_bytes_fn(image.thumb_url))
+                    except Exception:
+                        failed_downloads += 1
+                        continue
             selected_rows.append(
                 {
                     "image_id": image.image_id,
@@ -494,6 +504,8 @@ def download_mapillary_dataset(
         "seed": int(seed),
         "dry_run": bool(dry_run),
         "selected_count": len(selected_rows),
+        "failed_cells": int(failed_cells),
+        "failed_downloads": int(failed_downloads),
         "metadata_path": str(metadata_path),
         "images_dir": str(images_dir),
     }
