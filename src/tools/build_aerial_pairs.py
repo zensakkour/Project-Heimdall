@@ -18,6 +18,11 @@ from PIL import Image
 
 OAM_META_ENDPOINT = "https://api.openaerialmap.org/meta"
 USER_AGENT = "Project-Heimdall/1.0 (realistic Paris aerial pairing)"
+IGN_GEOPF_ORTHO_URL = (
+    "https://data.geopf.fr/wmts?"
+    "SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&"
+    "FORMAT=image/jpeg&TILEMATRIXSET=PM_0_19&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}"
+)
 
 
 @dataclass(frozen=True)
@@ -228,6 +233,19 @@ class OpenAerialMapProvider(AerialProvider):
         return scenes[0]
 
 
+class IgnGeopfProvider(AerialProvider):
+    def best_scene_for_point(self, lat: float, lon: float) -> Optional[AerialScene]:
+        return AerialScene(
+            source_id="ign_geopf_ortho",
+            provider="ign_geopf",
+            title="IGN ORTHOIMAGERY.ORTHOPHOTOS",
+            bbox=(-180.0, -85.0, 180.0, 85.0),
+            resolution_m=0.20,
+            license_info="IGN / Geoportail orthophotos; verify attribution for final publication.",
+            tms_url=IGN_GEOPF_ORTHO_URL,
+        )
+
+
 def make_provider(
     provider_name: str,
     *,
@@ -236,6 +254,8 @@ def make_provider(
     normalized = str(provider_name).strip().lower()
     if normalized == "openaerialmap":
         return OpenAerialMapProvider(fetch_json_fn=fetch_json_fn)
+    if normalized == "ign_geopf":
+        return IgnGeopfProvider()
     raise ValueError(f"unsupported_provider:{provider_name}")
 
 
