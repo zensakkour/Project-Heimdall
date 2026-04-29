@@ -8,6 +8,7 @@ import pytest
 from src.tools.download_mapillary_paris import (
     GridCell,
     _fetch_json_with_retry,
+    _load_dotenv_value,
     build_mapillary_images_url,
     download_mapillary_dataset,
     parse_bbox,
@@ -96,6 +97,12 @@ def test_fetch_json_with_retry_retries_until_success(monkeypatch: pytest.MonkeyP
     assert payload == {"data": []}
     assert calls["count"] == 3
     assert len(sleeps) == 2
+
+
+def test_load_dotenv_value_reads_key(tmp_path: Path) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text("# comment\nMAPILLARY_ACCESS_TOKEN='abc123'\nOTHER=x\n", encoding="utf-8")
+    assert _load_dotenv_value("MAPILLARY_ACCESS_TOKEN", env_path=env_path) == "abc123"
 
 
 def test_download_mapillary_dataset_writes_metadata_and_limits_sequences(tmp_path: Path) -> None:
@@ -214,3 +221,34 @@ def test_download_mapillary_dataset_dry_run_skips_writes(tmp_path: Path) -> None
     assert summary["selected_count"] == 1
     assert not (tmp_path / "street" / "metadata.csv").exists()
     assert not (tmp_path / "street" / "images").exists()
+
+
+def test_download_mapillary_dataset_reads_token_from_dotenv(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    (tmp_path / ".env").write_text("MAPILLARY_ACCESS_TOKEN=dotenv-token\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    def fake_fetch_json(url: str) -> dict:
+        assert "access_token=dotenv-token" in url
+        return {
+            "data": [
+                {
+                    "id": "img-1",
+                    "computed_geometry": {"type": "Point", "coordinates": [2.3001, 48.8001]},
+                    "thumb_2048_url": "https://example.com/img-1.jpg",
+                }
+            ]
+        }
+
+    summary = download_mapillary_dataset(
+        bbox=(48.80, 2.30, 48.8005, 2.3005),
+        out_dir=tmp_path / "street",
+        grid_step_m=1000.0,
+        street_per_cell=1,
+        max_images=1,
+        max_per_sequence=10,
+        seed=42,
+        dry_run=True,
+        fetch_json_fn=fake_fetch_json,
+        download_bytes_fn=lambda url: b"x",
+    )
+    assert summary["selected_count"] == 1
