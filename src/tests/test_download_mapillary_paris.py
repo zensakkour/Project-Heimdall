@@ -252,3 +252,42 @@ def test_download_mapillary_dataset_reads_token_from_dotenv(tmp_path: Path, monk
         download_bytes_fn=lambda url: b"x",
     )
     assert summary["selected_count"] == 1
+
+
+def test_download_mapillary_dataset_skips_failed_downloads(tmp_path: Path) -> None:
+    def fake_fetch_json(url: str) -> dict:
+        return {
+            "data": [
+                {
+                    "id": "img-1",
+                    "computed_geometry": {"type": "Point", "coordinates": [2.3001, 48.8001]},
+                    "thumb_2048_url": "https://example.com/img-1.jpg",
+                },
+                {
+                    "id": "img-2",
+                    "computed_geometry": {"type": "Point", "coordinates": [2.3002, 48.8002]},
+                    "thumb_2048_url": "https://example.com/img-2.jpg",
+                },
+            ]
+        }
+
+    def fake_download_bytes(url: str) -> bytes:
+        if url.endswith("img-1.jpg"):
+            raise RuntimeError("temporary")
+        return b"ok"
+
+    summary = download_mapillary_dataset(
+        bbox=(48.80, 2.30, 48.8005, 2.3005),
+        out_dir=tmp_path / "street",
+        grid_step_m=1000.0,
+        street_per_cell=3,
+        max_images=10,
+        max_per_sequence=10,
+        seed=42,
+        token="TOKEN",
+        fetch_json_fn=fake_fetch_json,
+        download_bytes_fn=fake_download_bytes,
+    )
+
+    assert summary["selected_count"] == 1
+    assert summary["failed_downloads"] == 1

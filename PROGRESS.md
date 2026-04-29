@@ -1967,3 +1967,29 @@ Do not delete or edit past entries. Append new work at the end.
     - IGN orthophoto aerial pairing for Paris
 - Decision:
   - for Paris specifically, completeness now means combining open French street imagery with French orthophotos instead of relying on one global provider alone
+
+## 2026-04-30 07:35 - Full data-build checkpoint
+
+- Operational build results on `tech/paris-realistic-data-v1`:
+  - confirmed `.env` token loading for Mapillary and validated the live downloader on a smoke bbox
+  - full-city Mapillary pull reached `3029` downloaded street images before the command window expired
+  - full-city Panoramax pull was promoted into a stable `10000`-image street dataset at:
+    - `data/paris_realistic_v1/street_panoramax/metadata.csv`
+  - IGN aerial pairing produced `3802` centered aerial crops before the long run window expired
+  - materialized those completed crops into:
+    - `data/paris_realistic_v1/aerial/metadata.csv`
+    - `data/paris_realistic_v1/pairs.csv`
+  - current pair count: `3802`
+  - current split outputs:
+    - train `2671`
+    - val `583`
+    - test `548`
+- Hardening:
+  - updated the Mapillary downloader so transient CDN or per-cell failures no longer abort the full run
+  - downloader now skips failed image downloads and keeps the dataset build moving
+- Current caveat:
+  - the current `3802`-pair cross-view subset is usable for immediate experimentation, but it is not yet the final full-Paris dataset
+  - the current split generator still needs stronger leakage protection because the minimum cross-split distance on this partial slice is too small
+- Decision:
+  - keep the `10000` Panoramax street dataset and `3802` IGN pair subset as the first real realistic-Paris checkpoint
+  - continue the data branch from this checkpoint rather than discarding partially completed large downloads
