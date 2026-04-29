@@ -6,7 +6,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from src.tools.build_aerial_pairs import IgnGeopfProvider, OpenAerialMapProvider, _parse_oam_scene, _render_tms_crop, build_aerial_pairs_dataset
+from src.tools.build_aerial_pairs import IgnGeopfProvider, OpenAerialMapProvider, _parse_oam_scene, _render_tms_crop, _render_wms_crop, build_aerial_pairs_dataset
 
 
 def test_parse_oam_scene_extracts_resolution_tms_and_license() -> None:
@@ -164,3 +164,28 @@ def test_ign_geopf_provider_returns_scene() -> None:
     assert scene is not None
     assert scene.provider == "ign_geopf"
     assert "ORTHOIMAGERY.ORTHOPHOTOS" in scene.title
+    assert scene.wms_url == "https://data.geopf.fr/wms-r"
+
+
+def test_render_wms_crop_builds_request() -> None:
+    tile = Image.new("RGB", (128, 128), (1, 2, 3))
+    buf = io.BytesIO()
+    tile.save(buf, format="JPEG")
+    jpg_bytes = buf.getvalue()
+    seen = {"url": ""}
+
+    def fake_download(url: str) -> bytes:
+        seen["url"] = url
+        return jpg_bytes
+
+    crop = _render_wms_crop(
+        wms_url="https://data.geopf.fr/wms-r",
+        lat=48.85,
+        lon=2.30,
+        crop_size_m=256.0,
+        crop_px=128,
+        download_bytes_fn=fake_download,
+    )
+    assert crop.size == (128, 128)
+    assert "REQUEST=GetMap" in seen["url"]
+    assert "CRS=CRS%3A84" in seen["url"]
