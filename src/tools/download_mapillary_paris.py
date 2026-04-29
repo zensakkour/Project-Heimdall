@@ -162,6 +162,27 @@ def _request_bytes_with_retry(
     raise RuntimeError(f"request_failed:{url}") from last_error
 
 
+def _load_dotenv_value(key: str, *, env_path: Path = Path(".env")) -> str:
+    if not env_path.exists():
+        return ""
+    try:
+        lines = env_path.read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return ""
+    prefix = f"{str(key).strip()}="
+    for raw_line in lines:
+        line = str(raw_line).strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        if not line.startswith(prefix):
+            continue
+        value = line[len(prefix) :].strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+            value = value[1:-1]
+        return value.strip()
+    return ""
+
+
 def _fetch_json_with_retry(
     url: str,
     *,
@@ -388,7 +409,7 @@ def download_mapillary_dataset(
     fetch_json_fn: Optional[Callable[[str], dict]] = None,
     download_bytes_fn: Optional[Callable[[str], bytes]] = None,
 ) -> dict:
-    access_token = str(token or os.environ.get("MAPILLARY_ACCESS_TOKEN") or "").strip()
+    access_token = str(token or os.environ.get("MAPILLARY_ACCESS_TOKEN") or _load_dotenv_value("MAPILLARY_ACCESS_TOKEN") or "").strip()
     if not access_token:
         raise ValueError("MAPILLARY_ACCESS_TOKEN_missing")
 
