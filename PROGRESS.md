@@ -1944,3 +1944,26 @@ Do not delete or edit past entries. Append new work at the end.
   - updated `README.md` with split generation and sanity-check commands
 - Decision:
   - keep the fixed realistic branch benchmark leakage-safe from the start rather than fixing split contamination later
+
+## 2026-04-30 01:10 - Paris completeness upgrade: Panoramax + IGN
+
+- Added:
+  - `src/tools/download_panoramax_paris.py`
+  - `src/tools/merge_realistic_street_datasets.py`
+  - `src/tests/test_download_panoramax_paris.py`
+  - `src/tests/test_merge_realistic_street_datasets.py`
+- Extended:
+  - `src/tools/build_aerial_pairs.py`
+  - `src/tests/test_build_aerial_pairs.py`
+- Upgraded the branch from single-source bootstrap toward a more complete Paris dataset path:
+  - added Panoramax federated street-image ingestion using the STAC-style search API
+  - preserves direct image assets, capture time, heading, source instance, and license metadata
+  - added a merge step so Mapillary and Panoramax datasets can be combined into one street metadata root
+  - added `ign_geopf` orthophoto support in aerial pairing for dense Paris-wide coverage when OAM is sparse
+- Documentation:
+  - updated `README.md` with the recommended higher-completeness path:
+    - Mapillary + Panoramax street ingestion
+    - merged `street_combined` dataset
+    - IGN orthophoto aerial pairing for Paris
+- Decision:
+  - for Paris specifically, completeness now means combining open French street imagery with French orthophotos instead of relying on one global provider alone
