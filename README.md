@@ -751,6 +751,14 @@ Useful fusion knobs:
 $env:MAPILLARY_ACCESS_TOKEN="MLY|..."
 .\.venv\Scripts\python -m src.tools.download_mapillary_paris --bbox 48.8156,2.2241,48.9022,2.4699 --out data/paris_realistic_v1/street --grid-step-m 80 --street-per-cell 3 --max-images 20000 --seed 42
 ```
+- Realistic Paris street-data bootstrap from Panoramax federated catalog:
+```powershell
+.\.venv\Scripts\python -m src.tools.download_panoramax_paris --bbox 48.8156,2.2241,48.9022,2.4699 --out data/paris_realistic_v1/street_panoramax --grid-step-m 80 --street-per-cell 3 --max-images 20000 --seed 42
+```
+- Merge Mapillary and Panoramax street datasets into one combined metadata root:
+```powershell
+.\.venv\Scripts\python -m src.tools.merge_realistic_street_datasets --metadata data/paris_realistic_v1/street/metadata.csv data/paris_realistic_v1/street_panoramax/metadata.csv --out data/paris_realistic_v1/street_combined
+```
 - Dry-run count check for the same dataset bootstrap:
 ```powershell
 .\.venv\Scripts\python -m src.tools.download_mapillary_paris --bbox 48.8156,2.2241,48.9022,2.4699 --out data/paris_realistic_v1/street --grid-step-m 80 --street-per-cell 3 --max-images 20000 --seed 42 --dry-run
@@ -766,10 +774,20 @@ $env:MAPILLARY_ACCESS_TOKEN="MLY|..."
   - uses `thumb_2048_url` with `thumb_1024_url` fallback
   - dedupes by `image_id`
   - limits near-duplicates with per-cell sampling plus per-sequence caps
+- Panoramax-specific behavior:
+  - uses the federated Panoramax catalog by default: `https://api.panoramax.xyz/api`
+  - keeps direct picture assets plus per-picture heading from `view:azimuth`
+  - preserves source instance information such as `panoramax:ign` or `panoramax:osmfr`
+- Best-completeness recommendation for Paris:
+  - use both Mapillary and Panoramax street ingestion, then merge them into `street_combined`
 - Do not use Google Street View, Google Maps scraping, or Google Earth tiles in this dataset path.
 - OpenAerialMap pairing for the same realistic Paris dataset:
 ```powershell
 .\.venv\Scripts\python -m src.tools.build_aerial_pairs --street-metadata data/paris_realistic_v1/street/metadata.csv --out data/paris_realistic_v1 --provider openaerialmap --crop-size-m 256 --crop-px 512 --allow-missing-aerial false --seed 42
+```
+- IGN orthophoto pairing for denser Paris coverage:
+```powershell
+.\.venv\Scripts\python -m src.tools.build_aerial_pairs --street-metadata data/paris_realistic_v1/street_combined/metadata.csv --out data/paris_realistic_v1_ign --provider ign_geopf --crop-size-m 256 --crop-px 512 --allow-missing-aerial false --seed 42
 ```
 - The aerial-pair builder writes:
   - `data/paris_realistic_v1/aerial/images/`
@@ -784,6 +802,7 @@ $env:MAPILLARY_ACCESS_TOKEN="MLY|..."
   - prefers the highest-resolution covering image
   - uses the OAM TMS URL from metadata to render a centered crop
   - marks `no_open_aerial_found` when no open aerial scene covers the point
+  - also supports `ign_geopf` using the official `ORTHOIMAGERY.ORTHOPHOTOS` WMTS tiles for complete French orthophoto coverage
 - Leakage-safe spatial split generation:
 ```powershell
 .\.venv\Scripts\python -m src.tools.split_realistic_dataset --pairs data/paris_realistic_v1/pairs.csv --out data/paris_realistic_v1/splits --train-ratio 0.70 --val-ratio 0.15 --test-ratio 0.15 --cell-size-m 300 --seed 42

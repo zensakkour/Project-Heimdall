@@ -6,13 +6,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from src.tools.build_aerial_pairs import (
-    AerialScene,
-    OpenAerialMapProvider,
-    _parse_oam_scene,
-    _render_tms_crop,
-    build_aerial_pairs_dataset,
-)
+from src.tools.build_aerial_pairs import IgnGeopfProvider, OpenAerialMapProvider, _parse_oam_scene, _render_tms_crop, build_aerial_pairs_dataset
 
 
 def test_parse_oam_scene_extracts_resolution_tms_and_license() -> None:
@@ -163,3 +157,10 @@ def test_build_aerial_pairs_dataset_marks_missing_when_no_scene(tmp_path: Path) 
     assert summary["pairs_written"] == 0
     aerial_rows = list(csv.DictReader((tmp_path / "dataset" / "aerial" / "metadata.csv").open("r", encoding="utf-8")))
     assert aerial_rows[0]["status"] == "no_open_aerial_found"
+
+
+def test_ign_geopf_provider_returns_scene() -> None:
+    scene = IgnGeopfProvider().best_scene_for_point(48.85, 2.30)
+    assert scene is not None
+    assert scene.provider == "ign_geopf"
+    assert "ORTHOIMAGERY.ORTHOPHOTOS" in scene.title
