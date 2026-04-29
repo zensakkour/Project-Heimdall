@@ -1993,3 +1993,26 @@ Do not delete or edit past entries. Append new work at the end.
 - Decision:
   - keep the `10000` Panoramax street dataset and `3802` IGN pair subset as the first real realistic-Paris checkpoint
   - continue the data branch from this checkpoint rather than discarding partially completed large downloads
+
+## 2026-04-30 17:05 - Full Panoramax -> IGN pair completion
+
+- Performance fix:
+  - upgraded `ign_geopf` aerial pairing from multi-tile WMTS rendering to direct WMS `GetMap` requests against the official IGN `wms-r` endpoint
+  - this removed the main bottleneck in the chunked aerial build
+- Operational result:
+  - completed the chunked aerial pairing run for all `10000` Panoramax street images
+  - merged chunk outputs back into the final dataset root
+  - final dataset counts in `data/paris_realistic_v1/`:
+    - `street_panoramax/metadata.csv`: `10000` street images
+    - `aerial/metadata.csv`: `10000` aerial crops
+    - `pairs.csv`: `10000` positive street-to-aerial pairs
+  - rebuilt full split files in `data/paris_realistic_v1/splits_full/`:
+    - train `7003`
+    - val `1500`
+    - test `1497`
+- Current caveat:
+  - the data volume is now complete for the Panoramax -> IGN branch
+  - the split generator still needs a stronger anti-leakage policy because the current minimum cross-split distance remains too small on the dense urban grid
+- Decision:
+  - treat `data/paris_realistic_v1/` as the first complete realistic Paris dataset checkpoint
+  - continue improving split integrity and optional Mapillary augmentation on top of this completed core dataset

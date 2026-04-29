@@ -43,6 +43,7 @@ class AerialScene:
     resolution_m: float
     license_info: str
     tms_url: str
+    wms_url: str = ""
 
 
 class AerialProvider:
@@ -243,6 +244,7 @@ class IgnGeopfProvider(AerialProvider):
             resolution_m=0.20,
             license_info="IGN / Geoportail orthophotos; verify attribution for final publication.",
             tms_url=IGN_GEOPF_ORTHO_URL,
+            wms_url="https://data.geopf.fr/wms-r",
         )
 
 
@@ -317,6 +319,40 @@ def _render_tms_crop(
     crop_right = crop_left + int(crop_px)
     crop_bottom = crop_top + int(crop_px)
     return canvas.crop((crop_left, crop_top, crop_right, crop_bottom))
+
+
+def _render_wms_crop(
+    *,
+    wms_url: str,
+    lat: float,
+    lon: float,
+    crop_size_m: float,
+    crop_px: int,
+    download_bytes_fn: Callable[[str], bytes],
+) -> Image.Image:
+    half_m = float(crop_size_m) / 2.0
+    meters_per_lat = 111132.92
+    meters_per_lon = max(1.0, 111412.84 * math.cos(math.radians(float(lat))))
+    dlat = half_m / meters_per_lat
+    dlon = half_m / meters_per_lon
+    min_lon = float(lon) - dlon
+    min_lat = float(lat) - dlat
+    max_lon = float(lon) + dlon
+    max_lat = float(lat) + dlat
+    params = {
+        "LAYERS": "ORTHOIMAGERY.ORTHOPHOTOS",
+        "FORMAT": "image/jpeg",
+        "SERVICE": "WMS",
+        "VERSION": "1.3.0",
+        "REQUEST": "GetMap",
+        "STYLES": "",
+        "CRS": "CRS:84",
+        "BBOX": f"{min_lon:.10f},{min_lat:.10f},{max_lon:.10f},{max_lat:.10f}",
+        "WIDTH": str(int(crop_px)),
+        "HEIGHT": str(int(crop_px)),
+    }
+    url = str(wms_url).rstrip("?") + "?" + urllib.parse.urlencode(params)
+    return Image.open(io.BytesIO(download_bytes_fn(url))).convert("RGB")
 
 
 def _write_csv(path: Path, fieldnames: Sequence[str], rows: Iterable[dict]) -> None:
@@ -398,15 +434,25 @@ def build_aerial_pairs_dataset(
             )
             continue
 
-        zoom = _target_zoom(street.lat, crop_size_m, crop_px)
-        image = _render_tms_crop(
-            tms_url=scene.tms_url,
-            lat=street.lat,
-            lon=street.lon,
-            crop_px=int(crop_px),
-            zoom=zoom,
-            download_bytes_fn=downloader,
-        )
+        if str(scene.wms_url).strip():
+            image = _render_wms_crop(
+                wms_url=scene.wms_url,
+                lat=street.lat,
+                lon=street.lon,
+                crop_size_m=float(crop_size_m),
+                crop_px=int(crop_px),
+                download_bytes_fn=downloader,
+            )
+        else:
+            zoom = _target_zoom(street.lat, crop_size_m, crop_px)
+            image = _render_tms_crop(
+                tms_url=scene.tms_url,
+                lat=street.lat,
+                lon=street.lon,
+                crop_px=int(crop_px),
+                zoom=zoom,
+                download_bytes_fn=downloader,
+            )
         aerial_id = f"{scene.source_id}_{street.image_id}"
         rel_path = f"aerial/images/{aerial_id}.png"
         out_path = out_dir / rel_path
