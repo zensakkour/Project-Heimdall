@@ -54,7 +54,7 @@ def test_rfdetr_detector_converts_boxes_to_detections(monkeypatch) -> None:
 def test_factory_uses_rfdetr_backend(monkeypatch) -> None:
     _install_fake_rfdetr(monkeypatch)
 
-    detector = create_detector(
+    created = create_detector(
         DetectorConfig(
             backend="rfdetr",
             weights_path="ignored-by-rfdetr",
@@ -63,7 +63,10 @@ def test_factory_uses_rfdetr_backend(monkeypatch) -> None:
         )
     )
 
+    assert created is not None
+    detector, backend = created
     assert isinstance(detector, RFDetrDetector)
+    assert backend == "rfdetr"
 
 
 def test_factory_falls_back_when_rfdetr_missing(monkeypatch) -> None:
@@ -77,7 +80,7 @@ def test_factory_falls_back_when_rfdetr_missing(monkeypatch) -> None:
 
     monkeypatch.setattr(builtins, "__import__", _fake_import)
 
-    detector = create_detector(
+    created = create_detector(
         DetectorConfig(
             backend="rfdetr",
             min_confidence=0.5,
@@ -86,5 +89,7 @@ def test_factory_falls_back_when_rfdetr_missing(monkeypatch) -> None:
         )
     )
 
-    assert detector is not None
+    assert created is not None
+    detector, backend = created
     assert detector.__class__.__name__ == "SidecarDetector"
+    assert backend == "sidecar"

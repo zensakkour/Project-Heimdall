@@ -47,3 +47,6 @@ out/
 # OS
 .DS_Store
 Thumbs.db
+
+*.pth
+dummy.jpg

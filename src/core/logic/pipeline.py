@@ -1,4 +1,4 @@
-﻿"""
+"""
 Core pipeline wiring (stub): detection -> geolocation -> verification -> score.
 """
 from __future__ import annotations
@@ -27,6 +27,7 @@ class HeimdallPipeline:
         fusion_config: Optional[FusionConfig] = None,
         score_config: Optional[ScoreConfig] = None,
         verification_config: Optional[VerificationConfig] = None,
+        detector_backend: Optional[str] = None,
     ) -> None:
         self.detector = detector
         self.geolocator = geolocator
@@ -34,6 +35,7 @@ class HeimdallPipeline:
         self.fusion_config = fusion_config
         self.score_config = score_config
         self.verification_config = verification_config
+        self.detector_backend = detector_backend
 
     def detect(self, image_path: str) -> List[Detection]:
         if self.detector is None:
@@ -84,6 +86,7 @@ class HeimdallPipeline:
             score=score,
             candidates=candidates,
             fusion=fusion,
+            backend=self.detector_backend,
         )
 
 

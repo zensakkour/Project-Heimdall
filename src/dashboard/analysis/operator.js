@@ -153,6 +153,27 @@ function renderSummary(result) {
   setMetric("metric-radius", radiusText);
   setMetric("metric-mode", modeText);
 
+  // Update System Info in Evidence Drawer
+  const backendEl = byId("details-backend");
+  if (backendEl) {
+    backendEl.textContent = result.result?.backend || (result.safe_demo ? "demo" : "-");
+  }
+  const workerEl = byId("details-worker");
+  if (workerEl) {
+    workerEl.textContent = result.runtime?.worker_mode || "-";
+  }
+
+  const reasonRow = byId("details-reason-row");
+  const reasonEl = byId("details-reason");
+  if (reasonRow && reasonEl) {
+    if (result.fallback_reason) {
+      reasonRow.style.display = "flex";
+      reasonEl.textContent = result.fallback_reason;
+    } else {
+      reasonRow.style.display = "none";
+    }
+  }
+
   const debugParts = [];
   if (geoDebug && geoDebug.candidate_count !== undefined) {
     debugParts.push(`${geoDebug.candidate_count} geo candidates`);
