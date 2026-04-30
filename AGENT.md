@@ -25,6 +25,8 @@ Use it to keep algorithm history, experiment intent, and evaluation standards co
 6. After each user prompt that changes code, config, metrics, experiments, or workflow, update documentation before finalizing work.
 7. Treat every state-changing command as documentation-relevant: if a command changes code, config, artifacts, or conclusions, reflect it in docs within the same prompt cycle.
 8. When updating `src/docs/RESEARCH_PAPER.md`, preserve the doctoral research-paper style: state the problem, define notation, describe the algorithm, explain the experiment, report the result, then state the decision.
+9. Before every commit, push, PR, or merge, explicitly verify documentation is current. If the change affects algorithms, data, evaluation, model behavior, UI analysis behavior, research direction, or measured results, update `src/docs/RESEARCH_PAPER.md`, `research.md`, `PROGRESS.md`, `README.md`, and/or `plan.md` as applicable before pushing.
+10. Do not push research-relevant work with only code changes. The pushed branch must include the corresponding paper/ledger/progress update or a clear note in `PROGRESS.md` explaining why the research paper did not need a change.
 
 ## Per-Prompt Documentation Sync (Required)
 At the end of each user request cycle, verify and update docs as needed:
@@ -38,6 +40,7 @@ Command-level enforcement:
 - After each meaningful command block (experiment run, config patch, benchmark, merge, or workflow change), immediately check whether docs need an update.
 - Do not defer documentation updates across multiple unrelated commands.
 - If branch intent changes during the prompt, update `plan.md` in the same prompt rather than deferring it.
+- Before `git commit`, `git push`, or merge, run a documentation gate: check whether `src/docs/RESEARCH_PAPER.md`, `research.md`, `PROGRESS.md`, `README.md`, and `plan.md` reflect the work being published.
 
 If no documentation changes are needed for the prompt, explicitly confirm that docs were reviewed and already up to date.
 
