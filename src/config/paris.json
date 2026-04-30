@@ -24,17 +24,22 @@
     "model_id": "sdan/geospot-base",
     "model_cache_dir": "data/models/geospot-base",
     "encoder_name": null,
-    "retrieval_index_path": "data/geo_index/spacenet_paris_chips_openai_clip_vit_large_patch14.npz",
-    "retrieval_index_paths": [],
-    "retrieval_index_weights": [],
+    "retrieval_index_path": "data/geo_index/spacenet_paris_chips_openai_clip_vit_large_patch14_proj_trainref_v2_mild.npz",
+    "retrieval_index_paths": [
+      "data/geo_index/spacenet_paris_chips_openai_clip_vit_large_patch14_proj_trainref_v2_mild_dba_geo2_k5.npz"
+    ],
+    "retrieval_index_weights": [
+      1.0,
+      0.5
+    ],
     "retrieval_index_model_ids": [],
     "retrieval_index_projection_paths": [],
     "retrieval_model_id": "openai/clip-vit-large-patch14",
-    "retrieval_projection_path": null,
+    "retrieval_projection_path": "runs/retrieval_projection_paris_query_trainref_v2_mild.npz",
     "retrieval_top_k": 25,
     "retrieval_per_index_top_k": 0,
     "retrieval_index_score_norm": "auto",
-    "retrieval_source_fusion_mode": "weighted_score",
+    "retrieval_source_fusion_mode": "rrf",
     "retrieval_source_balance_beta": 0.0,
     "retrieval_min_score": 0.05,
     "retrieval_min_keep_topk": 0,
