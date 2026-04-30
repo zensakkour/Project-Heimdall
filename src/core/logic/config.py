@@ -11,6 +11,7 @@ from typing import Dict, Optional, Tuple
 
 @dataclass(frozen=True)
 class DetectorConfig:
+    backend: str = "ultralytics_obb"
     weights_path: Optional[str] = None
     min_confidence: float = 0.25
     nms_iou: float = 0.5
@@ -22,6 +23,7 @@ class DetectorConfig:
     use_sidecar: bool = True
     use_classic: bool = False
     imgsz: int = 1280
+    rfdetr_model_size: str = "medium"
 
 
 @dataclass(frozen=True)
@@ -172,6 +174,7 @@ def load_config(path: str) -> HeimdallConfig:
     ver = raw.get("verification", {})
     return HeimdallConfig(
         detector=DetectorConfig(
+            backend=det.get("backend", "ultralytics_obb"),
             weights_path=det.get("weights_path"),
             min_confidence=det.get("min_confidence", 0.25),
             nms_iou=det.get("nms_iou", 0.5),
@@ -183,6 +186,7 @@ def load_config(path: str) -> HeimdallConfig:
             use_sidecar=det.get("use_sidecar", True),
             use_classic=det.get("use_classic", False),
             imgsz=det.get("imgsz", 1280),
+            rfdetr_model_size=det.get("rfdetr_model_size", "medium"),
         ),
         geolocator=GeoConfig(
             model_path=geo.get("model_path"),
