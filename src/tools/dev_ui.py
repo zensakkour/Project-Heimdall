@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import socket
+import webbrowser
 from pathlib import Path
 
 import uvicorn
@@ -48,6 +49,11 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Disable auto-reload.",
     )
+    parser.add_argument(
+        "--open-browser",
+        action="store_true",
+        help="Open the analysis UI in the default browser after choosing the port.",
+    )
     return parser.parse_args()
 
 
@@ -58,7 +64,10 @@ def main() -> None:
 
     port = _find_open_port(args.host, args.start_port, args.end_port)
     use_reload = not args.no_reload
-    print(f"Heimdall App: http://{args.host}:{port}/analysis/")
+    app_url = f"http://{args.host}:{port}/analysis/"
+    print(f"Heimdall App: {app_url}")
+    if args.open_browser:
+        webbrowser.open(app_url)
     kwargs = {
         "host": args.host,
         "port": port,

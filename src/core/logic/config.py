@@ -11,7 +11,7 @@ from typing import Dict, Optional, Tuple
 
 @dataclass(frozen=True)
 class DetectorConfig:
-    backend: str = "ultralytics_obb"
+    backend: str = "rfdetr"
     weights_path: Optional[str] = None
     min_confidence: float = 0.25
     nms_iou: float = 0.5
@@ -174,7 +174,7 @@ def load_config(path: str) -> HeimdallConfig:
     ver = raw.get("verification", {})
     return HeimdallConfig(
         detector=DetectorConfig(
-            backend=det.get("backend", "ultralytics_obb"),
+            backend=det.get("backend", "rfdetr"),
             weights_path=det.get("weights_path"),
             min_confidence=det.get("min_confidence", 0.25),
             nms_iou=det.get("nms_iou", 0.5),

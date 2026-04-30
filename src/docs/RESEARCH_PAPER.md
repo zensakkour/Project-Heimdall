@@ -322,7 +322,7 @@ The project reports multiple radii because a method can improve medium-range loc
 ### 6.1 Datasets and Artifacts Used in This Document
 - SpaceNet Paris train-like index artifacts (`data/geo_index/spacenet_paris_clip.npz`).
 - SpaceNet Paris test chips and metadata (`data/spacenet_paris_test/chips`, `metadata.csv`).
-- Open geo retrieval artifacts (Wikimedia-derived index) where specified by config.
+- Historical Open Geo/Wikimedia retrieval artifacts were used in earlier mismatch/debugging work, but the active runtime profiles are now Paris-only.
 - Realistic Paris Panoramax -> IGN checkpoint (`data/paris_realistic_v1/pairs.csv`) with `10,000` paired street-to-aerial examples.
 - Full realistic Paris combined dataset (`data/paris_realistic_v1_combined/pairs.csv`) with `40,000` paired street-to-aerial examples.
 - Full realistic Paris combined strict split (`data/paris_realistic_v1_combined/splits_strict/`) with `34,821` retained pairs and `5,179` excluded boundary pairs.

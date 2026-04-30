@@ -2249,3 +2249,86 @@ Do not delete or edit past entries. Append new work at the end.
   - relevant docs include `src/docs/RESEARCH_PAPER.md`, `research.md`, `PROGRESS.md`, `README.md`, and `plan.md`
 - Decision:
   - future agents should not push research-relevant code-only changes unless `PROGRESS.md` clearly explains why the research paper did not need an update
+
+## 2026-04-30 - Windows CMD app launcher
+
+- Added `run_heimdall.cmd` at the repo root.
+- The runner:
+  - changes into the repo directory
+  - uses `.venv\Scripts\python.exe` when available
+  - falls back to `python`
+  - launches `src.tools.dev_app`
+  - opens `/analysis/` in the default browser through the new `--open-browser` launcher flag
+  - passes through extra flags such as `--no-reload`
+- Updated `src/tools/dev_ui.py` with `--open-browser` support.
+- Updated `README.md` quick-start instructions.
+- Research-paper gate:
+  - this is workflow/UI launch plumbing only, with no algorithm, data, evaluation, or measured-result change, so `src/docs/RESEARCH_PAPER.md` and `research.md` did not need content updates
+
+## 2026-04-30 - Analysis profile default fix
+
+- Updated `/analysis/` profile selection so `Paris (SpaceNet)` is the default profile.
+- Existing browser storage containing the old `legacy` / Open Geo selection is now reset to `paris` on page load.
+- Users can still manually switch to `Paris Test (SpaceNet)` or `Open Geo (Wikimedia)` after the page loads.
+- Research-paper gate:
+  - this is UI default-state behavior only, with no algorithm, data, evaluation, or measured-result change, so `src/docs/RESEARCH_PAPER.md` and `research.md` did not need content updates
+
+## 2026-04-30 - Local data layout and cleanup guidance
+
+- Audited local `data/` size and usage.
+- Added `docs/DATA_LAYOUT.md` with:
+  - recommended images for manual `/analysis/` testing
+  - folders to keep for current realistic Paris model work
+  - cleanup candidates for generated chunk outputs, raw SpaceNet rebuild sources, DOTA data, and old smoke checkpoints
+  - conservative and aggressive cleanup command examples
+- Updated `README.md` to point to the data guide.
+- Research-paper gate:
+  - this is local storage hygiene/documentation only, with no algorithm, data collection, benchmark result, or model behavior change, so `src/docs/RESEARCH_PAPER.md` and `research.md` did not need content updates
+
+## 2026-04-30 - Paris-focused data cleanup and RF-DETR default
+
+- Removed local non-Paris/legacy data caches:
+  - `data/open_geo/`
+  - `data/dota`
+  - `data/dota_v1/`
+  - `data/samples/`
+  - `data/test_paris/`
+  - `data/geo_index/open_geo_clip.npz`
+  - 5-byte temporary `data/geo_index/tmp*_train_images_best_model.npz` stubs
+- Removed local intermediate Paris recovery/checkpoint caches duplicated by final combined outputs:
+  - `data/paris_realistic_v1_combined_chunkpairs/`
+  - `data/paris_realistic_v1_combined_chunkmeta/`
+  - `data/paris_realistic_v1_chunkpairs/`
+  - `data/paris_realistic_v1_chunkmeta/`
+  - `data/paris_realistic_smoke/`
+- Kept current Paris assets:
+  - `data/paris_realistic_v1/street_combined/`
+  - `data/paris_realistic_v1_combined/aerial/`
+  - `data/paris_realistic_v1_combined/splits_strict/`
+  - `data/paris_realistic_v1_combined/indices/`
+  - Paris SpaceNet chips/metadata and Paris retrieval indices
+- Created clean manual analysis upload set:
+  - `data/analysis_tests/paris_street/images/`
+  - `data/analysis_tests/paris_street/manifest.csv`
+- Cleared ignored generated dashboard JSON files that referenced removed sample/DOTA paths.
+- Removed Open Geo from active runtime profile selection:
+  - deleted `src/config/open_geo.json`
+  - removed Open Geo option from `/analysis/` and `/analysis/lab/`
+  - removed Open Geo config health check path
+- Made RF-DETR the default detector backend in shipped Paris configs:
+  - `detector.backend = "rfdetr"`
+  - `detector.weights_path = null`
+  - `detector.nms_mode = "aabb"`
+  - `detector.rfdetr_model_size = "medium"`
+- Added safe detector fallback:
+  - if RF-DETR is requested but the `rfdetr` package is unavailable, the factory falls back to sidecar/classic behavior instead of crashing the app
+- Updated docs:
+  - `README.md`
+  - `docs/DATA_LAYOUT.md`
+  - `src/docs/GEO_TECH.md`
+  - `src/docs/REPRODUCIBILITY.md`
+  - `research.md`
+  - `src/docs/RESEARCH_PAPER.md`
+- Decision:
+  - active product/research workflow is Paris-only for now
+  - broad Open Geo/Wikimedia support should return later on a dedicated expansion branch, not in the default app path
