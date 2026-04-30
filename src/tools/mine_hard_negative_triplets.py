@@ -314,7 +314,7 @@ def mine_triplets(
         query_key = Path(query_rec.path).as_posix()
         is_query = np.asarray([Path(path).as_posix() == query_key for path in paths], dtype=bool)
 
-        pos_mask = (d_gt > 0.0) & (d_gt <= float(positive_radius_km)) & (~is_query)
+        pos_mask = (d_gt <= float(positive_radius_km)) & (~is_query)
         pos_idx = np.where(pos_mask)[0]
         if pos_idx.size <= 0:
             continue

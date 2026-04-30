@@ -203,3 +203,41 @@ def test_merge_failures_keeps_hardest_per_query_and_dedupes() -> None:
     assert merged[0].query_path == "other.jpg"
     assert merged[1].query_path == "q.jpg"
     assert merged[1].distance_km == pytest.approx(5.0)
+
+
+def test_mine_triplets_accepts_exact_coordinate_positive_from_reference_pool() -> None:
+    query_records = [
+        GeoRecord(path="street.jpg", latitude=48.0000, longitude=2.0000),
+    ]
+    reference_records = [
+        GeoRecord(path="aerial_exact.png", latitude=48.0000, longitude=2.0000),
+        GeoRecord(path="aerial_neg.png", latitude=48.0180, longitude=2.0000),
+    ]
+    failures = [
+        EvalFailure(
+            query_path="street.jpg",
+            gt_latitude=48.0000,
+            gt_longitude=2.0000,
+            pred_latitude=48.0180,
+            pred_longitude=2.0000,
+            distance_km=2.0,
+        )
+    ]
+
+    out = mine_triplets(
+        query_records,
+        failures,
+        reference_records=reference_records,
+        min_error_km=1.0,
+        positive_radius_km=0.1,
+        negative_pred_radius_km=0.6,
+        negative_min_gt_distance_km=1.5,
+        negative_max_gt_distance_km=30.0,
+        max_positives=2,
+        max_negatives=2,
+    )
+
+    assert out
+    row = out[0]
+    assert row["positives"][0]["path"] == "aerial_exact.png"
+    assert row["positives"][0]["distance_to_gt_km"] == pytest.approx(0.0, abs=1e-9)

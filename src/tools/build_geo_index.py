@@ -83,12 +83,14 @@ def build_index(
 ) -> int:
     device = "cuda" if __import__("torch").cuda.is_available() else "cpu"
     embedder = ClipEmbedder(model_id, device, projection_path=projection_path)
+    batch_size = 32 if device == "cuda" else 16
 
     embeddings = []
     latitudes = []
     longitudes = []
     ids = []
     paths = []
+    records = []
 
     for item in meta:
         rel_path = item.get("path") or item.get("image") or item.get("file")
@@ -111,14 +113,23 @@ def build_index(
             lon_f = float(lon)
         except ValueError:
             continue
-        with Image.open(image_path) as img:
-            image = img.convert("RGB")
-        vec = embedder.embed(image)
-        embeddings.append(vec.squeeze(0))
-        latitudes.append(lat_f)
-        longitudes.append(lon_f)
-        ids.append(item.get("id") or image_path.stem)
-        paths.append(str(image_path))
+        records.append((image_path, lat_f, lon_f, item.get("id") or image_path.stem))
+
+    for start in range(0, len(records), batch_size):
+        batch = records[start : start + batch_size]
+        batch_images = []
+        batch_meta = []
+        for image_path, lat_f, lon_f, item_id in batch:
+            with Image.open(image_path) as img:
+                batch_images.append(img.convert("RGB"))
+            batch_meta.append((image_path, lat_f, lon_f, item_id))
+        vectors = embedder.embed_many(batch_images)
+        for idx, (image_path, lat_f, lon_f, item_id) in enumerate(batch_meta):
+            embeddings.append(vectors[idx])
+            latitudes.append(lat_f)
+            longitudes.append(lon_f)
+            ids.append(item_id)
+            paths.append(str(image_path))
 
     if not embeddings:
         return 0
@@ -146,25 +157,36 @@ def build_index_from_sidecars(
 ) -> int:
     device = "cuda" if __import__("torch").cuda.is_available() else "cpu"
     embedder = ClipEmbedder(model_id, device, projection_path=projection_path)
+    batch_size = 32 if device == "cuda" else 16
 
     embeddings = []
     latitudes = []
     longitudes = []
     ids = []
     paths = []
+    records = []
 
     for image_path in images:
         meta = _load_sidecar(image_path)
         if meta is None:
             continue
-        with Image.open(image_path) as img:
-            image = img.convert("RGB")
-        vec = embedder.embed(image)
-        embeddings.append(vec.squeeze(0))
-        latitudes.append(meta["latitude"])
-        longitudes.append(meta["longitude"])
-        ids.append(image_path.stem)
-        paths.append(str(image_path))
+        records.append((image_path, meta["latitude"], meta["longitude"], image_path.stem))
+
+    for start in range(0, len(records), batch_size):
+        batch = records[start : start + batch_size]
+        batch_images = []
+        batch_meta = []
+        for image_path, lat_f, lon_f, item_id in batch:
+            with Image.open(image_path) as img:
+                batch_images.append(img.convert("RGB"))
+            batch_meta.append((image_path, lat_f, lon_f, item_id))
+        vectors = embedder.embed_many(batch_images)
+        for idx, (image_path, lat_f, lon_f, item_id) in enumerate(batch_meta):
+            embeddings.append(vectors[idx])
+            latitudes.append(lat_f)
+            longitudes.append(lon_f)
+            ids.append(item_id)
+            paths.append(str(image_path))
 
     if not embeddings:
         return 0

@@ -1,6 +1,6 @@
 # Project Heimdall Research Ledger
 
-Last updated: April 29, 2026
+Last updated: April 30, 2026
 
 This file is the compact research-facing ledger for the repo. It is different from:
 
@@ -26,7 +26,60 @@ Current hard conclusion:
 - Heuristics helped, but only incrementally.
 - Geometry-lite reranking is real and worth keeping as an experimental branch result.
 - The best close-range gains came from multi-index projection + geo-aware DBA, not from more handcrafted scene cues alone.
-- The path toward a major jump is model/data work: larger hard-negative sets and encoder adaptation, not more blind rerank knobs.
+- The current stack is in a data-limited stalemate: the repo now has enough retrieval, projection, and eval machinery to measure progress honestly, but not enough realistic street-to-aerial supervision to unlock a major accuracy jump.
+- The path toward a major jump is model/data work: larger hard-negative sets, realistic street-view versus aerial pairs, and encoder adaptation, not more blind rerank knobs.
+
+## Realistic Paris Data Checkpoint
+
+Current data collected on the dedicated data branch:
+
+| Dataset artifact | Count | Path | Status |
+|---|---:|---|---|
+| Mapillary street metadata | 20,000 | `data/paris_realistic_v1/street_mapillary/metadata.csv` | complete street crawl checkpoint |
+| Panoramax street metadata | 20,000 | `data/paris_realistic_v1/street_panoramax/metadata.csv` | complete street crawl checkpoint |
+| Combined street metadata | 40,000 | `data/paris_realistic_v1/street_combined/metadata.csv` | merged street-view corpus |
+| Panoramax -> IGN aerial pairs | 10,000 | `data/paris_realistic_v1/pairs.csv` | first complete paired cross-view checkpoint |
+| Full all-source street -> IGN pairs | 40,000 | `data/paris_realistic_v1_combined/pairs.csv` | merged full realistic cross-view dataset |
+| Full all-source aerial metadata | 40,000 | `data/paris_realistic_v1_combined/aerial/metadata.csv` | merged IGN aerial crop metadata |
+| Full all-source strict split | 34,821 retained / 5,179 excluded | `data/paris_realistic_v1_combined/splits_strict/split_summary.json` | leakage-buffered benchmark split |
+
+Important caveats:
+
+- The older `data/paris_realistic_v1/splits_full/split_summary.json` is still too permissive (`min_cross_split_distance_m = 3.77`) and should not be used for final claims.
+- The benchmark-ready split is now `data/paris_realistic_v1_combined/splits_strict/` with `min_cross_split_distance_m = 1201.23`.
+- This means the repo now has a real full realistic Paris dataset and a leakage-buffered benchmark split, but not yet a trained model that reaches the `~3 km` target on that split.
+
+Replication commands used in the repo:
+
+```powershell
+.\.venv\Scripts\python -m src.tools.download_mapillary_paris --bbox 48.8156,2.2241,48.9022,2.4699 --out data/paris_realistic_v1/street_mapillary --grid-step-m 80 --street-per-cell 3 --max-images 20000 --seed 42
+.\.venv\Scripts\python -m src.tools.download_panoramax_paris --bbox 48.8156,2.2241,48.9022,2.4699 --out data/paris_realistic_v1/street_panoramax --grid-step-m 80 --street-per-cell 3 --max-images 20000 --seed 42
+.\.venv\Scripts\python -m src.tools.merge_realistic_street_datasets --metadata data/paris_realistic_v1/street_mapillary/metadata.csv data/paris_realistic_v1/street_panoramax/metadata.csv --out data/paris_realistic_v1/street_combined
+.\.venv\Scripts\python -m src.tools.build_aerial_pairs --street-metadata data/paris_realistic_v1/street_panoramax/metadata.csv --out data/paris_realistic_v1 --provider ign_geopf --crop-size-m 256 --crop-px 512 --allow-missing-aerial false --seed 42
+.\.venv\Scripts\python -m src.tools.recover_combined_aerial_dataset --existing-images-dir data/paris_realistic_v1/aerial/images --chunk-meta-dir data/paris_realistic_v1_combined_chunkmeta --chunk-out-dir data/paris_realistic_v1_combined_chunkpairs --final-out-dir data/paris_realistic_v1_combined --split-out-dir data/paris_realistic_v1_combined/splits_strict --provider ign_geopf --crop-size-m 256 --crop-px 512 --allow-missing-aerial false --seed 42 --max-workers 2 --train-ratio 0.70 --val-ratio 0.15 --test-ratio 0.15 --cell-size-m 300 --buffer-cells 2 --sort-axis auto
+.\.venv\Scripts\python -m src.tools.build_realistic_aerial_index --root data/paris_realistic_v1_combined --metadata aerial/metadata.csv --images-dir aerial/images --output indices/aerial_clip_index.npz --model-id openai/clip-vit-large-patch14
+.\.venv\Scripts\python -m src.tools.eval_realistic_crossview --test-pairs data/paris_realistic_v1_combined/splits_strict/test_pairs_probe240.csv --aerial-metadata data/paris_realistic_v1_combined/aerial/metadata.csv --street-images-dir data/paris_realistic_v1/street_combined --aerial-index data/paris_realistic_v1_combined/indices/aerial_clip_index.npz --embedding-model openai/clip-vit-large-patch14 --output runs/eval_realistic_crossview_combined_strict_probe240_baseline_full40k.json --top-k 50
+```
+
+Current merged-dataset benchmark snapshots:
+
+| Benchmark | Query set | Reference set | Mean km | Median km | <=1 km | <=2 km | <=5 km | Notes |
+|---|---|---|---:|---:|---:|---:|---:|---|
+| Old strict realistic baseline | `120` query probe on `data/paris_realistic_v1/splits_strict` | `10,000` Panoramax -> IGN pairs | 8.44 | 7.96 | 5.83% | 7.50% | 15.00% | Panoramax-only core dataset |
+| Combined strict probe, sampled aerial index | `240` query probe on `data/paris_realistic_v1_combined/splits_strict` | sampled `10,000` combined aerial index | 10.92 | 11.05 | 2.08% | 5.00% | 10.83% | `runs/eval_realistic_crossview_combined_strict_probe240_baseline_sample10k.json` |
+| Combined strict probe, full aerial index | `240` query probe on `data/paris_realistic_v1_combined/splits_strict` | full `40,000` combined aerial index | 10.97 | 11.75 | 2.92% | 5.83% | 12.50% | `runs/eval_realistic_crossview_combined_strict_probe240_baseline_full40k.json` |
+
+Interpretation:
+
+- The realistic data program is complete enough to benchmark honestly on a much larger and stricter street-to-aerial dataset.
+- Expanding the combined probe from the sampled `10k` aerial index to the full `40k` index modestly improved close-range hit rates (`<=1km`, `<=2km`, `<=5km`) but did not improve mean or median error yet.
+- The bottleneck has therefore shifted from "insufficient realistic data exists" to "the current frozen CLIP retrieval baseline still underfits the harder combined benchmark."
+
+Research recommendation from this checkpoint:
+
+- The current data is enough to start realistic street-to-aerial training, hard-negative mining, and baseline cross-view evaluation on the full combined dataset.
+- The current frozen CLIP baseline on the combined strict probe is still far from a serious `~3 km` mean result.
+- The next priority should now shift from data collection to model training on this new benchmark root: mine harder triplets from `data/paris_realistic_v1_combined/splits_strict/train_pairs.csv`, train the cross-view projection / encoder path, and compare against the current full-index baseline.
 
 ## Timeline
 
@@ -477,6 +530,9 @@ Artifacts:
    - fixed-loop evaluation on Paris-180
    - auxiliary serving-branch fusion support
 
+5. The next bottleneck is realistic data, not another round of scene heuristics.
+   Better street-view comparisons, cross-view geolocation, and stronger models now depend on building a leakage-safe Paris street-plus-aerial dataset with enough coverage to train and test on the same problem we actually care about.
+
 ## Current Best Artifacts To Reuse
 
 - Best close-range serving profile:
@@ -490,7 +546,8 @@ Artifacts:
 
 ## Next Recommended Work
 
-1. Run the auxiliary tuned-model branch against the full Paris-180 benchmark and compare it directly to `paris_close_range_dual_rrf`.
-2. Increase the training index beyond the current sampled `300` image rebuild so the tuned encoder is not bottlenecked by a tiny train pool.
-3. Expand hard-negative mining beyond one city once the Paris loop is stable.
-4. Benchmark stronger remote-sensing-native encoders only under the fixed, leakage-safe protocol.
+1. Build a realistic Paris street-image dataset from an allowed source with GPS, heading, capture metadata, and sequence information.
+2. Pair those street images with open aerial imagery and create leakage-safe spatial train, validation, and test splits.
+3. Mine realistic cross-view hard negatives from that dataset and retrain the street-to-aerial projection under the fixed benchmark protocol.
+4. Stand up realistic baseline evaluations for street-to-aerial, street-to-street, and fused retrieval before any new architecture claims.
+5. Only after those baselines exist, benchmark stronger remote-sensing-native encoders and other architecture upgrades on the same fixed realistic split.
