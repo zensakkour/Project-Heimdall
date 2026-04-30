@@ -862,6 +862,21 @@ $env:MAPILLARY_ACCESS_TOKEN="MLY|..."
     - `mean_km = 10.97`
     - `within_2km_pct = 5.83`
     - `within_5km_pct = 12.50`
+- First combined strict-probe cross-view projection run:
+```powershell
+.\.venv\Scripts\python -m src.tools.mine_realistic_crossview_triplets --pairs data/paris_realistic_v1_combined/splits_strict/train_pairs.csv --street-metadata data/paris_realistic_v1/street_combined/metadata.csv --aerial-metadata data/paris_realistic_v1_combined/aerial/metadata.csv --output runs/paris_realistic_crossview_train_triplets_v1.jsonl --summary-output runs/paris_realistic_crossview_train_triplets_v1.summary.json --positive-radius-m 80 --negative-min-distance-m 300 --negative-max-distance-m 5000 --max-positives 3 --max-negatives 20 --seed 42
+.\.venv\Scripts\python -m src.tools.train_crossview_projection --triplets runs/paris_realistic_crossview_train_triplets_v1.jsonl --aerial-index data/paris_realistic_v1_combined/indices/aerial_clip_index.npz --street-images-dir data/paris_realistic_v1/street_combined --output runs/crossview_projection_paris_combined_v1_probe.npz --report-output runs/crossview_projection_paris_combined_v1_probe.report.json --embedding-model openai/clip-vit-large-patch14 --max-triplets 6000 --epochs 8 --batch-size 64 --learning-rate 3e-4 --weight-decay 1e-4 --margin 0.08 --temperature 0.07 --ce-weight 0.3 --sample-weight-mode triplet_weight --sample-weight-max 3.0 --seed 42 --device auto
+.\.venv\Scripts\python -m src.tools.eval_realistic_crossview --test-pairs data/paris_realistic_v1_combined/splits_strict/test_pairs_probe240.csv --aerial-metadata data/paris_realistic_v1_combined/aerial/metadata.csv --street-images-dir data/paris_realistic_v1/street_combined --aerial-index data/paris_realistic_v1_combined/indices/aerial_clip_index.npz --projection runs/crossview_projection_paris_combined_v1_probe.npz --embedding-model openai/clip-vit-large-patch14 --output runs/eval_realistic_crossview_combined_strict_probe240_crossviewproj_v1_full40k.json --top-k 50
+```
+- First combined strict-probe cross-view projection result:
+  - `mean_km = 9.75`
+  - `median_km = 10.24`
+  - `within_1km_pct = 2.08`
+  - `within_2km_pct = 7.50`
+  - `within_5km_pct = 20.42`
+- Interpretation:
+  - this first learned cross-view projection beat the frozen full-40k CLIP baseline on `mean_km`, `<=2km`, and `<=5km`
+  - it did not yet beat the baseline at `<=1km`, so it is a real improvement but not the final answer
 - Realistic street-to-aerial cross-view evaluation:
 ```powershell
 .\.venv\Scripts\python -m src.tools.eval_realistic_crossview --test-pairs data/paris_realistic_v1/splits_strict/test_pairs.csv --aerial-metadata data/paris_realistic_v1/aerial/metadata.csv --street-images-dir data/paris_realistic_v1/street_panoramax --aerial-index data/paris_realistic_v1/indices/aerial_clip_index.npz --embedding-model openai/clip-vit-large-patch14 --output runs/eval_realistic_crossview_strict.json --top-k 50

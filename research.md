@@ -2,12 +2,12 @@
 
 Last updated: April 30, 2026
 
-This file is the compact research-facing ledger for the repo. It is different from:
+This file is the compact research-facing ledger for the repo. It is not the paper itself; it is the evidence log behind the paper. It is different from:
 
 - `PROGRESS.md`: append-only engineering work log
 - `src/docs/RESEARCH_PAPER.md`: narrative paper-style draft
 
-Use this file when you need the exact sequence of major geolocation changes, the measured before/after performance, and the current state of the stack without digging through every run artifact.
+Use this file when you need the exact sequence of major geolocation changes, measured before/after performance, commands, and artifact paths without digging through every run output. Use `src/docs/RESEARCH_PAPER.md` when you want the authored narrative research write-up.
 
 ## Current Status
 
@@ -68,12 +68,22 @@ Current merged-dataset benchmark snapshots:
 | Old strict realistic baseline | `120` query probe on `data/paris_realistic_v1/splits_strict` | `10,000` Panoramax -> IGN pairs | 8.44 | 7.96 | 5.83% | 7.50% | 15.00% | Panoramax-only core dataset |
 | Combined strict probe, sampled aerial index | `240` query probe on `data/paris_realistic_v1_combined/splits_strict` | sampled `10,000` combined aerial index | 10.92 | 11.05 | 2.08% | 5.00% | 10.83% | `runs/eval_realistic_crossview_combined_strict_probe240_baseline_sample10k.json` |
 | Combined strict probe, full aerial index | `240` query probe on `data/paris_realistic_v1_combined/splits_strict` | full `40,000` combined aerial index | 10.97 | 11.75 | 2.92% | 5.83% | 12.50% | `runs/eval_realistic_crossview_combined_strict_probe240_baseline_full40k.json` |
+| Combined strict probe, first query-only cross-view projection | `240` query probe on `data/paris_realistic_v1_combined/splits_strict` | full `40,000` combined aerial index | 9.75 | 10.24 | 2.08% | 7.50% | 20.42% | `runs/eval_realistic_crossview_combined_strict_probe240_crossviewproj_v1_full40k.json` |
 
 Interpretation:
 
 - The realistic data program is complete enough to benchmark honestly on a much larger and stricter street-to-aerial dataset.
 - Expanding the combined probe from the sampled `10k` aerial index to the full `40k` index modestly improved close-range hit rates (`<=1km`, `<=2km`, `<=5km`) but did not improve mean or median error yet.
-- The bottleneck has therefore shifted from "insufficient realistic data exists" to "the current frozen CLIP retrieval baseline still underfits the harder combined benchmark."
+- The first query-only street-to-aerial projection run is the first real model-side gain on the harder combined benchmark: `mean_km` improved from `10.97` to `9.75`, `<=2km` improved from `5.83%` to `7.50%`, and `<=5km` improved from `12.50%` to `20.42%`, but `<=1km` regressed from `2.92%` to `2.08%`.
+- The bottleneck has therefore shifted from "insufficient realistic data exists" to "how well we train the cross-view model on the harder combined benchmark."
+
+First combined cross-view training workflow used in the repo:
+
+```powershell
+.\.venv\Scripts\python -m src.tools.mine_realistic_crossview_triplets --pairs data/paris_realistic_v1_combined/splits_strict/train_pairs.csv --street-metadata data/paris_realistic_v1/street_combined/metadata.csv --aerial-metadata data/paris_realistic_v1_combined/aerial/metadata.csv --output runs/paris_realistic_crossview_train_triplets_v1.jsonl --summary-output runs/paris_realistic_crossview_train_triplets_v1.summary.json --positive-radius-m 80 --negative-min-distance-m 300 --negative-max-distance-m 5000 --max-positives 3 --max-negatives 20 --seed 42
+.\.venv\Scripts\python -m src.tools.train_crossview_projection --triplets runs/paris_realistic_crossview_train_triplets_v1.jsonl --aerial-index data/paris_realistic_v1_combined/indices/aerial_clip_index.npz --street-images-dir data/paris_realistic_v1/street_combined --output runs/crossview_projection_paris_combined_v1_probe.npz --report-output runs/crossview_projection_paris_combined_v1_probe.report.json --embedding-model openai/clip-vit-large-patch14 --max-triplets 6000 --epochs 8 --batch-size 64 --learning-rate 3e-4 --weight-decay 1e-4 --margin 0.08 --temperature 0.07 --ce-weight 0.3 --sample-weight-mode triplet_weight --sample-weight-max 3.0 --seed 42 --device auto
+.\.venv\Scripts\python -m src.tools.eval_realistic_crossview --test-pairs data/paris_realistic_v1_combined/splits_strict/test_pairs_probe240.csv --aerial-metadata data/paris_realistic_v1_combined/aerial/metadata.csv --street-images-dir data/paris_realistic_v1/street_combined --aerial-index data/paris_realistic_v1_combined/indices/aerial_clip_index.npz --projection runs/crossview_projection_paris_combined_v1_probe.npz --embedding-model openai/clip-vit-large-patch14 --output runs/eval_realistic_crossview_combined_strict_probe240_crossviewproj_v1_full40k.json --top-k 50
+```
 
 Research recommendation from this checkpoint:
 
