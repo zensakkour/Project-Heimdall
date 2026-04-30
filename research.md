@@ -567,3 +567,64 @@ Artifacts:
 3. Mine realistic cross-view hard negatives from that dataset and retrain the street-to-aerial projection under the fixed benchmark protocol.
 4. Stand up realistic baseline evaluations for street-to-aerial, street-to-street, and fused retrieval before any new architecture claims.
 5. Only after those baselines exist, benchmark stronger remote-sensing-native encoders and other architecture upgrades on the same fixed realistic split.
+
+## Apr 30, 2026: Tier 1 kept, Tier 2 completed, Tier 3 evaluated
+
+- Promoted `src/config/paris.json` from the older single-index setup to the validated dual-index projected+DBA `rrf` profile.
+- Verified on `runs/geo_eval_tier1_upgraded_paris_180.json` that the default Paris serving config improved from `mean_km 15.53` to `14.60`, from `median_km 9.77` to `4.21`, and from `<=2km 19.44%` to `31.11%`, while `<=1km` stayed flat at `10.56%`.
+- Ran the next realistic cross-view projection training pass on the full `26,204` mined triplets:
+
+```powershell
+.\.venv\Scripts\python -m src.tools.train_crossview_projection --triplets runs/paris_realistic_crossview_train_triplets_v1.jsonl --aerial-index data/paris_realistic_v1_combined/indices/aerial_clip_index.npz --street-images-dir data/paris_realistic_v1/street_combined --output runs/crossview_projection_paris_combined_v2_full.npz --report-output runs/crossview_projection_paris_combined_v2_full.report.json --embedding-model openai/clip-vit-large-patch14 --max-triplets 0 --epochs 30 --batch-size 32 --learning-rate 1e-4 --weight-decay 1e-4 --margin 0.08 --temperature 0.07 --ce-weight 0.3 --sample-weight-mode triplet_weight --sample-weight-max 3.0 --seed 42 --device auto
+```
+
+- Important runtime constraint: this workspace currently has `torch 2.11.0+cpu`, so `--device auto` resolves to CPU. That made Tier 2 materially slower here than the original GPU-based expectation.
+- Tier 2 result on the same strict `probe240` benchmark:
+
+| Model | Mean km | Median km | <=1 km | <=2 km | <=5 km |
+|---|---:|---:|---:|---:|---:|
+| First probe projection (`6000` triplets, `8` epochs) | 9.75 | 10.24 | 2.08% | 7.50% | 20.42% |
+| Full-triplet projection (`26204` triplets, `30` epochs) | 9.83 | 10.92 | 4.17% | 12.08% | 22.92% |
+
+- Interpretation:
+  - Scaling projection training to all `26k` triplets improved the close-range success rates that matter most for this benchmark.
+  - The tradeoff is that `mean_km` and `median_km` regressed slightly, so this is a real but mixed gain rather than a clean Pareto improvement.
+- Tier 3 DINOv2 follow-up:
+
+```powershell
+.\.venv\Scripts\python -m src.tools.build_geo_index --images-dir data/spacenet_paris/chips --metadata data/spacenet_paris/metadata.csv --output data/geo_index/spacenet_paris_chips_facebook_dinov2_base.npz --model-id facebook/dinov2-base
+.\.venv\Scripts\python -m src.tools.run_geo_eval --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --config src/config/paris_dinov2_rrf_experimental.json --retrieval-only --limit 180 --seed 42 --output runs/geo_eval_paris_dinov2_rrf_experimental_180_fixed.json
+```
+
+- Supporting fix during Tier 3:
+  - `src/core/logic/config.py` had been deduplicating `retrieval_index_model_ids`, which silently broke the positional mapping for a three-index config that legitimately repeats the CLIP model id twice.
+  - The loader now preserves order and duplicates for `retrieval_index_model_ids`, and `src/tests/test_config_loading.py` covers that case.
+- Tier 3 result versus the Tier 1 serving baseline:
+
+| Config | Mean km | Median km | <=1 km | <=2 km | <=5 km | <=10 km |
+|---|---:|---:|---:|---:|---:|---:|
+| Tier 1 default Paris config | 14.60 | 4.21 | 10.56% | 31.11% | 52.78% | 65.56% |
+| Tier 3 DINOv2 experimental fusion | 14.42 | 4.47 | 13.33% | 31.67% | 52.22% | 66.67% |
+
+- Interpretation:
+  - DINOv2 added a complementary signal and helped the very-close buckets, especially `<=1km`.
+  - The regression in `median_km` and `<=5km` means the gain is still mixed, so the DINOv2 fusion should stay experimental rather than replacing the default Paris serving config.
+- Tier 4 encoder fine-tune kickoff:
+
+```powershell
+.\.venv\Scripts\python.exe -m src.tools.train_retrieval_encoder --triplets runs/paris_realistic_crossview_train_triplets_v1.jsonl --query-images-dir data/paris_realistic_v1\street_combined --reference-images-dir data/paris_realistic_v1_combined --model-id openai/clip-vit-large-patch14 --output-dir runs/retrieval_encoder_finetune/paris_realistic_crossview_v1_e1 --report-output runs/retrieval_encoder_finetune/paris_realistic_crossview_v1_e1.report.json --train-scope vision_encoder --epochs 1 --batch-size 8 --learning-rate 1e-5 --weight-decay 1e-4 --margin 0.08 --temperature 0.07 --ce-weight 0.2 --sample-weight-mode triplet_weight --sample-weight-max 3.0 --seed 42 --device auto
+```
+
+- Rationale:
+  - Tier 4 should test real encoder adaptation on the realistic cross-view corpus, not just another projection layer.
+  - Because this workspace is CPU-only, the first pass is intentionally `1` epoch over the full `26204`-triplet dataset so we get a measured outcome before scaling to a slower multi-epoch run.
+- Execution status:
+  - Added `scripts/run_tier4_encoder_ft.ps1` so the training, aerial-index rebuild, and `probe240` eval can run as one reproducible Tier 4 pipeline.
+  - Validated the path with a `--max-triplets 1` smoke run: `runs/retrieval_encoder_finetune/smoke_one_triplet/` and `runs/retrieval_encoder_finetune/smoke_one_triplet.report.json`.
+  - The full unattended background launch was not healthy in this shell environment: it stalled after CLIP initialization and did not enter measurable training.
+  - Captured logs from the stalled attempt: `runs/tier4_encoder_ft_pipeline.log` and `runs/tier4_encoder_ft_train.stderr.log`.
+  - Expected full-run outputs once the execution path is stable:
+    - `runs/retrieval_encoder_finetune/paris_realistic_crossview_v1_e1/`
+    - `runs/retrieval_encoder_finetune/paris_realistic_crossview_v1_e1.report.json`
+    - `data/paris_realistic_v1_combined/indices/aerial_clip_index_retrieval_encoder_ft_v1_e1.npz`
+    - `runs/eval_realistic_crossview_combined_strict_probe240_encoderft_v1_e1_full40k.json`

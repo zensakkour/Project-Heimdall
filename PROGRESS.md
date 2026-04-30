@@ -2348,3 +2348,57 @@ Do not delete or edit past entries. Append new work at the end.
 - Metrics (before -> after): mean_km 15.53->14.60, median_km 9.77->4.21, within_1km 10.56%->10.56%, within_2km 19.44%->31.11%, within_5km 37.22%->52.78%, within_10km 50.56%->65.56%
 - Artifacts: runs/geo_eval_tier1_upgraded_paris_180.json
 - Decision: Keep. Massive improvement in median (+57% reduction) and within_2km (+60% relative gain) with zero code changes.
+
+## 2026-04-30 Tier 2: Full-Triplet Cross-View Projection Completed
+- Goal: Retrain the street-to-aerial query projection on the full mined realistic triplet corpus instead of the earlier `6000`-triplet probe.
+- Launch command: .venv\Scripts\python -m src.tools.train_crossview_projection --triplets runs/paris_realistic_crossview_train_triplets_v1.jsonl --aerial-index data/paris_realistic_v1_combined/indices/aerial_clip_index.npz --street-images-dir data/paris_realistic_v1/street_combined --output runs/crossview_projection_paris_combined_v2_full.npz --report-output runs/crossview_projection_paris_combined_v2_full.report.json --embedding-model openai/clip-vit-large-patch14 --max-triplets 0 --epochs 30 --batch-size 32 --learning-rate 1e-4 --weight-decay 1e-4 --margin 0.08 --temperature 0.07 --ce-weight 0.3 --sample-weight-mode triplet_weight --sample-weight-max 3.0 --seed 42 --device auto
+- Runtime note: this environment currently has `torch 2.11.0+cpu`, so `--device auto` resolves to CPU and the full run is materially slower than the original GPU-based expectation.
+- Result:
+  - training artifact: `runs/crossview_projection_paris_combined_v2_full.npz`
+  - training report: `runs/crossview_projection_paris_combined_v2_full.report.json`
+  - strict eval: `runs/eval_realistic_crossview_combined_strict_probe240_crossviewproj_v2_full40k.json`
+  - dataset: `26204` triplets, `27171` aerial references touched, `0` dropped rows
+  - training: `30` epochs on CPU, `elapsed_sec = 620.57`
+  - weighted hard triplet loss: `0.1145 -> 0.0905`
+  - weighted satisfied pct: `1.51% -> 6.28%`
+  - benchmark delta vs Tier 2 probe model:
+    - `mean_km 9.75 -> 9.83`
+    - `median_km 10.24 -> 10.92`
+    - `within_1km 2.08% -> 4.17%`
+    - `within_2km 7.50% -> 12.08%`
+    - `within_5km 20.42% -> 22.92%`
+- Decision: keep as a measured close-range gain on the realistic cross-view benchmark, but do not overclaim it as a universal improvement because `mean_km` and `median_km` regressed slightly even while `<=1km`, `<=2km`, and `<=5km` improved.
+
+## 2026-04-30 Tier 3: DINOv2 Complementary Backbone Evaluated
+- Goal: Add a non-CLIP visual signal to Paris retrieval by building a DINOv2 aerial index and fusing it with the validated dual-index CLIP setup.
+- Build command: .venv\Scripts\python -m src.tools.build_geo_index --images-dir data/spacenet_paris/chips --metadata data/spacenet_paris/metadata.csv --output data/geo_index/spacenet_paris_chips_facebook_dinov2_base.npz --model-id facebook/dinov2-base
+- New experimental config: `src/config/paris_dinov2_rrf_experimental.json`
+- Supporting code fix: `src/core/logic/config.py` now parses `retrieval_index_model_ids` as an ordered sequence instead of deduplicating repeated strings. This was necessary because the three-index setup legitimately uses the CLIP model id twice plus one DINOv2 model id.
+- Regression coverage: `src/tests/test_config_loading.py::test_load_config_preserves_duplicate_retrieval_index_model_ids`
+- Validation command: .venv\Scripts\python -m pytest -q src/tests/test_config_loading.py
+- Eval command: .venv\Scripts\python -m src.tools.run_geo_eval --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --config src/config/paris_dinov2_rrf_experimental.json --retrieval-only --limit 180 --seed 42 --output runs/geo_eval_paris_dinov2_rrf_experimental_180_fixed.json
+- Artifacts:
+  - DINOv2 index: `data/geo_index/spacenet_paris_chips_facebook_dinov2_base.npz`
+  - eval: `runs/geo_eval_paris_dinov2_rrf_experimental_180_fixed.json`
+- Metrics (Tier 1 baseline -> Tier 3 experimental): `mean_km 14.60->14.42`, `median_km 4.21->4.47`, `within_1km 10.56%->13.33%`, `within_2km 31.11%->31.67%`, `within_5km 52.78%->52.22%`, `within_10km 65.56%->66.67%`
+- Decision: keep DINOv2 as experimental only. It improves very-close retrieval and slightly improves `mean_km`, but it regresses `median_km` and `<=5km`, so there is not yet a clean case to replace `src/config/paris.json`.
+
+## 2026-04-30 Tier 4: Realistic Cross-View Encoder Fine-Tune Launched
+- Goal: Fine-tune the CLIP image encoder directly on the full realistic cross-view triplet corpus, then rebuild the `40k` aerial index with the tuned model and measure it on the strict `probe240` benchmark.
+- Runtime constraint: this machine is still CPU-only, so the first planned Tier 4 pass is a full-data `1`-epoch run to get a measured signal before committing to a much longer multi-epoch job.
+- Prepared full-run launcher: `scripts/run_tier4_encoder_ft.ps1`
+- Intended training command inside that runner: .venv\Scripts\python.exe -m src.tools.train_retrieval_encoder --triplets runs/paris_realistic_crossview_train_triplets_v1.jsonl --query-images-dir data/paris_realistic_v1\street_combined --reference-images-dir data/paris_realistic_v1_combined --model-id openai/clip-vit-large-patch14 --output-dir runs/retrieval_encoder_finetune/paris_realistic_crossview_v1_e1 --report-output runs/retrieval_encoder_finetune/paris_realistic_crossview_v1_e1.report.json --train-scope vision_encoder --epochs 1 --batch-size 8 --learning-rate 1e-5 --weight-decay 1e-4 --margin 0.08 --temperature 0.07 --ce-weight 0.2 --sample-weight-mode triplet_weight --sample-weight-max 3.0 --seed 42 --device auto
+- Smoke test:
+  - command path validated with `--max-triplets 1`, `--batch-size 1`, `--epochs 1`
+  - artifacts: `runs/retrieval_encoder_finetune/smoke_one_triplet/` and `runs/retrieval_encoder_finetune/smoke_one_triplet.report.json`
+  - result: the encoder trainer, model save, and local-model reload path are all working
+- Blocker on unattended full run:
+  - multiple background launches on this shell environment stalled immediately after CLIP initialization, before real training progress
+  - logs captured from those attempts: `runs/tier4_encoder_ft_pipeline.log`, `runs/tier4_encoder_ft_train.stderr.log`
+- Expected follow-up artifacts once the full run is executed successfully:
+  - tuned model: `runs/retrieval_encoder_finetune/paris_realistic_crossview_v1_e1/`
+  - training report: `runs/retrieval_encoder_finetune/paris_realistic_crossview_v1_e1.report.json`
+  - rebuilt index: `data/paris_realistic_v1_combined/indices/aerial_clip_index_retrieval_encoder_ft_v1_e1.npz`
+  - eval report: `runs/eval_realistic_crossview_combined_strict_probe240_encoderft_v1_e1_full40k.json`
+- Dataset scale for this run: `26204` triplets, `26204` unique street queries, `27171` unique aerial reference paths, `40000` aerial reference records in the evaluation index root.
+- Decision: Tier 4 is prepared but not yet benchmarked. The training path itself is valid, but the full unattended CPU run needs a reliable execution path before I can claim Tier 4 metrics.

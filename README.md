@@ -916,6 +916,39 @@ $env:MAPILLARY_ACCESS_TOKEN="MLY|..."
 - Interpretation:
   - this first learned cross-view projection beat the frozen full-40k CLIP baseline on `mean_km`, `<=2km`, and `<=5km`
   - it did not yet beat the baseline at `<=1km`, so it is a real improvement but not the final answer
+- Full-triplet follow-up projection run:
+```powershell
+.\.venv\Scripts\python -m src.tools.train_crossview_projection --triplets runs/paris_realistic_crossview_train_triplets_v1.jsonl --aerial-index data/paris_realistic_v1_combined/indices/aerial_clip_index.npz --street-images-dir data/paris_realistic_v1/street_combined --output runs/crossview_projection_paris_combined_v2_full.npz --report-output runs/crossview_projection_paris_combined_v2_full.report.json --embedding-model openai/clip-vit-large-patch14 --max-triplets 0 --epochs 30 --batch-size 32 --learning-rate 1e-4 --weight-decay 1e-4 --margin 0.08 --temperature 0.07 --ce-weight 0.3 --sample-weight-mode triplet_weight --sample-weight-max 3.0 --seed 42 --device auto
+.\.venv\Scripts\python -m src.tools.eval_realistic_crossview --test-pairs data/paris_realistic_v1_combined/splits_strict/test_pairs_probe240.csv --aerial-metadata data/paris_realistic_v1_combined/aerial/metadata.csv --street-images-dir data/paris_realistic_v1/street_combined --aerial-index data/paris_realistic_v1_combined/indices/aerial_clip_index.npz --projection runs/crossview_projection_paris_combined_v2_full.npz --embedding-model openai/clip-vit-large-patch14 --output runs/eval_realistic_crossview_combined_strict_probe240_crossviewproj_v2_full40k.json --top-k 50
+```
+- Full-triplet result:
+  - `mean_km = 9.83`
+  - `median_km = 10.92`
+  - `within_1km_pct = 4.17`
+  - `within_2km_pct = 12.08`
+  - `within_5km_pct = 22.92`
+- Interpretation:
+  - training on all `26204` realistic triplets improved close-range hit rates over the first probe model
+  - it did not improve `mean_km` or `median_km`, so it should be treated as a close-range tradeoff, not a universal replacement win
+- Tier 3 DINOv2 complement experiment:
+```powershell
+.\.venv\Scripts\python -m src.tools.build_geo_index --images-dir data/spacenet_paris/chips --metadata data/spacenet_paris/metadata.csv --output data/geo_index/spacenet_paris_chips_facebook_dinov2_base.npz --model-id facebook/dinov2-base
+.\.venv\Scripts\python -m src.tools.run_geo_eval --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --config src/config/paris_dinov2_rrf_experimental.json --retrieval-only --limit 180 --seed 42 --output runs/geo_eval_paris_dinov2_rrf_experimental_180_fixed.json
+```
+- Tier 3 result versus current `src/config/paris.json`:
+  - `mean_km 14.60 -> 14.42`
+  - `median_km 4.21 -> 4.47`
+  - `within_1km_pct 10.56 -> 13.33`
+  - `within_2km_pct 31.11 -> 31.67`
+  - `within_5km_pct 52.78 -> 52.22`
+  - `within_10km_pct 65.56 -> 66.67`
+- Decision:
+  - keep `src/config/paris_dinov2_rrf_experimental.json` as an experimental branch config
+  - do not replace `src/config/paris.json` yet because the DINOv2 fusion helps the closest buckets but still regresses `median_km` and `<=5km`
+- Tier 4 encoder fine-tune status:
+  - added `scripts/run_tier4_encoder_ft.ps1` to run the realistic cross-view encoder fine-tune, aerial-index rebuild, and `probe240` eval as one pipeline
+  - validated the path with a `--max-triplets 1` smoke run at `runs/retrieval_encoder_finetune/smoke_one_triplet.report.json`
+  - the full unattended CPU run is not benchmarked yet because background launches on this shell environment stalled immediately after CLIP initialization
 - Realistic street-to-aerial cross-view evaluation:
 ```powershell
 .\.venv\Scripts\python -m src.tools.eval_realistic_crossview --test-pairs data/paris_realistic_v1/splits_strict/test_pairs.csv --aerial-metadata data/paris_realistic_v1/aerial/metadata.csv --street-images-dir data/paris_realistic_v1/street_panoramax --aerial-index data/paris_realistic_v1/indices/aerial_clip_index.npz --embedding-model openai/clip-vit-large-patch14 --output runs/eval_realistic_crossview_strict.json --top-k 50
