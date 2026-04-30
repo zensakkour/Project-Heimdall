@@ -42,6 +42,7 @@ def assessment_to_dict(result: Assessment) -> dict[str, Any]:
         "score": result.score,
         "candidates": [_candidate_to_dict(c) for c in result.candidates],
         "fusion": None if result.fusion is None else _fusion_to_dict(result.fusion),
+        "backend": result.backend,
     }
 
 

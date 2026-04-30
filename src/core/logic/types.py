@@ -96,3 +96,4 @@ class Assessment:
     score: float
     candidates: List[GeoCandidate] = field(default_factory=list)
     fusion: Optional["FusionResult"] = None
+    backend: Optional[str] = None

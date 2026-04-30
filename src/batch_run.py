@@ -122,6 +122,7 @@ def build_pipeline(
         fusion_config=fusion_cfg,
         score_config=score_cfg,
         verification_config=verification_cfg,
+        detector_backend=backend,
     )
 
 

@@ -1,4 +1,4 @@
-﻿"""
+"""
 FastAPI server for live analysis UI.
 """
 from __future__ import annotations
@@ -325,8 +325,8 @@ def _json_safe(value: Any) -> Any:
     return value
 
 _WORKER_ENABLED_DEFAULT = os.getenv("HEIMDALL_USE_INFERENCE_WORKER", "1")
-_WORKER_IMAGE_TIMEOUT_S = float(os.getenv("HEIMDALL_INFERENCE_TIMEOUT_S", "90"))
-_WORKER_VIDEO_TIMEOUT_S = float(os.getenv("HEIMDALL_VIDEO_TIMEOUT_S", "300"))
+_WORKER_IMAGE_TIMEOUT_S = float(os.getenv("HEIMDALL_INFERENCE_TIMEOUT_S", "900"))
+_WORKER_VIDEO_TIMEOUT_S = float(os.getenv("HEIMDALL_VIDEO_TIMEOUT_S", "900"))
 _MAX_IMAGE_BYTES = int(os.getenv("HEIMDALL_MAX_IMAGE_BYTES", str(20 * 1024 * 1024)))
 _MAX_VIDEO_BYTES = int(os.getenv("HEIMDALL_MAX_VIDEO_BYTES", str(256 * 1024 * 1024)))
 _MAX_METADATA_BYTES = int(os.getenv("HEIMDALL_MAX_METADATA_BYTES", str(4 * 1024 * 1024)))
@@ -361,7 +361,9 @@ def build_pipeline(cfg: Optional[HeimdallConfig]) -> "HeimdallPipeline":
 
     if cfg is None:
         return HeimdallPipeline()
-    detector = create_detector(cfg.detector)
+    detector_tuple = create_detector(cfg.detector)
+    detector = detector_tuple[0] if detector_tuple else None
+    backend = detector_tuple[1] if detector_tuple else "none"
     geolocator = GeoLocator(
         cfg.geolocator.model_path,
         use_sidecar=cfg.geolocator.use_sidecar,
@@ -449,6 +451,7 @@ def build_pipeline(cfg: Optional[HeimdallConfig]) -> "HeimdallPipeline":
         fusion_config=cfg.fusion,
         score_config=cfg.score,
         verification_config=cfg.verification,
+        detector_backend=backend,
     )
 
 
@@ -683,6 +686,7 @@ def _build_demo_assessment(width: int, height: int, reason: Optional[str]) -> As
         score=0.72,
         candidates=candidates,
         fusion=fusion,
+        backend="demo",
     )
 
 
@@ -703,6 +707,7 @@ def _make_demo_image_payload(image_path: Path, reason: Optional[str]) -> dict:
             "fallback_reason": reason,
         },
         "safe_demo": True,
+        "fallback_reason": reason,
     }
 
 
@@ -1141,17 +1146,17 @@ def _run_inference_worker(task: dict, timeout_s: float) -> tuple[Optional[dict],
     process = ctx.Process(target=_inference_worker, args=(task, result_queue), daemon=True)
     started = time.perf_counter()
     process.start()
-    process.join(timeout_s)
-    if process.is_alive():
-        process.terminate()
-        process.join(2)
-        return None, f"inference timeout after {timeout_s:.1f}s", round((time.perf_counter() - started) * 1000, 2)
-    duration_ms = round((time.perf_counter() - started) * 1000, 2)
     try:
-        result = result_queue.get_nowait()
+        result = result_queue.get(timeout=timeout_s)
     except QueueEmpty:
-        exit_code = process.exitcode
-        return None, f"inference worker exited without payload (exit={exit_code})", duration_ms
+        if process.is_alive():
+            process.terminate()
+            process.join(2)
+        return None, f"inference timeout after {timeout_s:.1f}s", round((time.perf_counter() - started) * 1000, 2)
+
+    process.join(2)
+    duration_ms = round((time.perf_counter() - started) * 1000, 2)
+
     if not result.get("ok"):
         return None, str(result.get("error") or "worker failure"), duration_ms
     return result.get("payload"), None, duration_ms

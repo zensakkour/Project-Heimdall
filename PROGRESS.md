@@ -2332,3 +2332,10 @@ Do not delete or edit past entries. Append new work at the end.
 - Decision:
   - active product/research workflow is Paris-only for now
   - broad Open Geo/Wikimedia support should return later on a dedicated expansion branch, not in the default app path
+## 2026-04-30
+- Hypothesis: The application was falling back to demo mode because the inference worker spawned by ui_server.py was encountering a deadlock when passing the large payload queue via multiprocessing.Queue. Reading the queue while waiting for the process to join resolves the deadlock.
+- Change: Increased _WORKER_IMAGE_TIMEOUT_S and _WORKER_VIDEO_TIMEOUT_S to 900.0s. Fixed multiprocessing deadlock in _run_inference_worker by calling esult_queue.get(timeout=timeout_s) before process.join(). Fixed bug in _make_demo_image_payload to put allback_reason at the top level of the payload so the frontend correctly renders the "Status Note". Disabled compile=True inside fdetr_detector.py's optimize_for_inference to prevent JIT tracing from hanging.
+- Files touched: src/tools/ui_server.py, src/core/detection/rfdetr_detector.py.
+- Validation command: Ran the frontend and verified that rfdetr successfully initialized and was used as the backend without timing out.
+- Artifacts: None.
+- Decision: Keep the fixes. No changes made to RESEARCH_PAPER.md because this was purely an engineering fix for the local analysis GUI server and did not affect the core modeling algorithms or research claims.
