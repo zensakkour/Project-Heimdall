@@ -2240,3 +2240,12 @@ Do not delete or edit past entries. Append new work at the end.
 - Decision:
   - RF-DETR is optional until it is benchmarked against the current detector stack
   - the UI now exposes more verification data without changing the analysis API contract
+
+## 2026-04-30 - Pre-push research documentation gate
+
+- Updated `AGENT.md` to make research/documentation sync an explicit pre-commit, pre-push, PR, and merge gate.
+- New rule:
+  - if published work affects algorithms, data, evaluation, model behavior, UI analysis behavior, research direction, or measured results, the branch must update the relevant docs before pushing
+  - relevant docs include `src/docs/RESEARCH_PAPER.md`, `research.md`, `PROGRESS.md`, `README.md`, and `plan.md`
+- Decision:
+  - future agents should not push research-relevant code-only changes unless `PROGRESS.md` clearly explains why the research paper did not need an update
