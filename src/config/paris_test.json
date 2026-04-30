@@ -1,17 +1,19 @@
 {
   "profile_scope": "PARIS",
   "detector": {
-    "weights_path": "yolo11x-obb.pt",
+    "backend": "rfdetr",
+    "weights_path": null,
     "min_confidence": 0.25,
     "nms_iou": 0.5,
-    "nms_mode": "obb",
+    "nms_mode": "aabb",
     "max_detections": 100,
     "min_area_px": 16.0,
     "class_agnostic_nms": false,
     "use_tta": false,
     "use_sidecar": true,
     "use_classic": false,
-    "imgsz": 1280
+    "imgsz": 1280,
+    "rfdetr_model_size": "medium"
   },
   "geolocator": {
     "model_path": null,

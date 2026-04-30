@@ -283,6 +283,18 @@ Development app launch (auto-picks free port):
 
 This starts the full app server: API + dashboard + analysis UI.
 
+Windows CMD launcher:
+
+```cmd
+run_heimdall.cmd
+```
+
+This uses `.venv\Scripts\python.exe` when available, starts the same app server, and opens `/analysis/` in your default browser. Extra launcher flags can be passed through, for example:
+
+```cmd
+run_heimdall.cmd --no-reload
+```
+
 If filesystem watcher issues occur, run without reload:
 
 ```powershell
@@ -298,6 +310,14 @@ If filesystem watcher issues occur, run without reload:
 ```
 
 ### 2. Start the app server
+
+CMD:
+
+```cmd
+run_heimdall.cmd
+```
+
+PowerShell/manual:
 
 ```powershell
 .\.venv\Scripts\python -m src.tools.dev_app
@@ -372,7 +392,7 @@ Inference hardening toggles:
 ### Run single-image inference (CLI)
 
 ```powershell
-.\.venv\Scripts\python -m src.cli data/samples/real_port_miami.jpg --json
+.\.venv\Scripts\python -m src.cli data/analysis_tests/paris_street/images/mapillary__1021055432583866.jpg --json
 ```
 
 ### Run batch inference
@@ -405,10 +425,10 @@ Update workflow:
 .\.venv\Scripts\python -m src.tools.geo_hard_negative_report --results runs/results.jsonl --ground-truth data/spacenet_paris/metadata.csv --output runs/hard_negative_report.json
 ```
 
-### Merge multiple geo retrieval indices (scale data coverage)
+### Merge multiple Paris geo retrieval indices (scale Paris data coverage)
 
 ```powershell
-.\.venv\Scripts\python -m src.tools.merge_geo_indices --inputs data/geo_index/open_geo_clip.npz data/geo_index/spacenet_paris_clip.npz --output data/geo_index/merged_clip.npz --dedupe-radius-m 75
+.\.venv\Scripts\python -m src.tools.merge_geo_indices --inputs data/geo_index/spacenet_paris_clip.npz data/geo_index/spacenet_paris_test_clip.npz --output data/geo_index/merged_paris_clip.npz --dedupe-radius-m 75
 ```
 
 ### Fit fusion source priors from eval outputs
@@ -679,11 +699,10 @@ Config files are under `src/config/`:
 - `paris_balanced_dual_rrf.json`: experimental Paris balanced dual-index profile (better mean/median/<=10km)
 - `paris_close_range_dual_rrf_graph_kde.json`: experimental Paris W1-max dual-index profile (graph support + KDE mode refinement)
 - `paris_test.json`: Paris test profile
-- `open_geo.json`: lightweight open-geo profile
 
-Each shipped profile also declares `profile_scope` at the JSON root so region intent is explicit (`PARIS` vs `US`) and easier to audit in runs.
+Each shipped profile declares `profile_scope` at the JSON root so region intent is explicit and easier to audit in runs. The active shipped profiles are Paris-only; Open Geo/Wikimedia is retired from the runtime profile list until the project expands beyond Paris again.
 
-`src.tools.run_geo_eval` now validates profile/data scope alignment by default (for example, blocking `open_geo` profile on Paris datasets). Use `--allow-scope-mismatch` only for intentional cross-scope experiments.
+`src.tools.run_geo_eval` validates profile/data scope alignment by default. Use `--allow-scope-mismatch` only for intentional cross-scope experiments.
 
 Pass a config where supported with `--config <path>`.
 
@@ -711,14 +730,14 @@ Useful geo quality knobs in `geolocator`:
 - `retrieval_source_balance_beta`: source-balancing strength for multi-index top-k selection (`0` disables balancing).
 
 Useful detection quality knobs in `detector`:
-- `backend`: detector backend (`ultralytics_obb` by default, or optional `rfdetr`).
+- `backend`: detector backend (`rfdetr` by default, with safe sidecar fallback if the package is unavailable; `ultralytics_obb` remains available for YOLO OBB experiments).
 - `min_area_px`: filters tiny unstable detections.
 - `nms_mode`: `obb` (oriented IoU) or `aabb` (axis-aligned IoU) suppression mode.
 - `class_agnostic_nms`: when `false`, NMS keeps overlapping boxes from different classes.
 - `use_tta`: enables test-time augmentation in Ultralytics inference.
 - `rfdetr_model_size`: RF-DETR size when `backend` is `rfdetr` (`nano`, `small`, `medium`, `large`, `xlarge`, `2xlarge`). Keep Plus/XL licensing under review before promoting it as default.
 
-Optional RF-DETR detector backend:
+RF-DETR detector backend:
 ```json
 {
   "detector": {
@@ -731,9 +750,9 @@ Optional RF-DETR detector backend:
 }
 ```
 
-Install only when using that backend:
+Install the ML stack to use RF-DETR directly:
 ```powershell
-.\.venv\Scripts\python -m pip install rfdetr
+.\.venv\Scripts\python -m pip install -r requirements.txt
 ```
 
 Useful fusion knobs:
@@ -763,9 +782,9 @@ Useful fusion knobs:
 ## Data and Model Notes
 
 - Large datasets and model artifacts are intentionally not stored in Git.
+- Local data-folder guide and cleanup recommendations: `docs/DATA_LAYOUT.md`.
 - Typical local path: `data/geo_index/*.npz`
 - Typical local path: `data/models/*`
-- Typical local path: `data/dota_v1/*`
 - Realistic Paris street-data bootstrap from Mapillary:
 ```powershell
 $env:MAPILLARY_ACCESS_TOKEN="MLY|..."
@@ -900,11 +919,6 @@ $env:MAPILLARY_ACCESS_TOKEN="MLY|..."
 - Realistic street-to-aerial cross-view evaluation:
 ```powershell
 .\.venv\Scripts\python -m src.tools.eval_realistic_crossview --test-pairs data/paris_realistic_v1/splits_strict/test_pairs.csv --aerial-metadata data/paris_realistic_v1/aerial/metadata.csv --street-images-dir data/paris_realistic_v1/street_panoramax --aerial-index data/paris_realistic_v1/indices/aerial_clip_index.npz --embedding-model openai/clip-vit-large-patch14 --output runs/eval_realistic_crossview_strict.json --top-k 50
-```
-- Open geo bootstrap (Wikimedia API, broader coverage):
-```powershell
-.\.venv\Scripts\python -m src.tools.download_open_geo --mode api --limit 300 --per-anchor 25 --output data/open_geo
-.\.venv\Scripts\python -m src.tools.build_geo_index --images-dir data/open_geo/images --metadata data/open_geo/metadata.csv --output data/geo_index/open_geo_clip.npz
 ```
 - See [Geo Tech Notes](src/docs/GEO_TECH.md) for deeper implementation and dataset details.
 

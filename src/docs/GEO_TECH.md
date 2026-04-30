@@ -79,25 +79,17 @@ This doc describes the current geolocation and object localization stack, how it
 This section reflects what exists on disk right now under `data/`.
 
 ### Geo (local)
-- Open geo demo set (Wikimedia Commons): `data/open_geo/`
-  - Images: `data/open_geo/images/`
-  - Metadata: `data/open_geo/metadata.csv`
-- Retrieval index built from open geo demo set:
-  - `data/geo_index/open_geo_clip.npz`
 - SpaceNet (AOI_3_Paris) PS-RGB tiles (proof-of-concept):
   - Raw tiles: `data/spacenet_paris/PS-RGB/`
   - Chips: `data/spacenet_paris/chips/`
   - Metadata: `data/spacenet_paris/metadata.csv`
   - Retrieval index: `data/geo_index/spacenet_paris_clip.npz`
-- Paris test set (not in training/index):
-  - `data/test_paris/`
-- Samples (used in UI/demo):
-  - `data/samples/sample_port.jpg`
+- Manual Paris analysis images:
+  - `data/analysis_tests/paris_street/images/`
 
 ### Detection (local)
-- DOTA v1.0 (prepared):
-  - Dataset root: `data/dota_v1/`
-  - YAML: `data/dota_v1/dota.yaml`
+- RF-DETR is the default detector backend.
+- DOTA is not required for the current Paris-focused app path.
 
 ### Models / weights (local)
 - GeoSpot Base weights cache:
@@ -126,7 +118,7 @@ python -m src.tools.build_geo_index --images-dir data/university-1652/images/tra
 
 Or use sidecar files next to images (`.geo.json` / `.geoloc.json`) instead of a metadata CSV/JSON:
 ```powershell
-python -m src.tools.build_geo_index --images-dir data/samples/with_sidecars
+python -m src.tools.build_geo_index --images-dir data/analysis_tests/paris_street/images
 ```
 
 Configure retrieval in `src/config/defaults.json`:
@@ -158,16 +150,10 @@ Configure retrieval in `src/config/defaults.json`:
 `src.tools.tune_retrieval_geo` can now sweep `retrieval_structure_rerank_top_n` and `retrieval_structure_rerank_weight` directly when structure / geometry-lite rerank settings need controlled comparison.
 
 ### UI Geo Profiles
-The analysis UI can switch between geo profiles (tabs in the Inputs section):
+The analysis UI can switch between Paris geo profiles:
 - Paris Focus: `src/config/paris.json` (SpaceNet Paris index)
-- Legacy Open Geo: `src/config/open_geo.json` (Wikimedia demo index)
-
-### Open Geo Demo (Wikimedia Commons)
-You can bootstrap retrieval with open geotagged images from Wikimedia Commons:
-```powershell
-python -m src.tools.download_open_geo --mode api --limit 300 --per-anchor 25 --output data/open_geo
-python -m src.tools.build_geo_index --images-dir data/open_geo/images --metadata data/open_geo/metadata.csv --output data/geo_index/open_geo_clip.npz
-```
+- Paris Test: `src/config/paris_test.json`
+- The previous Open Geo/Wikimedia runtime profile has been removed until broad-scope geolocation is resumed.
 
 ## Data You Can Add Now (Suggested)
 The following datasets are commonly used to improve geo-localization and overhead object detection. See their official pages for license and download instructions.
@@ -177,10 +163,10 @@ The following datasets are commonly used to improve geo-localization and overhea
 - University-1652: drone/satellite/ground multi-view geo-localization (requires request).
 
 ### Aerial / Overhead Object Detection
-- DOTA: oriented bounding boxes for aerial imagery (high-res, many rotations).
+- DOTA: oriented bounding boxes for aerial imagery (high-res, many rotations). This is not required for the current Paris-focused app path.
 - xView: large-scale overhead imagery with bounding boxes (60 classes).
 
-If you want to add DOTA v1.0 now (supported by tools):
+If you want to add DOTA v1.0 later (supported by tools):
 ```powershell
 python -m src.tools.download_dota_v1 --output data/dota
 python -m src.tools.prepare_dota_v1 --zip data/dota --out data/dota_v1 --yaml data/dota_v1/dota.yaml
