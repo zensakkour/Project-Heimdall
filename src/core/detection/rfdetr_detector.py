@@ -52,6 +52,8 @@ class RFDetrDetector:
         model_cls = getattr(rfdetr, class_name)
 
         self.model = model_cls()
+        if hasattr(self.model, "optimize_for_inference"):
+            self.model.optimize_for_inference(compile=False)
         self.min_confidence = min_confidence
         self.iou = iou
         self.nms_mode = nms_mode

@@ -170,6 +170,23 @@
             <summary>Inspect Evidence</summary>
             <div class="evidence-grid">
               <section class="evidence-panel">
+                <h3>System Info</h3>
+                <div class="list">
+                  <div class="list-item" style="cursor: default; border-bottom: 1px solid var(--color-border-dim);">
+                    <span>Detector Backend</span>
+                    <strong id="details-backend" style="color: var(--color-text-bright);">-</strong>
+                  </div>
+                  <div class="list-item" style="cursor: default;">
+                    <span>Process Mode</span>
+                    <strong id="details-worker" style="color: var(--color-text-bright);">-</strong>
+                  </div>
+                  <div id="details-reason-row" class="list-item" style="cursor: default; display: none;">
+                    <span>Status Note</span>
+                    <strong id="details-reason" style="color: var(--color-error); font-size: 0.85em;">-</strong>
+                  </div>
+                </div>
+              </section>
+              <section class="evidence-panel">
                 <h3>Geo Ranking</h3>
                 <div id="geo-ranking" class="geo-ranking muted"></div>
               </section>
@@ -177,7 +194,7 @@
                 <h3>Detections</h3>
                 <div id="detection-list" class="list"></div>
               </section>
-              <section class="evidence-panel evidence-panel-wide">
+              <section class="evidence-panel">
                 <h3>Details</h3>
                 <pre id="details" class="details">Select a detection to inspect details.</pre>
               </section>
