@@ -200,7 +200,7 @@ def load_config(path: str) -> HeimdallConfig:
             retrieval_index_path=geo.get("retrieval_index_path"),
             retrieval_index_paths=_parse_str_tuple(geo.get("retrieval_index_paths", [])),
             retrieval_index_weights=_parse_float_tuple_allow_empty(geo.get("retrieval_index_weights", [])),
-            retrieval_index_model_ids=_parse_str_tuple(geo.get("retrieval_index_model_ids", [])),
+            retrieval_index_model_ids=_parse_str_sequence(geo.get("retrieval_index_model_ids", [])),
             retrieval_index_projection_paths=_parse_optional_str_sequence(
                 geo.get("retrieval_index_projection_paths", [])
             ),
@@ -353,6 +353,18 @@ def _parse_str_tuple(raw) -> Tuple[str, ...]:
         if text in seen:
             continue
         seen.add(text)
+        out.append(text)
+    return tuple(out)
+
+
+def _parse_str_sequence(raw) -> Tuple[str, ...]:
+    if not isinstance(raw, (list, tuple)):
+        return ()
+    out = []
+    for value in raw:
+        text = str(value).strip() if value is not None else ""
+        if not text:
+            continue
         out.append(text)
     return tuple(out)
 

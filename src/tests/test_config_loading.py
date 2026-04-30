@@ -349,3 +349,25 @@ def test_load_config_accepts_median_tta_reduce() -> None:
         )
         cfg = load_config(str(path))
         assert cfg.geolocator.retrieval_query_tta_reduce == "median"
+
+
+def test_load_config_preserves_duplicate_retrieval_index_model_ids() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        path = _write_config(
+            tmpdir,
+            {
+                "geolocator": {
+                    "retrieval_index_model_ids": [
+                        "openai/clip-vit-large-patch14",
+                        "openai/clip-vit-large-patch14",
+                        "facebook/dinov2-base",
+                    ]
+                }
+            },
+        )
+        cfg = load_config(str(path))
+        assert cfg.geolocator.retrieval_index_model_ids == (
+            "openai/clip-vit-large-patch14",
+            "openai/clip-vit-large-patch14",
+            "facebook/dinov2-base",
+        )
