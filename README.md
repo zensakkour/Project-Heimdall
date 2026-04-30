@@ -711,10 +711,30 @@ Useful geo quality knobs in `geolocator`:
 - `retrieval_source_balance_beta`: source-balancing strength for multi-index top-k selection (`0` disables balancing).
 
 Useful detection quality knobs in `detector`:
+- `backend`: detector backend (`ultralytics_obb` by default, or optional `rfdetr`).
 - `min_area_px`: filters tiny unstable detections.
 - `nms_mode`: `obb` (oriented IoU) or `aabb` (axis-aligned IoU) suppression mode.
 - `class_agnostic_nms`: when `false`, NMS keeps overlapping boxes from different classes.
 - `use_tta`: enables test-time augmentation in Ultralytics inference.
+- `rfdetr_model_size`: RF-DETR size when `backend` is `rfdetr` (`nano`, `small`, `medium`, `large`, `xlarge`, `2xlarge`). Keep Plus/XL licensing under review before promoting it as default.
+
+Optional RF-DETR detector backend:
+```json
+{
+  "detector": {
+    "backend": "rfdetr",
+    "weights_path": null,
+    "min_confidence": 0.35,
+    "nms_mode": "aabb",
+    "rfdetr_model_size": "medium"
+  }
+}
+```
+
+Install only when using that backend:
+```powershell
+.\.venv\Scripts\python -m pip install rfdetr
+```
 
 Useful fusion knobs:
 - `fusion.retrieval_score_norm`: `none`, `zscore_sigmoid`, `minmax`, `rank_exp`.

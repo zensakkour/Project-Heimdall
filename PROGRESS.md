@@ -2217,3 +2217,26 @@ Do not delete or edit past entries. Append new work at the end.
   - first query-only cross-view projection result
 - Validation:
   - documentation-only update; no tests were required
+
+## 2026-04-30 - Analysis UI and optional RF-DETR branch start
+
+- Created branch-local plan for `tech/analysis-ui-rfdetr`.
+- Reviewed RF-DETR as an optional object detector candidate:
+  - real-time transformer detection/segmentation model from Roboflow
+  - DINOv2-style backbone
+  - open Apache-designated model sizes are suitable for experimentation
+  - Plus/XL variants require separate license review before any default use
+- Added optional detector config path:
+  - `detector.backend = "rfdetr"`
+  - `detector.rfdetr_model_size`
+  - existing `ultralytics_obb` behavior remains the default
+- Added RF-DETR adapter scaffolding that converts axis-aligned RF-DETR boxes into Heimdall `Detection` objects for the existing canvas/evidence pipeline.
+- Upgraded the `/analysis/` globe workflow:
+  - radar-style pulsing candidate points
+  - click-to-fly candidate selection
+  - selected candidate uncertainty ring
+  - selected-to-mean support line
+  - candidate inspector with rank, coordinates, posterior, retrieval score, interval, and source
+- Decision:
+  - RF-DETR is optional until it is benchmarked against the current detector stack
+  - the UI now exposes more verification data without changing the analysis API contract
