@@ -189,3 +189,79 @@ def test_render_wms_crop_builds_request() -> None:
     assert crop.size == (128, 128)
     assert "REQUEST=GetMap" in seen["url"]
     assert "CRS=CRS%3A84" in seen["url"]
+
+
+def test_build_aerial_pairs_dataset_recovers_existing_ign_images_without_redownload(tmp_path: Path) -> None:
+    street_dir = tmp_path / "street"
+    street_dir.mkdir(parents=True, exist_ok=True)
+    metadata_path = street_dir / "metadata.csv"
+    metadata_path.write_text(
+        "image_id,path,lat,lon,heading_deg,captured_at,camera_type,width,height,quality_score,sequence,source,license_info\n"
+        "street-1,images/street-1.jpg,48.85000000,2.30000000,90.0,,,,,,,panoramax,\n",
+        encoding="utf-8",
+    )
+
+    out_dir = tmp_path / "dataset"
+    image_dir = out_dir / "aerial" / "images"
+    image_dir.mkdir(parents=True, exist_ok=True)
+    tile = Image.new("RGB", (128, 128), (5, 6, 7))
+    tile.save(image_dir / "ign_geopf_ortho_street-1.png", format="PNG")
+
+    summary = build_aerial_pairs_dataset(
+        street_metadata=metadata_path,
+        out_dir=out_dir,
+        provider_name="ign_geopf",
+        crop_size_m=256.0,
+        crop_px=128,
+        allow_missing_aerial=False,
+        seed=42,
+        download_bytes_fn=lambda url: (_ for _ in ()).throw(AssertionError("should_not_download")),
+    )
+
+    assert summary["pairs_written"] == 1
+    assert summary["recovered_existing_count"] == 1
+    aerial_rows = list(csv.DictReader((out_dir / "aerial" / "metadata.csv").open("r", encoding="utf-8")))
+    assert aerial_rows[0]["status"] == "ok"
+    assert aerial_rows[0]["aerial_id"] == "ign_geopf_ortho_street-1"
+
+
+def test_build_aerial_pairs_dataset_continues_after_request_failure(tmp_path: Path) -> None:
+    street_dir = tmp_path / "street"
+    street_dir.mkdir(parents=True, exist_ok=True)
+    metadata_path = street_dir / "metadata.csv"
+    metadata_path.write_text(
+        "image_id,path,lat,lon,heading_deg,captured_at,camera_type,width,height,quality_score,sequence,source,license_info\n"
+        "street-1,images/street-1.jpg,48.85000000,2.30000000,90.0,,,,,,,panoramax,\n"
+        "street-2,images/street-2.jpg,48.85100000,2.30100000,91.0,,,,,,,panoramax,\n",
+        encoding="utf-8",
+    )
+
+    tile = Image.new("RGB", (128, 128), (1, 2, 3))
+    buf = io.BytesIO()
+    tile.save(buf, format="JPEG")
+    jpg_bytes = buf.getvalue()
+    seen = {"count": 0}
+
+    def flaky_download(url: str) -> bytes:
+        seen["count"] += 1
+        if seen["count"] == 1:
+            raise RuntimeError("boom")
+        return jpg_bytes
+
+    summary = build_aerial_pairs_dataset(
+        street_metadata=metadata_path,
+        out_dir=tmp_path / "dataset",
+        provider_name="ign_geopf",
+        crop_size_m=256.0,
+        crop_px=128,
+        allow_missing_aerial=False,
+        seed=42,
+        download_bytes_fn=flaky_download,
+    )
+
+    assert summary["request_failed_count"] == 1
+    assert summary["pairs_written"] == 1
+    aerial_rows = list(csv.DictReader((tmp_path / "dataset" / "aerial" / "metadata.csv").open("r", encoding="utf-8")))
+    statuses = {row["paired_street_id"]: row["status"] for row in aerial_rows}
+    assert statuses["street-1"] == "request_failed"
+    assert statuses["street-2"] == "ok"

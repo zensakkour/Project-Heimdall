@@ -99,3 +99,60 @@ def test_download_panoramax_dataset_writes_metadata(tmp_path: Path) -> None:
     assert rows[0]["source"] == "panoramax:ign"
     assert (tmp_path / "street" / "images" / "pic-1.jpg").exists()
 
+
+def test_download_panoramax_dataset_resumes_from_existing_metadata(tmp_path: Path) -> None:
+    street = tmp_path / "street"
+    street.mkdir(parents=True, exist_ok=True)
+    (street / "metadata.csv").write_text(
+        "image_id,path,lat,lon,heading_deg,captured_at,camera_type,width,height,quality_score,sequence,source,license_info\n"
+        "pic-1,images/pic-1.jpg,48.85,2.30,123,2026-01-01T00:00:00Z,flat,4096,2160,42,seq-1,panoramax:ign,etalab\n",
+        encoding="utf-8",
+    )
+
+    def fake_fetch_json(url: str) -> dict:
+        return {
+            "features": [
+                {
+                    "id": "pic-1",
+                    "collection": "seq-1",
+                    "geometry": {"type": "Point", "coordinates": [2.30, 48.85]},
+                    "assets": {"sd": {"href": "https://example.com/pic-1.jpg"}},
+                    "links": [{"rel": "license", "href": "https://example.com/license", "title": "License"}],
+                    "properties": {
+                        "datetime": "2026-01-01T00:00:00Z",
+                        "view:azimuth": 123,
+                        "license": "etalab-2.0",
+                        "panoramax:horizontal_pixel_density": 42,
+                        "pers:interior_orientation": {"sensor_array_dimensions": [4096, 2160]},
+                    },
+                },
+                {
+                    "id": "pic-2",
+                    "collection": "seq-2",
+                    "geometry": {"type": "Point", "coordinates": [2.31, 48.86]},
+                    "assets": {"sd": {"href": "https://example.com/pic-2.jpg"}},
+                    "links": [{"rel": "license", "href": "https://example.com/license", "title": "License"}],
+                    "properties": {
+                        "datetime": "2026-01-02T00:00:00Z",
+                        "view:azimuth": 90,
+                        "license": "etalab-2.0",
+                        "panoramax:horizontal_pixel_density": 42,
+                        "pers:interior_orientation": {"sensor_array_dimensions": [4096, 2160]},
+                    },
+                },
+            ],
+            "links": [],
+        }
+
+    summary = download_panoramax_dataset(
+        bbox=(48.80, 2.30, 48.8005, 2.3005),
+        out_dir=street,
+        grid_step_m=1000.0,
+        street_per_cell=3,
+        max_images=10,
+        max_per_sequence=10,
+        seed=42,
+        fetch_json_fn=fake_fetch_json,
+        download_bytes_fn=lambda url: b"x",
+    )
+    assert summary["selected_count"] == 2

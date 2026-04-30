@@ -291,3 +291,43 @@ def test_download_mapillary_dataset_skips_failed_downloads(tmp_path: Path) -> No
 
     assert summary["selected_count"] == 1
     assert summary["failed_downloads"] == 1
+
+
+def test_download_mapillary_dataset_resumes_from_existing_metadata(tmp_path: Path) -> None:
+    street = tmp_path / "street"
+    street.mkdir(parents=True, exist_ok=True)
+    (street / "metadata.csv").write_text(
+        "image_id,path,lat,lon,heading_deg,captured_at,camera_type,width,height,quality_score,sequence,source,license_info\n"
+        "img-1,images/img-1.jpg,48.80010000,2.30010000,12.0,,,,,,,mapillary,\n",
+        encoding="utf-8",
+    )
+
+    def fake_fetch_json(url: str) -> dict:
+        return {
+            "data": [
+                {
+                    "id": "img-1",
+                    "computed_geometry": {"type": "Point", "coordinates": [2.3001, 48.8001]},
+                    "thumb_2048_url": "https://example.com/img-1.jpg",
+                },
+                {
+                    "id": "img-2",
+                    "computed_geometry": {"type": "Point", "coordinates": [2.3002, 48.8002]},
+                    "thumb_2048_url": "https://example.com/img-2.jpg",
+                },
+            ]
+        }
+
+    summary = download_mapillary_dataset(
+        bbox=(48.80, 2.30, 48.8005, 2.3005),
+        out_dir=street,
+        grid_step_m=1000.0,
+        street_per_cell=3,
+        max_images=10,
+        max_per_sequence=10,
+        seed=42,
+        token="TOKEN",
+        fetch_json_fn=fake_fetch_json,
+        download_bytes_fn=lambda url: b"x",
+    )
+    assert summary["selected_count"] == 2
