@@ -7,6 +7,11 @@ Use it to keep algorithm history, experiment intent, and evaluation standards co
 ## Canonical Documents
 - Engineering change log: `PROGRESS.md` (append-only)
 - Research narrative: `src/docs/RESEARCH_PAPER.md`
+  - Treat this as Zein Sakkour's doctoral-style research manuscript.
+  - It should explain the algorithms, mathematical formulation, experiments tried, measured results, and research decisions.
+  - It should not collapse into a changelog; use `research.md` and `PROGRESS.md` for raw chronology.
+- Research evidence ledger: `research.md`
+  - Keep exact dates, commands, artifact paths, and before/after metrics here.
 - Geo stack technical reference: `src/docs/GEO_TECH.md`
 - Repro and eval workflow: `src/docs/REPRODUCIBILITY.md`
 - Benchmark contracts and outputs: `benchmarks/` and `docs/eval/`
@@ -19,6 +24,7 @@ Use it to keep algorithm history, experiment intent, and evaluation standards co
 5. If a change touches scoring/fusion/retrieval logic, add or update regression tests.
 6. After each user prompt that changes code, config, metrics, experiments, or workflow, update documentation before finalizing work.
 7. Treat every state-changing command as documentation-relevant: if a command changes code, config, artifacts, or conclusions, reflect it in docs within the same prompt cycle.
+8. When updating `src/docs/RESEARCH_PAPER.md`, preserve the doctoral research-paper style: state the problem, define notation, describe the algorithm, explain the experiment, report the result, then state the decision.
 
 ## Per-Prompt Documentation Sync (Required)
 At the end of each user request cycle, verify and update docs as needed:

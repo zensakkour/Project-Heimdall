@@ -2134,3 +2134,86 @@ Do not delete or edit past entries. Append new work at the end.
   - the realistic data phase is now complete enough to stop treating data collection as the main blocker
   - expanding the merged probe from a sampled `10k` aerial index to the full `40k` index helped close-range hit rates slightly, but did not improve mean/median error
   - the next bottleneck is the model, not the existence of a realistic dataset
+
+## 2026-04-30 - First combined cross-view projection training pass
+
+- Added dedicated realistic cross-view model-training tooling:
+  - `src/tools/mine_realistic_crossview_triplets.py`
+  - `src/tools/train_crossview_projection.py`
+  - tests:
+    - `src/tests/test_mine_realistic_crossview_triplets.py`
+    - `src/tests/test_train_crossview_projection.py`
+- Validation:
+  - `4 passed` on:
+    - `src/tests/test_mine_realistic_crossview_triplets.py`
+    - `src/tests/test_train_crossview_projection.py`
+    - `src/tests/test_eval_realistic_crossview.py`
+- Mined the first full realistic train pool from the combined strict split:
+  - `runs/paris_realistic_crossview_train_triplets_v1.jsonl`
+  - `runs/paris_realistic_crossview_train_triplets_v1.summary.json`
+  - counts:
+    - `total_queries = 26204`
+    - `triplets_written = 26204`
+    - `avg_positives = 2.97`
+    - `avg_negatives = 20.0`
+- Trained the first query-only street-to-aerial projection:
+  - `runs/crossview_projection_paris_combined_v1_probe.npz`
+  - `runs/crossview_projection_paris_combined_v1_probe.report.json`
+  - training subset:
+    - `6000` mined train triplets
+    - `6000` embedded street queries
+    - `26679` aerial references touched by those triplets
+  - training report:
+    - `8` epochs
+    - `weighted_hard_triplet_loss: 0.1147 -> 0.0928`
+    - `weighted_triplet_satisfied_pct: 0.75% -> 4.92%`
+- Benchmarked against the same full `40k` combined strict probe (`240` queries):
+  - frozen CLIP baseline:
+    - `runs/eval_realistic_crossview_combined_strict_probe240_baseline_full40k.json`
+    - `mean_km = 10.97`
+    - `median_km = 11.75`
+    - `within_1km_pct = 2.92`
+    - `within_2km_pct = 5.83`
+    - `within_5km_pct = 12.50`
+  - first cross-view projection:
+    - `runs/eval_realistic_crossview_combined_strict_probe240_crossviewproj_v1_full40k.json`
+    - `mean_km = 9.75`
+    - `median_km = 10.24`
+    - `within_1km_pct = 2.08`
+    - `within_2km_pct = 7.50`
+    - `within_5km_pct = 20.42`
+- Decision:
+  - this is the first real model-side improvement on the combined realistic benchmark
+  - the new projection meaningfully improves medium-range localization, but it is not yet the final close-range answer because `<=1km` regressed
+  - next training passes should focus on harder close-range negatives and faster query-embedding reuse rather than going back to more data collection
+
+## 2026-04-30 - Research paper doctoral-style framing update
+
+- Clarified document roles:
+  - `research.md` is the evidence ledger for exact dates, commands, artifacts, and before/after metrics
+  - `src/docs/RESEARCH_PAPER.md` is the authored research manuscript
+- Updated `AGENT.md` so future contributors preserve the intended paper style:
+  - problem statement
+  - notation
+  - algorithm description
+  - experiment
+  - result
+  - decision
+- Expanded `src/docs/RESEARCH_PAPER.md` with formal mathematical sections covering:
+  - ranked geolocation candidate inference
+  - CLIP-style retrieval embedding similarity
+  - multi-index weighted and RRF retrieval
+  - asymmetric street-to-aerial query projection
+  - triplet and contrastive loss
+  - structure/geometry reranking
+  - consensus, KDE, and geo-aware DBA
+  - probabilistic fusion and uncertainty
+  - leakage-safe spatial splitting
+  - benchmark metrics
+- Added the latest data/model progression to the paper chronology:
+  - realistic Paris data bottleneck
+  - `40,000` street-to-aerial pairs
+  - strict split with `1201.23 m` minimum cross-split distance
+  - first query-only cross-view projection result
+- Validation:
+  - documentation-only update; no tests were required
