@@ -20,7 +20,6 @@ def create_detector(cfg: Optional[DetectorConfig]) -> Optional[tuple[Detector, s
     backend = str(getattr(cfg, "backend", "rfdetr") or "rfdetr").strip().lower()
     if backend in {"rfdetr", "rf_detr", "rf-detr"}:
         try:
-            from .rfdetr_detector import RFDetrDetector
             return RFDetrDetector(
                 model_size=cfg.rfdetr_model_size,
                 min_confidence=cfg.min_confidence,
@@ -32,7 +31,6 @@ def create_detector(cfg: Optional[DetectorConfig]) -> Optional[tuple[Detector, s
             ), "rfdetr"
         except ImportError:
             if cfg.use_sidecar:
-                from .sidecar_detector import SidecarDetector
                 return SidecarDetector(
                     min_confidence=cfg.min_confidence,
                     nms_iou=cfg.nms_iou,
@@ -43,11 +41,9 @@ def create_detector(cfg: Optional[DetectorConfig]) -> Optional[tuple[Detector, s
                     use_classic=cfg.use_classic,
                 ), "sidecar"
             if cfg.use_classic:
-                from .classic import ClassicDetector
                 return ClassicDetector(), "classic"
             raise
     if cfg.weights_path:
-        from .ultralytics_obb import UltralyticsObbDetector
         return UltralyticsObbDetector(
             cfg.weights_path,
             min_confidence=cfg.min_confidence,
