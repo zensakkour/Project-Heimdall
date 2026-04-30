@@ -1859,3 +1859,278 @@ Do not delete or edit past entries. Append new work at the end.
   - Do not promote the tuned encoder as a replacement for the serving stack yet.
   - Do not promote the auxiliary fused serving config yet; even a conservative low-weight blend regressed sharply on the real Paris `180` benchmark.
   - Continue to serve `paris_close_range_dual_rrf` as the primary close-range branch and treat the tuned-model auxiliary source as infrastructure that still needs stronger training data before deployment.
+
+## 2026-04-29 23:10 - Data Branch Kickoff: realistic Paris dataset
+
+- Branch:
+  - created `tech/paris-realistic-data-v1` from merged `master`
+- Research conclusion update:
+  - recorded the current state as a data-limited stalemate rather than a modeling-only problem
+  - documented that better street-view comparison, cross-view geolocation, and stronger model adaptation now require a realistic street-plus-aerial dataset
+- Planning work:
+  - replaced the root `plan.md` on the new branch with a branch-local roadmap
+  - captured the repo audit for:
+    - retrieval and index pipeline
+    - metadata CSV conventions
+    - hard-negative mining reuse points
+    - projection-training reuse points
+    - config implications in `src/core/logic/config.py`
+    - docs and `PROGRESS.md` policy
+  - staged the next implementation sequence:
+    - Mapillary street-image ingestion
+    - OpenAerialMap aerial pairing
+    - leakage-safe spatial splits
+    - realistic cross-view triplet mining
+    - street-to-aerial projection and evaluation
+    - orientation-aware scoring
+    - street-to-street retrieval
+    - fused street-plus-aerial evaluation
+    - later architecture-upgrade branch only after a fixed realistic baseline exists
+- Decision:
+  - stop treating more small rerank ideas as the primary path to a breakthrough
+  - move the next research cycle onto realistic data construction first
+
+## 2026-04-29 23:45 - Mapillary Paris street-data ingestion tool
+
+- Added:
+  - `src/tools/download_mapillary_paris.py`
+  - `src/tests/test_download_mapillary_paris.py`
+- Implemented a first realistic street-image ingestion tool for the new Paris data branch:
+  - reads `MAPILLARY_ACCESS_TOKEN` from environment
+  - splits the requested Paris bbox into safe smaller query cells using meter-based grid steps
+  - queries `graph.mapillary.com/images` with the required fields
+  - prefers `computed_geometry` over `geometry`
+  - prefers `computed_compass_angle` over `compass_angle`
+  - uses `thumb_2048_url` with `thumb_1024_url` fallback
+  - writes `data/paris_realistic_v1/street/images/` plus `metadata.csv`
+  - dedupes by `image_id`
+  - limits near-duplicates by cell sampling and per-sequence caps
+  - supports `--dry-run` for expected-count checks without writing files
+  - includes retry and backoff for API and download reads
+- Documentation:
+  - updated `README.md` with the new realistic Paris street-data bootstrap command and metadata contract
+- Decision:
+  - start the realistic data pipeline with a controlled, reproducible street-image bootstrap before moving to aerial pairing and split generation
+
+## 2026-04-30 00:15 - OpenAerialMap aerial pairing tool
+
+- Added:
+  - `src/tools/build_aerial_pairs.py`
+  - `src/tests/test_build_aerial_pairs.py`
+- Implemented the first aerial-pair generation step for the realistic Paris branch:
+  - reads `street/metadata.csv`
+  - queries OpenAerialMap metadata near each street coordinate
+  - selects the highest-resolution scene covering the point
+  - reads the OAM TMS URL from scene metadata and renders a centered aerial crop
+  - writes `aerial/images/`, `aerial/metadata.csv`, and `pairs.csv`
+  - marks `no_open_aerial_found` when no OAM scene covers the point
+  - supports `--allow-missing-aerial` for explicit missing-pair rows
+- Documentation:
+  - updated `README.md` with the OAM pairing command and output contracts
+- Decision:
+  - keep the provider abstraction minimal for now: one open provider, explicit contracts, and TMS-based centered crops before adding more imagery sources
+
+## 2026-04-30 00:35 - Leakage-safe realistic split builder
+
+- Added:
+  - `src/tools/split_realistic_dataset.py`
+  - `src/tests/test_split_realistic_dataset.py`
+- Implemented spatial splitting for the realistic Paris dataset:
+  - groups pairs by geographic cells instead of random rows
+  - writes `train_pairs.csv`, `val_pairs.csv`, `test_pairs.csv`
+  - writes `split_summary.json` with pair counts, cell counts, bbox, seed, cell size, and minimum cross-split distance
+  - added a `--sanity-check-dir` mode to report minimum cross-split distance from an existing split folder
+- Documentation:
+  - updated `README.md` with split generation and sanity-check commands
+- Decision:
+  - keep the fixed realistic branch benchmark leakage-safe from the start rather than fixing split contamination later
+
+## 2026-04-30 01:10 - Paris completeness upgrade: Panoramax + IGN
+
+- Added:
+  - `src/tools/download_panoramax_paris.py`
+  - `src/tools/merge_realistic_street_datasets.py`
+  - `src/tests/test_download_panoramax_paris.py`
+  - `src/tests/test_merge_realistic_street_datasets.py`
+- Extended:
+  - `src/tools/build_aerial_pairs.py`
+  - `src/tests/test_build_aerial_pairs.py`
+- Upgraded the branch from single-source bootstrap toward a more complete Paris dataset path:
+  - added Panoramax federated street-image ingestion using the STAC-style search API
+  - preserves direct image assets, capture time, heading, source instance, and license metadata
+  - added a merge step so Mapillary and Panoramax datasets can be combined into one street metadata root
+  - added `ign_geopf` orthophoto support in aerial pairing for dense Paris-wide coverage when OAM is sparse
+- Documentation:
+  - updated `README.md` with the recommended higher-completeness path:
+    - Mapillary + Panoramax street ingestion
+    - merged `street_combined` dataset
+    - IGN orthophoto aerial pairing for Paris
+- Decision:
+  - for Paris specifically, completeness now means combining open French street imagery with French orthophotos instead of relying on one global provider alone
+
+## 2026-04-30 07:35 - Full data-build checkpoint
+
+- Operational build results on `tech/paris-realistic-data-v1`:
+  - confirmed `.env` token loading for Mapillary and validated the live downloader on a smoke bbox
+  - full-city Mapillary pull reached `3029` downloaded street images before the command window expired
+  - full-city Panoramax pull was promoted into a stable `10000`-image street dataset at:
+    - `data/paris_realistic_v1/street_panoramax/metadata.csv`
+  - IGN aerial pairing produced `3802` centered aerial crops before the long run window expired
+  - materialized those completed crops into:
+    - `data/paris_realistic_v1/aerial/metadata.csv`
+    - `data/paris_realistic_v1/pairs.csv`
+  - current pair count: `3802`
+  - current split outputs:
+    - train `2671`
+    - val `583`
+    - test `548`
+- Hardening:
+  - updated the Mapillary downloader so transient CDN or per-cell failures no longer abort the full run
+  - downloader now skips failed image downloads and keeps the dataset build moving
+- Current caveat:
+  - the current `3802`-pair cross-view subset is usable for immediate experimentation, but it is not yet the final full-Paris dataset
+  - the current split generator still needs stronger leakage protection because the minimum cross-split distance on this partial slice is too small
+- Decision:
+  - keep the `10000` Panoramax street dataset and `3802` IGN pair subset as the first real realistic-Paris checkpoint
+  - continue the data branch from this checkpoint rather than discarding partially completed large downloads
+
+## 2026-04-30 17:05 - Full Panoramax -> IGN pair completion
+
+- Performance fix:
+  - upgraded `ign_geopf` aerial pairing from multi-tile WMTS rendering to direct WMS `GetMap` requests against the official IGN `wms-r` endpoint
+  - this removed the main bottleneck in the chunked aerial build
+- Operational result:
+  - completed the chunked aerial pairing run for all `10000` Panoramax street images
+  - merged chunk outputs back into the final dataset root
+  - final dataset counts in `data/paris_realistic_v1/`:
+    - `street_panoramax/metadata.csv`: `10000` street images
+    - `aerial/metadata.csv`: `10000` aerial crops
+    - `pairs.csv`: `10000` positive street-to-aerial pairs
+  - rebuilt full split files in `data/paris_realistic_v1/splits_full/`:
+    - train `7003`
+    - val `1500`
+    - test `1497`
+- Current caveat:
+  - the data volume is now complete for the Panoramax -> IGN branch
+  - the split generator still needs a stronger anti-leakage policy because the current minimum cross-split distance remains too small on the dense urban grid
+- Decision:
+  - treat `data/paris_realistic_v1/` as the first complete realistic Paris dataset checkpoint
+  - continue improving split integrity and optional Mapillary augmentation on top of this completed core dataset
+
+## 2026-04-29 - Research and replication docs refreshed for the data bottleneck
+
+- Updated `research.md` to record the current realistic Paris data checkpoint explicitly:
+  - `20,000` Mapillary street rows
+  - `20,000` Panoramax street rows
+  - `40,000` merged street rows
+  - `10,000` complete Panoramax -> IGN street-to-aerial pairs
+- Documented the current limitations honestly:
+  - the full `40,000` combined street -> IGN pairing attempt did not finish cleanly
+  - the current `splits_full` summary still reports `min_cross_split_distance_m = 3.77`, so the benchmark split is not strict enough yet
+- Updated `src/docs/RESEARCH_PAPER.md` so the paper now states:
+  - the retrieval/fusion stack was validated across multiple controlled upgrades
+  - progress then hit a data-limited stalemate rather than a purely algorithmic one
+  - the current research path is realistic street-to-aerial data collection and replication
+  - the current dataset is enough to start real cross-view training, but not enough to justify a serious `~3 km` mean-accuracy claim yet
+- Updated `README.md` dataset instructions to match the actual branch outputs and replication path:
+  - `street_mapillary`
+  - `street_panoramax`
+  - `street_combined`
+  - `pairs.csv`
+  - `splits_full`
+
+## 2026-04-29 - Strict realistic split and first cross-view benchmark loop
+
+- Added:
+  - `src/tools/eval_realistic_crossview.py`
+  - `src/tests/test_eval_realistic_crossview.py`
+- Tightened:
+  - `src/tools/split_realistic_dataset.py`
+  - `src/tests/test_split_realistic_dataset.py`
+  - `src/tools/mine_hard_negative_triplets.py`
+  - `src/tests/test_mine_hard_negative_triplets.py`
+- Split fix:
+  - changed realistic split generation from shuffled adjacent cell assignment to contiguous geographic bands plus explicit boundary buffering
+  - split builder now supports `--buffer-cells`
+  - excluded boundary rows are materialized into `excluded_pairs.csv` instead of being hidden
+  - exact street/aerial coordinate matches are now treated as valid positives in hard-negative mining when query and reference paths differ
+- Strict benchmark artifact:
+  - `data/paris_realistic_v1/splits_strict/split_summary.json`
+  - counts:
+    - retained pairs: `8405`
+    - excluded boundary-buffer pairs: `1595`
+    - train: `6435`
+    - val: `739`
+    - test: `1231`
+  - anti-leakage floor:
+    - `min_cross_split_distance_m = 1213.11`
+- First realistic cross-view benchmark probe on the strict split:
+  - baseline report: `runs/eval_realistic_crossview_strict_probe120_baseline.json`
+  - projection report: `runs/paris_realistic_strict_crossview_projection.report.json`
+  - projected eval report: `runs/eval_realistic_crossview_strict_probe120_projected.json`
+  - probe size: `120` strict test queries
+  - baseline metrics:
+    - `mean_km = 8.44`
+    - `median_km = 7.96`
+    - `within_1km_pct = 5.83`
+    - `within_2km_pct = 7.50`
+    - `within_5km_pct = 15.00`
+  - first projection pass (`1500` train-only synthetic triplets, `5` epochs):
+    - `mean_km = 8.60`
+    - `median_km = 9.16`
+    - `within_1km_pct = 10.00`
+    - `within_2km_pct = 13.33`
+    - `within_5km_pct = 28.33`
+- Decision:
+  - the realistic cross-view path is now measurable on a stricter split
+  - the first projection pass improved close-range hit rates but did not improve mean/median error yet
+  - next work should mine harder train triplets and compare against the same strict probe before claiming a better model
+
+## 2026-04-30 - Full combined realistic dataset completion and benchmark handoff
+
+- Completed the full all-source realistic Paris recovery path:
+  - `data/paris_realistic_v1_combined/pairs.csv` now contains `40,000` combined street -> IGN pairs
+  - `data/paris_realistic_v1_combined/aerial/metadata.csv` now contains `40,000` aerial rows
+  - `data/paris_realistic_v1_combined/recovery_summary.json` records the merged dataset state
+- Tightened the combined benchmark root:
+  - rebuilt `data/paris_realistic_v1_combined/splits_strict/` after the full merge
+  - split summary:
+    - train: `26204`
+    - val: `3382`
+    - test: `5235`
+    - excluded: `5179`
+    - retained: `34821`
+    - `min_cross_split_distance_m = 1201.23`
+- Fixed two infrastructure bottlenecks that blocked realistic-scale benchmarking:
+  - vectorized `min_cross_split_distance_m` in `src/tools/split_realistic_dataset.py` so strict-split summary generation no longer stalls on the large combined dataset
+  - added batched image embedding support in:
+    - `src/core/geo/retrieval_provider.py`
+    - `src/tools/build_geo_index.py`
+  - added:
+    - `src/tools/build_realistic_aerial_index.py`
+    - `src/tools/recover_combined_aerial_dataset.py`
+    - `src/tests/test_build_geo_index.py`
+    - `src/tests/test_recover_combined_aerial_dataset.py`
+- Validation:
+  - `6 passed` on:
+    - `src/tests/test_build_geo_index.py`
+    - `src/tests/test_split_realistic_dataset.py`
+- First merged-dataset benchmark reports:
+  - sampled `10k` aerial index, `240`-query strict probe:
+    - `runs/eval_realistic_crossview_combined_strict_probe240_baseline_sample10k.json`
+    - `mean_km = 10.92`
+    - `median_km = 11.05`
+    - `within_1km_pct = 2.08`
+    - `within_2km_pct = 5.00`
+    - `within_5km_pct = 10.83`
+  - full `40k` aerial index, same `240`-query strict probe:
+    - `runs/eval_realistic_crossview_combined_strict_probe240_baseline_full40k.json`
+    - `mean_km = 10.97`
+    - `median_km = 11.75`
+    - `within_1km_pct = 2.92`
+    - `within_2km_pct = 5.83`
+    - `within_5km_pct = 12.50`
+- Decision:
+  - the realistic data phase is now complete enough to stop treating data collection as the main blocker
+  - expanding the merged probe from a sampled `10k` aerial index to the full `40k` index helped close-range hit rates slightly, but did not improve mean/median error
+  - the next bottleneck is the model, not the existence of a realistic dataset

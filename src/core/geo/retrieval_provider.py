@@ -161,12 +161,11 @@ class ClipEmbedder:
             self._projection_weight = torch.from_numpy(weight).to(device=self.device, dtype=torch.float32)
             self._projection_bias = torch.from_numpy(bias).to(device=self.device, dtype=torch.float32)
 
-    def embed(self, image: Image.Image) -> np.ndarray:
+    def _embed_processed(self, processed: dict) -> np.ndarray:
         if torch is None:
             raise RuntimeError("torch_not_available")
         with torch.no_grad():
-            inputs = self.processor(images=image, return_tensors="pt")
-            inputs = {k: v.to(self.device) for k, v in inputs.items() if hasattr(v, "to")}
+            inputs = {k: v.to(self.device) for k, v in processed.items() if hasattr(v, "to")}
             if hasattr(self.model, "get_image_features"):
                 feats = self.model.get_image_features(**inputs)
             else:
@@ -180,6 +179,17 @@ class ClipEmbedder:
                 feats = feats @ self._projection_weight.transpose(0, 1) + self._projection_bias
             feats = feats / feats.norm(dim=-1, keepdim=True).clamp_min(1e-12)
             return feats.cpu().numpy().astype(np.float32)
+
+    def embed(self, image: Image.Image) -> np.ndarray:
+        inputs = self.processor(images=image, return_tensors="pt")
+        return self._embed_processed(inputs)
+
+    def embed_many(self, images: Sequence[Image.Image]) -> np.ndarray:
+        batch = list(images)
+        if not batch:
+            raise ValueError("images_batch_empty")
+        inputs = self.processor(images=batch, return_tensors="pt")
+        return self._embed_processed(inputs)
 
 
 def _extract_tensor(output):
