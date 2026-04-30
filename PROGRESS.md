@@ -2016,3 +2016,121 @@ Do not delete or edit past entries. Append new work at the end.
 - Decision:
   - treat `data/paris_realistic_v1/` as the first complete realistic Paris dataset checkpoint
   - continue improving split integrity and optional Mapillary augmentation on top of this completed core dataset
+
+## 2026-04-29 - Research and replication docs refreshed for the data bottleneck
+
+- Updated `research.md` to record the current realistic Paris data checkpoint explicitly:
+  - `20,000` Mapillary street rows
+  - `20,000` Panoramax street rows
+  - `40,000` merged street rows
+  - `10,000` complete Panoramax -> IGN street-to-aerial pairs
+- Documented the current limitations honestly:
+  - the full `40,000` combined street -> IGN pairing attempt did not finish cleanly
+  - the current `splits_full` summary still reports `min_cross_split_distance_m = 3.77`, so the benchmark split is not strict enough yet
+- Updated `src/docs/RESEARCH_PAPER.md` so the paper now states:
+  - the retrieval/fusion stack was validated across multiple controlled upgrades
+  - progress then hit a data-limited stalemate rather than a purely algorithmic one
+  - the current research path is realistic street-to-aerial data collection and replication
+  - the current dataset is enough to start real cross-view training, but not enough to justify a serious `~3 km` mean-accuracy claim yet
+- Updated `README.md` dataset instructions to match the actual branch outputs and replication path:
+  - `street_mapillary`
+  - `street_panoramax`
+  - `street_combined`
+  - `pairs.csv`
+  - `splits_full`
+
+## 2026-04-29 - Strict realistic split and first cross-view benchmark loop
+
+- Added:
+  - `src/tools/eval_realistic_crossview.py`
+  - `src/tests/test_eval_realistic_crossview.py`
+- Tightened:
+  - `src/tools/split_realistic_dataset.py`
+  - `src/tests/test_split_realistic_dataset.py`
+  - `src/tools/mine_hard_negative_triplets.py`
+  - `src/tests/test_mine_hard_negative_triplets.py`
+- Split fix:
+  - changed realistic split generation from shuffled adjacent cell assignment to contiguous geographic bands plus explicit boundary buffering
+  - split builder now supports `--buffer-cells`
+  - excluded boundary rows are materialized into `excluded_pairs.csv` instead of being hidden
+  - exact street/aerial coordinate matches are now treated as valid positives in hard-negative mining when query and reference paths differ
+- Strict benchmark artifact:
+  - `data/paris_realistic_v1/splits_strict/split_summary.json`
+  - counts:
+    - retained pairs: `8405`
+    - excluded boundary-buffer pairs: `1595`
+    - train: `6435`
+    - val: `739`
+    - test: `1231`
+  - anti-leakage floor:
+    - `min_cross_split_distance_m = 1213.11`
+- First realistic cross-view benchmark probe on the strict split:
+  - baseline report: `runs/eval_realistic_crossview_strict_probe120_baseline.json`
+  - projection report: `runs/paris_realistic_strict_crossview_projection.report.json`
+  - projected eval report: `runs/eval_realistic_crossview_strict_probe120_projected.json`
+  - probe size: `120` strict test queries
+  - baseline metrics:
+    - `mean_km = 8.44`
+    - `median_km = 7.96`
+    - `within_1km_pct = 5.83`
+    - `within_2km_pct = 7.50`
+    - `within_5km_pct = 15.00`
+  - first projection pass (`1500` train-only synthetic triplets, `5` epochs):
+    - `mean_km = 8.60`
+    - `median_km = 9.16`
+    - `within_1km_pct = 10.00`
+    - `within_2km_pct = 13.33`
+    - `within_5km_pct = 28.33`
+- Decision:
+  - the realistic cross-view path is now measurable on a stricter split
+  - the first projection pass improved close-range hit rates but did not improve mean/median error yet
+  - next work should mine harder train triplets and compare against the same strict probe before claiming a better model
+
+## 2026-04-30 - Full combined realistic dataset completion and benchmark handoff
+
+- Completed the full all-source realistic Paris recovery path:
+  - `data/paris_realistic_v1_combined/pairs.csv` now contains `40,000` combined street -> IGN pairs
+  - `data/paris_realistic_v1_combined/aerial/metadata.csv` now contains `40,000` aerial rows
+  - `data/paris_realistic_v1_combined/recovery_summary.json` records the merged dataset state
+- Tightened the combined benchmark root:
+  - rebuilt `data/paris_realistic_v1_combined/splits_strict/` after the full merge
+  - split summary:
+    - train: `26204`
+    - val: `3382`
+    - test: `5235`
+    - excluded: `5179`
+    - retained: `34821`
+    - `min_cross_split_distance_m = 1201.23`
+- Fixed two infrastructure bottlenecks that blocked realistic-scale benchmarking:
+  - vectorized `min_cross_split_distance_m` in `src/tools/split_realistic_dataset.py` so strict-split summary generation no longer stalls on the large combined dataset
+  - added batched image embedding support in:
+    - `src/core/geo/retrieval_provider.py`
+    - `src/tools/build_geo_index.py`
+  - added:
+    - `src/tools/build_realistic_aerial_index.py`
+    - `src/tools/recover_combined_aerial_dataset.py`
+    - `src/tests/test_build_geo_index.py`
+    - `src/tests/test_recover_combined_aerial_dataset.py`
+- Validation:
+  - `6 passed` on:
+    - `src/tests/test_build_geo_index.py`
+    - `src/tests/test_split_realistic_dataset.py`
+- First merged-dataset benchmark reports:
+  - sampled `10k` aerial index, `240`-query strict probe:
+    - `runs/eval_realistic_crossview_combined_strict_probe240_baseline_sample10k.json`
+    - `mean_km = 10.92`
+    - `median_km = 11.05`
+    - `within_1km_pct = 2.08`
+    - `within_2km_pct = 5.00`
+    - `within_5km_pct = 10.83`
+  - full `40k` aerial index, same `240`-query strict probe:
+    - `runs/eval_realistic_crossview_combined_strict_probe240_baseline_full40k.json`
+    - `mean_km = 10.97`
+    - `median_km = 11.75`
+    - `within_1km_pct = 2.92`
+    - `within_2km_pct = 5.83`
+    - `within_5km_pct = 12.50`
+- Decision:
+  - the realistic data phase is now complete enough to stop treating data collection as the main blocker
+  - expanding the merged probe from a sampled `10k` aerial index to the full `40k` index helped close-range hit rates slightly, but did not improve mean/median error
+  - the next bottleneck is the model, not the existence of a realistic dataset

@@ -239,6 +239,13 @@ def _write_metadata_csv(path: Path, rows: Iterable[dict]) -> None:
             writer.writerow(row)
 
 
+def _load_existing_metadata_rows(path: Path) -> List[dict]:
+    if not path.exists():
+        return []
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        return [dict(row) for row in csv.DictReader(handle)]
+
+
 def download_panoramax_dataset(
     *,
     bbox: Tuple[float, float, float, float],
@@ -261,8 +268,23 @@ def download_panoramax_dataset(
     metadata_path = out_dir / "metadata.csv"
 
     seen_ids: set[str] = set()
+    metadata_ids: set[str] = set()
     sequence_counts: Dict[str, int] = {}
     rows: List[dict] = []
+    existing_rows = _load_existing_metadata_rows(metadata_path)
+    for row in existing_rows:
+        image_id = str(row.get("image_id") or "").strip()
+        if not image_id:
+            continue
+        rows.append(row)
+        seen_ids.add(image_id)
+        metadata_ids.add(image_id)
+        sequence = str(row.get("sequence") or "").strip()
+        if sequence:
+            sequence_counts[sequence] = sequence_counts.get(sequence, 0) + 1
+    existing_file_ids: set[str] = set()
+    if images_dir.exists():
+        existing_file_ids = {path.stem for path in images_dir.glob("*") if path.is_file()}
 
     for cell in cells:
         if len(rows) >= int(max_images):
@@ -279,7 +301,7 @@ def download_panoramax_dataset(
         per_cell_sequences: set[str] = set()
         taken = 0
         for image in pool:
-            if image.image_id in seen_ids:
+            if image.image_id in metadata_ids:
                 continue
             if image.sequence:
                 if image.sequence in per_cell_sequences:
@@ -289,7 +311,9 @@ def download_panoramax_dataset(
             rel_path = f"images/{image.image_id}{_image_extension(image.image_url)}"
             if not dry_run:
                 images_dir.mkdir(parents=True, exist_ok=True)
-                (out_dir / rel_path).write_bytes(download_bytes(image.image_url))
+                out_path = out_dir / rel_path
+                if not out_path.exists():
+                    out_path.write_bytes(download_bytes(image.image_url))
             rows.append(
                 {
                     "image_id": image.image_id,
@@ -308,6 +332,7 @@ def download_panoramax_dataset(
                 }
             )
             seen_ids.add(image.image_id)
+            metadata_ids.add(image.image_id)
             if image.sequence:
                 sequence_counts[image.sequence] = sequence_counts.get(image.sequence, 0) + 1
                 per_cell_sequences.add(image.sequence)

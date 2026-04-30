@@ -26,6 +26,7 @@ def test_spatial_split_pairs_keeps_cells_together() -> None:
         test_ratio=0.25,
         cell_size_m=300.0,
         seed=42,
+        buffer_cells=0,
     )
     pair_to_split = {}
     for split_name, split_rows in splits.items():
@@ -54,6 +55,7 @@ def test_build_realistic_splits_writes_csv_and_summary(tmp_path: Path) -> None:
         test_ratio=0.25,
         cell_size_m=300.0,
         seed=42,
+        buffer_cells=0,
     )
 
     assert (tmp_path / "splits" / "train_pairs.csv").exists()
@@ -86,3 +88,32 @@ def test_sanity_check_split_dir_reports_min_distance(tmp_path: Path) -> None:
 def test_min_cross_split_distance_handles_empty_splits() -> None:
     minimum = min_cross_split_distance_m({"train": [], "val": [], "test": []})
     assert minimum is None
+
+
+def test_spatial_split_pairs_can_exclude_boundary_cells_for_stricter_gap() -> None:
+    rows = []
+    for idx in range(12):
+        rows.append(
+            {
+                "pair_id": f"p{idx}",
+                "lat": f"{48.8500 + (idx * 0.0009):.8f}",
+                "lon": "2.30000000",
+            }
+        )
+
+    splits, summary = spatial_split_pairs(
+        rows,
+        train_ratio=0.5,
+        val_ratio=0.25,
+        test_ratio=0.25,
+        cell_size_m=100.0,
+        seed=42,
+        buffer_cells=1,
+        sort_axis="lat",
+    )
+
+    assert "excluded" in splits
+    assert summary["excluded_pairs"] > 0
+    assert summary["retained_pairs"] + summary["excluded_pairs"] == 12
+    minimum = min_cross_split_distance_m(splits)
+    assert minimum is None or minimum > 0.0

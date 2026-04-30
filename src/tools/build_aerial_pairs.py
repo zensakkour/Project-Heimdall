@@ -7,6 +7,7 @@ import io
 import json
 import math
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
@@ -54,7 +55,7 @@ class AerialProvider:
 def _request_bytes_with_retry(
     url: str,
     *,
-    retries: int = 3,
+    retries: int = 6,
     timeout_s: float = 30.0,
     sleep_fn: Callable[[float], None] = time.sleep,
     opener: Callable[..., object] = urllib.request.urlopen,
@@ -69,7 +70,15 @@ def _request_bytes_with_retry(
             last_error = exc
             if attempt >= max(1, int(retries)) - 1:
                 break
-            sleep_fn(min(8.0, 0.5 * (2**attempt)))
+            delay = min(30.0, 1.0 * (2**attempt))
+            if isinstance(exc, urllib.error.HTTPError) and int(getattr(exc, "code", 0) or 0) == 429:
+                retry_after = str(getattr(exc, "headers", {}).get("Retry-After") or "").strip()
+                parsed_retry_after = _optional_float(retry_after)
+                if parsed_retry_after is not None:
+                    delay = max(delay, float(parsed_retry_after))
+                else:
+                    delay = max(delay, 15.0)
+            sleep_fn(delay)
     raise RuntimeError(f"request_failed:{url}") from last_error
 
 
@@ -373,6 +382,63 @@ def _parse_bool(text: str) -> bool:
     raise ValueError(f"invalid_bool:{text}")
 
 
+def _load_existing_rows(path: Path, key_field: str) -> Dict[str, dict]:
+    if not path.exists():
+        return {}
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        out: Dict[str, dict] = {}
+        for row in reader:
+            key = str(row.get(key_field) or "").strip()
+            if not key:
+                continue
+            out[key] = dict(row)
+        return out
+
+
+def _ign_aerial_id_for_street(street: StreetRecord) -> str:
+    return f"ign_geopf_ortho_{street.image_id}"
+
+
+def _recover_existing_ign_rows(
+    *,
+    street: StreetRecord,
+    out_dir: Path,
+    crop_size_m: float,
+    crop_px: int,
+) -> Optional[Tuple[dict, dict]]:
+    aerial_id = _ign_aerial_id_for_street(street)
+    rel_path = f"aerial/images/{aerial_id}.png"
+    out_path = out_dir / rel_path
+    if not out_path.exists():
+        return None
+    aerial_row = {
+        "aerial_id": aerial_id,
+        "path": rel_path,
+        "lat": f"{street.lat:.8f}",
+        "lon": f"{street.lon:.8f}",
+        "source": "ign_geopf_ortho",
+        "provider": "ign_geopf",
+        "resolution_m": f"{0.20:.6f}",
+        "crop_size_m": f"{float(crop_size_m):.2f}",
+        "crop_px": str(int(crop_px)),
+        "license_info": "IGN / Geoportail orthophotos; verify attribution for final publication.",
+        "paired_street_id": street.image_id,
+        "status": "ok",
+    }
+    pair_row = {
+        "pair_id": f"{street.image_id}__{aerial_id}",
+        "street_id": street.image_id,
+        "street_path": street.path,
+        "aerial_id": aerial_id,
+        "aerial_path": rel_path,
+        "lat": f"{street.lat:.8f}",
+        "lon": f"{street.lon:.8f}",
+        "heading_deg": "" if street.heading_deg is None else f"{street.heading_deg:.6f}",
+    }
+    return aerial_row, pair_row
+
+
 def build_aerial_pairs_dataset(
     *,
     street_metadata: Path,
@@ -397,14 +463,135 @@ def build_aerial_pairs_dataset(
     aerial_rows: List[dict] = []
     pair_rows: List[dict] = []
     missing_count = 0
+    request_failed_count = 0
+    recovered_existing_count = 0
+    existing_aerial_by_street = _load_existing_rows(aerial_metadata_path, "paired_street_id")
+    existing_pair_by_street = _load_existing_rows(pairs_path, "street_id")
+    seen_street_ids: set[str] = set()
 
     for street in street_rows:
-        scene = provider.best_scene_for_point(street.lat, street.lon)
-        if scene is None:
-            missing_count += 1
+        if street.image_id in seen_street_ids:
+            continue
+        seen_street_ids.add(street.image_id)
+
+        existing_aerial = existing_aerial_by_street.get(street.image_id)
+        existing_pair = existing_pair_by_street.get(street.image_id)
+        if existing_aerial is not None:
+            aerial_rows.append(dict(existing_aerial))
+            if existing_pair is not None:
+                pair_rows.append(dict(existing_pair))
+            recovered_existing_count += 1
+            continue
+
+        recovered = None
+        if str(provider_name).strip().lower() == "ign_geopf":
+            recovered = _recover_existing_ign_rows(
+                street=street,
+                out_dir=out_dir,
+                crop_size_m=float(crop_size_m),
+                crop_px=int(crop_px),
+            )
+        if recovered is not None:
+            aerial_row, pair_row = recovered
+            aerial_rows.append(aerial_row)
+            pair_rows.append(pair_row)
+            recovered_existing_count += 1
+            continue
+
+        try:
+            scene = provider.best_scene_for_point(street.lat, street.lon)
+            if scene is None:
+                missing_count += 1
+                aerial_rows.append(
+                    {
+                        "aerial_id": f"missing_{street.image_id}",
+                        "path": "",
+                        "lat": f"{street.lat:.8f}",
+                        "lon": f"{street.lon:.8f}",
+                        "source": "",
+                        "provider": str(provider_name),
+                        "resolution_m": "",
+                        "crop_size_m": f"{float(crop_size_m):.2f}",
+                        "crop_px": str(int(crop_px)),
+                        "license_info": "",
+                        "paired_street_id": street.image_id,
+                        "status": "no_open_aerial_found",
+                    }
+                )
+                if not allow_missing_aerial:
+                    continue
+                pair_rows.append(
+                    {
+                        "pair_id": f"{street.image_id}__missing",
+                        "street_id": street.image_id,
+                        "street_path": street.path,
+                        "aerial_id": "",
+                        "aerial_path": "",
+                        "lat": f"{street.lat:.8f}",
+                        "lon": f"{street.lon:.8f}",
+                        "heading_deg": "" if street.heading_deg is None else f"{street.heading_deg:.6f}",
+                    }
+                )
+                continue
+
+            if str(scene.wms_url).strip():
+                image = _render_wms_crop(
+                    wms_url=scene.wms_url,
+                    lat=street.lat,
+                    lon=street.lon,
+                    crop_size_m=float(crop_size_m),
+                    crop_px=int(crop_px),
+                    download_bytes_fn=downloader,
+                )
+            else:
+                zoom = _target_zoom(street.lat, crop_size_m, crop_px)
+                image = _render_tms_crop(
+                    tms_url=scene.tms_url,
+                    lat=street.lat,
+                    lon=street.lon,
+                    crop_px=int(crop_px),
+                    zoom=zoom,
+                    download_bytes_fn=downloader,
+                )
+            aerial_id = f"{scene.source_id}_{street.image_id}"
+            rel_path = f"aerial/images/{aerial_id}.png"
+            out_path = out_dir / rel_path
+            aerial_dir.mkdir(parents=True, exist_ok=True)
+            image.save(out_path, format="PNG")
+
             aerial_rows.append(
                 {
-                    "aerial_id": f"missing_{street.image_id}",
+                    "aerial_id": aerial_id,
+                    "path": rel_path,
+                    "lat": f"{street.lat:.8f}",
+                    "lon": f"{street.lon:.8f}",
+                    "source": scene.source_id,
+                    "provider": scene.provider,
+                    "resolution_m": f"{scene.resolution_m:.6f}",
+                    "crop_size_m": f"{float(crop_size_m):.2f}",
+                    "crop_px": str(int(crop_px)),
+                    "license_info": scene.license_info,
+                    "paired_street_id": street.image_id,
+                    "status": "ok",
+                }
+            )
+            pair_rows.append(
+                {
+                    "pair_id": f"{street.image_id}__{aerial_id}",
+                    "street_id": street.image_id,
+                    "street_path": street.path,
+                    "aerial_id": aerial_id,
+                    "aerial_path": rel_path,
+                    "lat": f"{street.lat:.8f}",
+                    "lon": f"{street.lon:.8f}",
+                    "heading_deg": "" if street.heading_deg is None else f"{street.heading_deg:.6f}",
+                }
+            )
+        except Exception:
+            request_failed_count += 1
+            aerial_rows.append(
+                {
+                    "aerial_id": f"failed_{street.image_id}",
                     "path": "",
                     "lat": f"{street.lat:.8f}",
                     "lon": f"{street.lon:.8f}",
@@ -415,78 +602,22 @@ def build_aerial_pairs_dataset(
                     "crop_px": str(int(crop_px)),
                     "license_info": "",
                     "paired_street_id": street.image_id,
-                    "status": "no_open_aerial_found",
+                    "status": "request_failed",
                 }
             )
-            if not allow_missing_aerial:
-                continue
-            pair_rows.append(
-                {
-                    "pair_id": f"{street.image_id}__missing",
-                    "street_id": street.image_id,
-                    "street_path": street.path,
-                    "aerial_id": "",
-                    "aerial_path": "",
-                    "lat": f"{street.lat:.8f}",
-                    "lon": f"{street.lon:.8f}",
-                    "heading_deg": "" if street.heading_deg is None else f"{street.heading_deg:.6f}",
-                }
-            )
-            continue
-
-        if str(scene.wms_url).strip():
-            image = _render_wms_crop(
-                wms_url=scene.wms_url,
-                lat=street.lat,
-                lon=street.lon,
-                crop_size_m=float(crop_size_m),
-                crop_px=int(crop_px),
-                download_bytes_fn=downloader,
-            )
-        else:
-            zoom = _target_zoom(street.lat, crop_size_m, crop_px)
-            image = _render_tms_crop(
-                tms_url=scene.tms_url,
-                lat=street.lat,
-                lon=street.lon,
-                crop_px=int(crop_px),
-                zoom=zoom,
-                download_bytes_fn=downloader,
-            )
-        aerial_id = f"{scene.source_id}_{street.image_id}"
-        rel_path = f"aerial/images/{aerial_id}.png"
-        out_path = out_dir / rel_path
-        aerial_dir.mkdir(parents=True, exist_ok=True)
-        image.save(out_path, format="PNG")
-
-        aerial_rows.append(
-            {
-                "aerial_id": aerial_id,
-                "path": rel_path,
-                "lat": f"{street.lat:.8f}",
-                "lon": f"{street.lon:.8f}",
-                "source": scene.source_id,
-                "provider": scene.provider,
-                "resolution_m": f"{scene.resolution_m:.6f}",
-                "crop_size_m": f"{float(crop_size_m):.2f}",
-                "crop_px": str(int(crop_px)),
-                "license_info": scene.license_info,
-                "paired_street_id": street.image_id,
-                "status": "ok",
-            }
-        )
-        pair_rows.append(
-            {
-                "pair_id": f"{street.image_id}__{aerial_id}",
-                "street_id": street.image_id,
-                "street_path": street.path,
-                "aerial_id": aerial_id,
-                "aerial_path": rel_path,
-                "lat": f"{street.lat:.8f}",
-                "lon": f"{street.lon:.8f}",
-                "heading_deg": "" if street.heading_deg is None else f"{street.heading_deg:.6f}",
-            }
-        )
+            if allow_missing_aerial:
+                pair_rows.append(
+                    {
+                        "pair_id": f"{street.image_id}__failed",
+                        "street_id": street.image_id,
+                        "street_path": street.path,
+                        "aerial_id": "",
+                        "aerial_path": "",
+                        "lat": f"{street.lat:.8f}",
+                        "lon": f"{street.lon:.8f}",
+                        "heading_deg": "" if street.heading_deg is None else f"{street.heading_deg:.6f}",
+                    }
+                )
 
     _write_csv(
         aerial_metadata_path,
@@ -522,6 +653,8 @@ def build_aerial_pairs_dataset(
         "aerial_rows": len(aerial_rows),
         "pairs_written": len(pair_rows),
         "missing_aerial_count": int(missing_count),
+        "request_failed_count": int(request_failed_count),
+        "recovered_existing_count": int(recovered_existing_count),
         "aerial_metadata": str(aerial_metadata_path),
         "pairs_csv": str(pairs_path),
     }
