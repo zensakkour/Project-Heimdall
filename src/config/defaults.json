@@ -1,6 +1,7 @@
 {
   "profile_scope": "PARIS",
   "detector": {
+    "backend": "ultralytics_obb",
     "weights_path": "yolo11x-obb.pt",
     "min_confidence": 0.25,
     "nms_iou": 0.5,
@@ -11,7 +12,8 @@
     "use_tta": false,
     "use_sidecar": true,
     "use_classic": false,
-    "imgsz": 1280
+    "imgsz": 1280,
+    "rfdetr_model_size": "medium"
   },
   "geolocator": {
     "model_path": null,

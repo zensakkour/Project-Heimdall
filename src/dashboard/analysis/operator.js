@@ -198,6 +198,58 @@ function weightColor(weight) {
   return `hsl(186, 68%, ${lightness}%)`;
 }
 
+function formatPercent(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return "-";
+  return `${(Number(value) * 100).toFixed(1)}%`;
+}
+
+function formatMeters(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return "-";
+  const meters = Number(value);
+  if (meters >= 1000) return `${(meters / 1000).toFixed(2)} km`;
+  return `${meters.toFixed(0)} m`;
+}
+
+function sourceFromMatchId(matchId) {
+  if (!matchId) return "retrieval";
+  const text = String(matchId);
+  if (text.includes(":")) return text.split(":")[0];
+  return text.includes("/") ? text.split("/")[0] : "retrieval";
+}
+
+function setInspectorText(id, value) {
+  const el = byId(id);
+  if (el) el.textContent = value;
+}
+
+function renderCandidateInspector(candidate) {
+  const title = byId("geo-inspector-title");
+  const inspector = byId("geo-inspector");
+  if (!title || !inspector) return;
+  if (!candidate) {
+    inspector.classList.add("muted");
+    title.textContent = "Select a candidate point or row to inspect it.";
+    setInspectorText("geo-inspector-rank", "-");
+    setInspectorText("geo-inspector-coords", "-");
+    setInspectorText("geo-inspector-posterior", "-");
+    setInspectorText("geo-inspector-retrieval", "-");
+    setInspectorText("geo-inspector-interval", "-");
+    setInspectorText("geo-inspector-source", "-");
+    return;
+  }
+  inspector.classList.remove("muted");
+  title.textContent = `Candidate #${candidate.rank} locked for verification`;
+  setInspectorText("geo-inspector-rank", `#${candidate.rank}`);
+  setInspectorText(
+    "geo-inspector-coords",
+    `${Number(candidate.latitude).toFixed(5)}, ${Number(candidate.longitude).toFixed(5)}`
+  );
+  setInspectorText("geo-inspector-posterior", formatPercent(candidate.posterior));
+  setInspectorText("geo-inspector-retrieval", formatPercent(candidate.retrieval));
+  setInspectorText("geo-inspector-interval", formatMeters(liveFusionSummary?.ringRadius));
+  setInspectorText("geo-inspector-source", candidate.source || "retrieval");
+}
+
 const emptyFeatureCollection = { type: "FeatureCollection", features: [] };
 const initialCenter = [0, 20];
 const initialZoom = 1.6;
@@ -208,6 +260,38 @@ let livePopup = null;
 let liveCandidatePoints = [];
 let selectedRank = null;
 let hoverPopup = null;
+let liveFusionSummary = null;
+let radarAnimationId = null;
+
+function startRadarPulse() {
+  if (radarAnimationId || window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) return;
+  const tick = () => {
+    radarAnimationId = requestAnimationFrame(tick);
+    if (!liveMap || !liveMap.getLayer("candidate-glow-layer")) return;
+    const phase = (performance.now() % 1800) / 1800;
+    const pulse = 0.5 + 0.5 * Math.sin(phase * Math.PI * 2);
+    liveMap.setPaintProperty("candidate-glow-layer", "circle-radius", [
+      "+",
+      ["interpolate", ["linear"], ["get", "weightNorm"], 0, 9, 1, 20],
+      5 + pulse * 10,
+    ]);
+    liveMap.setPaintProperty("candidate-glow-layer", "circle-opacity", [
+      "case",
+      ["==", ["get", "rank"], selectedRank ?? -1],
+      0.28 + pulse * 0.28,
+      ["interpolate", ["linear"], ["get", "weightNorm"], 0, 0.06 + pulse * 0.04, 1, 0.18 + pulse * 0.1],
+    ]);
+    if (liveMap.getLayer("selected-ring-layer")) {
+      liveMap.setPaintProperty("selected-ring-layer", "line-opacity", 0.54 + pulse * 0.42);
+      liveMap.setPaintProperty("selected-ring-layer", "line-width", 1.6 + pulse * 1.3);
+    }
+    if (liveMap.getLayer("mean-halo-layer")) {
+      liveMap.setPaintProperty("mean-halo-layer", "circle-radius", 11 + pulse * 7);
+      liveMap.setPaintProperty("mean-halo-layer", "circle-opacity", 0.22 + pulse * 0.2);
+    }
+  };
+  radarAnimationId = requestAnimationFrame(tick);
+}
 
 function ensureLiveMap() {
   if (liveMap) return liveMapReady;
@@ -261,6 +345,14 @@ function ensureLiveMap() {
         type: "geojson",
         data: emptyFeatureCollection,
       });
+      liveMap.addSource("selected-ring", {
+        type: "geojson",
+        data: emptyFeatureCollection,
+      });
+      liveMap.addSource("selected-spoke", {
+        type: "geojson",
+        data: emptyFeatureCollection,
+      });
 
       liveMap.addLayer({
         id: "ring-layer",
@@ -283,6 +375,40 @@ function ensureLiveMap() {
           "line-width": ["interpolate", ["linear"], ["get", "weightNorm"], 0, 0.8, 1, 2.2],
           "line-opacity": ["interpolate", ["linear"], ["get", "weightNorm"], 0, 0.18, 1, 0.52],
           "line-blur": 0.45,
+        },
+      });
+
+      liveMap.addLayer({
+        id: "selected-spoke-layer",
+        type: "line",
+        source: "selected-spoke",
+        paint: {
+          "line-color": "rgba(255, 150, 150, 0.78)",
+          "line-width": 1.4,
+          "line-dasharray": [1, 1.8],
+          "line-opacity": 0.82,
+        },
+      });
+
+      liveMap.addLayer({
+        id: "selected-ring-fill",
+        type: "fill",
+        source: "selected-ring",
+        paint: {
+          "fill-color": "rgba(255, 130, 130, 0.08)",
+          "fill-opacity": 0.42,
+        },
+      });
+
+      liveMap.addLayer({
+        id: "selected-ring-layer",
+        type: "line",
+        source: "selected-ring",
+        paint: {
+          "line-color": "rgba(255, 150, 150, 0.92)",
+          "line-width": 2.2,
+          "line-dasharray": [1.2, 1.5],
+          "line-opacity": 0.9,
         },
       });
 
@@ -379,6 +505,13 @@ function ensureLiveMap() {
           .setLngLat(coords)
           .setText(lines.join("\n"))
           .addTo(liveMap);
+        liveMap.flyTo({
+          center: coords,
+          zoom: Math.max(liveMap.getZoom(), 4.8),
+          bearing: 25,
+          pitch: 42,
+          duration: 850,
+        });
       });
 
       liveMap.on("click", "mean-layer", (e) => {
@@ -391,6 +524,7 @@ function ensureLiveMap() {
           .addTo(liveMap);
       });
 
+      startRadarPulse();
       resolve();
     });
   });
@@ -428,8 +562,12 @@ function renderLiveMap(result) {
       liveMap.getSource("candidate-links").setData(emptyFeatureCollection);
       liveMap.getSource("mean").setData(emptyFeatureCollection);
       liveMap.getSource("ring").setData(emptyFeatureCollection);
+      liveMap.getSource("selected-ring").setData(emptyFeatureCollection);
+      liveMap.getSource("selected-spoke").setData(emptyFeatureCollection);
     }
     selectedRank = null;
+    liveFusionSummary = null;
+    renderCandidateInspector(null);
     renderGeoRanking([]);
     return;
   }
@@ -442,8 +580,12 @@ function renderLiveMap(result) {
       liveMap.getSource("candidate-links").setData(emptyFeatureCollection);
       liveMap.getSource("mean").setData(emptyFeatureCollection);
       liveMap.getSource("ring").setData(emptyFeatureCollection);
+      liveMap.getSource("selected-ring").setData(emptyFeatureCollection);
+      liveMap.getSource("selected-spoke").setData(emptyFeatureCollection);
     }
     selectedRank = null;
+    liveFusionSummary = null;
+    renderCandidateInspector(null);
     renderGeoRanking([]);
     return;
   }
@@ -471,6 +613,9 @@ function renderLiveMap(result) {
           color: weightColor(weightNorm),
           posterior: item.posterior_weight ?? null,
           retrieval: item.candidate?.retrieval_score ?? item.retrieval_score ?? null,
+          matchId: item.candidate?.match_id ?? "",
+          imagePath: item.candidate?.image_path ?? "",
+          source: sourceFromMatchId(item.candidate?.match_id),
         },
       };
     })
@@ -485,6 +630,11 @@ function renderLiveMap(result) {
         latitude: cand.latitude,
         longitude: cand.longitude,
         weight: weightFrom(item),
+        posterior: item.posterior_weight ?? null,
+        retrieval: item.candidate?.retrieval_score ?? item.retrieval_score ?? null,
+        matchId: item.candidate?.match_id ?? "",
+        imagePath: item.candidate?.image_path ?? "",
+        source: sourceFromMatchId(item.candidate?.match_id),
       };
     })
     .filter(Boolean);
@@ -496,6 +646,7 @@ function renderLiveMap(result) {
   const ringRadius =
     fusion?.uncertainty_radius_m ??
     (fusion?.ellipse?.major_axis_m ? fusion.ellipse.major_axis_m * 0.6 : null);
+  liveFusionSummary = { meanLat, meanLon, ringRadius };
 
   const meanFeature =
     meanLat !== undefined && meanLon !== undefined
@@ -575,6 +726,9 @@ function renderLiveMap(result) {
       });
     }
 
+    if (!liveCandidatePoints.some((item) => item.rank === selectedRank) && liveCandidatePoints.length) {
+      selectedRank = liveCandidatePoints[0].rank;
+    }
     applyCandidateHighlight();
   });
 }
@@ -887,10 +1041,12 @@ function renderGeoRanking(items) {
       setSelectedRank(item.rank);
       ensureLiveMap();
       if (liveMap) {
-        liveMap.easeTo({
+        liveMap.flyTo({
           center: [item.longitude, item.latitude],
-          zoom: 3.2,
-          duration: 650,
+          zoom: Math.max(liveMap.getZoom(), 4.8),
+          bearing: 25,
+          pitch: 42,
+          duration: 850,
         });
       }
     });
@@ -948,6 +1104,7 @@ function applyCandidateHighlight() {
       ["interpolate", ["linear"], ["get", "weightNorm"], 0, 0.18, 1, 0.52],
     ]);
   }
+  updateSelectedCandidateGeometry();
 }
 
 function setSelectedRank(rank) {
@@ -956,6 +1113,54 @@ function setSelectedRank(rank) {
     el.classList.toggle("active", Number(el.dataset.rank) === rank);
   });
   applyCandidateHighlight();
+  const selected = liveCandidatePoints.find((item) => item.rank === rank) || null;
+  renderCandidateInspector(selected);
+}
+
+function updateSelectedCandidateGeometry() {
+  if (!liveMap || !liveMap.getSource("selected-ring") || !liveMap.getSource("selected-spoke")) return;
+  const selected = liveCandidatePoints.find((item) => item.rank === selectedRank);
+  if (!selected || !liveFusionSummary) {
+    liveMap.getSource("selected-ring").setData(emptyFeatureCollection);
+    liveMap.getSource("selected-spoke").setData(emptyFeatureCollection);
+    renderCandidateInspector(null);
+    return;
+  }
+  const radius = liveFusionSummary.ringRadius;
+  const ringFeature =
+    radius && radius > 0
+      ? {
+          type: "Feature",
+          geometry: {
+            type: "Polygon",
+            coordinates: [circlePolygon(selected.latitude, selected.longitude, radius)],
+          },
+          properties: { rank: selected.rank },
+        }
+      : null;
+  const spokeFeature =
+    liveFusionSummary.meanLat !== undefined && liveFusionSummary.meanLon !== undefined
+      ? {
+          type: "Feature",
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [liveFusionSummary.meanLon, liveFusionSummary.meanLat],
+              [selected.longitude, selected.latitude],
+            ],
+          },
+          properties: { rank: selected.rank },
+        }
+      : null;
+  liveMap.getSource("selected-ring").setData({
+    type: "FeatureCollection",
+    features: ringFeature ? [ringFeature] : [],
+  });
+  liveMap.getSource("selected-spoke").setData({
+    type: "FeatureCollection",
+    features: spokeFeature ? [spokeFeature] : [],
+  });
+  renderCandidateInspector(selected);
 }
 
 function init() {
@@ -967,6 +1172,7 @@ function init() {
   setMetricsBaseline();
   setSummaryState("idle", "Upload an image and click Analyze Image to start.");
   renderGeoRanking([]);
+  renderCandidateInspector(null);
 
   ensureLiveMap();
   if (liveMap) {

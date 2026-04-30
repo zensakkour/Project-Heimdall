@@ -9,6 +9,7 @@ from src.core.logic.config import DetectorConfig
 
 from .base import Detector
 from .classic import ClassicDetector
+from .rfdetr_detector import RFDetrDetector
 from .sidecar_detector import SidecarDetector
 from .ultralytics_obb import UltralyticsObbDetector
 
@@ -16,6 +17,17 @@ from .ultralytics_obb import UltralyticsObbDetector
 def create_detector(cfg: Optional[DetectorConfig]) -> Optional[Detector]:
     if cfg is None:
         return None
+    backend = str(getattr(cfg, "backend", "ultralytics_obb") or "ultralytics_obb").strip().lower()
+    if backend in {"rfdetr", "rf_detr", "rf-detr"}:
+        return RFDetrDetector(
+            model_size=cfg.rfdetr_model_size,
+            min_confidence=cfg.min_confidence,
+            iou=cfg.nms_iou,
+            nms_mode="aabb" if cfg.nms_mode == "obb" else cfg.nms_mode,
+            max_detections=cfg.max_detections,
+            min_area_px=cfg.min_area_px,
+            class_agnostic_nms=cfg.class_agnostic_nms,
+        )
     if cfg.weights_path:
         return UltralyticsObbDetector(
             cfg.weights_path,
@@ -41,5 +53,4 @@ def create_detector(cfg: Optional[DetectorConfig]) -> Optional[Detector]:
     if cfg.use_classic:
         return ClassicDetector()
     return None
-
 
