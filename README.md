@@ -749,7 +749,7 @@ Useful fusion knobs:
 - Realistic Paris street-data bootstrap from Mapillary:
 ```powershell
 $env:MAPILLARY_ACCESS_TOKEN="MLY|..."
-.\.venv\Scripts\python -m src.tools.download_mapillary_paris --bbox 48.8156,2.2241,48.9022,2.4699 --out data/paris_realistic_v1/street --grid-step-m 80 --street-per-cell 3 --max-images 20000 --seed 42
+.\.venv\Scripts\python -m src.tools.download_mapillary_paris --bbox 48.8156,2.2241,48.9022,2.4699 --out data/paris_realistic_v1/street_mapillary --grid-step-m 80 --street-per-cell 3 --max-images 20000 --seed 42
 ```
 - Realistic Paris street-data bootstrap from Panoramax federated catalog:
 ```powershell
@@ -757,15 +757,15 @@ $env:MAPILLARY_ACCESS_TOKEN="MLY|..."
 ```
 - Merge Mapillary and Panoramax street datasets into one combined metadata root:
 ```powershell
-.\.venv\Scripts\python -m src.tools.merge_realistic_street_datasets --metadata data/paris_realistic_v1/street/metadata.csv data/paris_realistic_v1/street_panoramax/metadata.csv --out data/paris_realistic_v1/street_combined
+.\.venv\Scripts\python -m src.tools.merge_realistic_street_datasets --metadata data/paris_realistic_v1/street_mapillary/metadata.csv data/paris_realistic_v1/street_panoramax/metadata.csv --out data/paris_realistic_v1/street_combined
 ```
 - Dry-run count check for the same dataset bootstrap:
 ```powershell
-.\.venv\Scripts\python -m src.tools.download_mapillary_paris --bbox 48.8156,2.2241,48.9022,2.4699 --out data/paris_realistic_v1/street --grid-step-m 80 --street-per-cell 3 --max-images 20000 --seed 42 --dry-run
+.\.venv\Scripts\python -m src.tools.download_mapillary_paris --bbox 48.8156,2.2241,48.9022,2.4699 --out data/paris_realistic_v1/street_mapillary --grid-step-m 80 --street-per-cell 3 --max-images 20000 --seed 42 --dry-run
 ```
 - The downloader writes:
-  - `data/paris_realistic_v1/street/images/`
-  - `data/paris_realistic_v1/street/metadata.csv`
+  - `data/paris_realistic_v1/street_mapillary/images/`
+  - `data/paris_realistic_v1/street_mapillary/metadata.csv`
 - Current metadata contract:
   - `image_id,path,lat,lon,heading_deg,captured_at,camera_type,width,height,quality_score,sequence,source,license_info`
 - Current behavior:
@@ -774,20 +774,25 @@ $env:MAPILLARY_ACCESS_TOKEN="MLY|..."
   - uses `thumb_2048_url` with `thumb_1024_url` fallback
   - dedupes by `image_id`
   - limits near-duplicates with per-cell sampling plus per-sequence caps
+  - resumes cleanly from an existing `metadata.csv` checkpoint instead of restarting from zero
 - Panoramax-specific behavior:
   - uses the federated Panoramax catalog by default: `https://api.panoramax.xyz/api`
   - keeps direct picture assets plus per-picture heading from `view:azimuth`
   - preserves source instance information such as `panoramax:ign` or `panoramax:osmfr`
 - Best-completeness recommendation for Paris:
   - use both Mapillary and Panoramax street ingestion, then merge them into `street_combined`
+- Current checkpoint on disk:
+  - `20,000` Mapillary street rows at `data/paris_realistic_v1/street_mapillary/metadata.csv`
+  - `20,000` Panoramax street rows at `data/paris_realistic_v1/street_panoramax/metadata.csv`
+  - `40,000` merged street rows at `data/paris_realistic_v1/street_combined/metadata.csv`
 - Do not use Google Street View, Google Maps scraping, or Google Earth tiles in this dataset path.
 - OpenAerialMap pairing for the same realistic Paris dataset:
 ```powershell
-.\.venv\Scripts\python -m src.tools.build_aerial_pairs --street-metadata data/paris_realistic_v1/street/metadata.csv --out data/paris_realistic_v1 --provider openaerialmap --crop-size-m 256 --crop-px 512 --allow-missing-aerial false --seed 42
+.\.venv\Scripts\python -m src.tools.build_aerial_pairs --street-metadata data/paris_realistic_v1/street_mapillary/metadata.csv --out data/paris_realistic_v1 --provider openaerialmap --crop-size-m 256 --crop-px 512 --allow-missing-aerial false --seed 42
 ```
 - IGN orthophoto pairing for denser Paris coverage:
 ```powershell
-.\.venv\Scripts\python -m src.tools.build_aerial_pairs --street-metadata data/paris_realistic_v1/street_combined/metadata.csv --out data/paris_realistic_v1_ign --provider ign_geopf --crop-size-m 256 --crop-px 512 --allow-missing-aerial false --seed 42
+.\.venv\Scripts\python -m src.tools.build_aerial_pairs --street-metadata data/paris_realistic_v1/street_panoramax/metadata.csv --out data/paris_realistic_v1 --provider ign_geopf --crop-size-m 256 --crop-px 512 --allow-missing-aerial false --seed 42
 ```
 - The aerial-pair builder writes:
   - `data/paris_realistic_v1/aerial/images/`
@@ -802,20 +807,65 @@ $env:MAPILLARY_ACCESS_TOKEN="MLY|..."
   - prefers the highest-resolution covering image
   - uses the OAM TMS URL from metadata to render a centered crop
   - marks `no_open_aerial_found` when no open aerial scene covers the point
-  - also supports `ign_geopf` using the official `ORTHOIMAGERY.ORTHOPHOTOS` WMTS tiles for complete French orthophoto coverage
+  - also supports `ign_geopf` using the official `ORTHOIMAGERY.ORTHOPHOTOS` service for complete French orthophoto coverage
+- Current complete paired checkpoints:
+  - `10,000` Panoramax -> IGN pairs at `data/paris_realistic_v1/pairs.csv`
+  - `40,000` combined street -> IGN pairs at `data/paris_realistic_v1_combined/pairs.csv`
 - Leakage-safe spatial split generation:
 ```powershell
-.\.venv\Scripts\python -m src.tools.split_realistic_dataset --pairs data/paris_realistic_v1/pairs.csv --out data/paris_realistic_v1/splits --train-ratio 0.70 --val-ratio 0.15 --test-ratio 0.15 --cell-size-m 300 --seed 42
+.\.venv\Scripts\python -m src.tools.split_realistic_dataset --pairs data/paris_realistic_v1/pairs.csv --out data/paris_realistic_v1/splits_full --train-ratio 0.70 --val-ratio 0.15 --test-ratio 0.15 --cell-size-m 300 --seed 42
+```
+- Stricter buffered split generation for benchmark work:
+```powershell
+.\.venv\Scripts\python -m src.tools.split_realistic_dataset --pairs data/paris_realistic_v1/pairs.csv --out data/paris_realistic_v1/splits_strict --train-ratio 0.70 --val-ratio 0.15 --test-ratio 0.15 --cell-size-m 300 --buffer-cells 2 --seed 42
 ```
 - Split sanity check:
 ```powershell
-.\.venv\Scripts\python -m src.tools.split_realistic_dataset --sanity-check-dir data/paris_realistic_v1/splits
+.\.venv\Scripts\python -m src.tools.split_realistic_dataset --sanity-check-dir data/paris_realistic_v1/splits_full
 ```
 - Split outputs:
-  - `data/paris_realistic_v1/splits/train_pairs.csv`
-  - `data/paris_realistic_v1/splits/val_pairs.csv`
-  - `data/paris_realistic_v1/splits/test_pairs.csv`
-  - `data/paris_realistic_v1/splits/split_summary.json`
+  - `data/paris_realistic_v1/splits_full/train_pairs.csv`
+  - `data/paris_realistic_v1/splits_full/val_pairs.csv`
+  - `data/paris_realistic_v1/splits_full/test_pairs.csv`
+  - `data/paris_realistic_v1/splits_full/split_summary.json`
+- Current split caveat:
+  - the current `min_cross_split_distance_m` is `3.77`, so this split is usable for pipeline bring-up but not yet strict enough to support a final benchmark claim toward `~3 km` mean error
+- Current stricter benchmark checkpoint:
+  - `data/paris_realistic_v1/splits_strict/`
+  - retained pairs: `8405`
+  - excluded boundary-buffer pairs: `1595`
+  - minimum cross-split distance: `1213.11 m`
+  - additional holdout rows are written to `excluded_pairs.csv` instead of silently disappearing
+- Current full combined benchmark checkpoint:
+  - `data/paris_realistic_v1_combined/splits_strict/`
+  - retained pairs: `34821`
+  - excluded boundary-buffer pairs: `5179`
+  - minimum cross-split distance: `1201.23 m`
+- Full combined recovery + strict split:
+```powershell
+.\.venv\Scripts\python -m src.tools.recover_combined_aerial_dataset --existing-images-dir data/paris_realistic_v1/aerial/images --chunk-meta-dir data/paris_realistic_v1_combined_chunkmeta --chunk-out-dir data/paris_realistic_v1_combined_chunkpairs --final-out-dir data/paris_realistic_v1_combined --split-out-dir data/paris_realistic_v1_combined/splits_strict --provider ign_geopf --crop-size-m 256 --crop-px 512 --allow-missing-aerial false --seed 42 --max-workers 2 --train-ratio 0.70 --val-ratio 0.15 --test-ratio 0.15 --cell-size-m 300 --buffer-cells 2 --sort-axis auto
+```
+- Full combined aerial index:
+```powershell
+.\.venv\Scripts\python -m src.tools.build_realistic_aerial_index --root data/paris_realistic_v1_combined --metadata aerial/metadata.csv --images-dir aerial/images --output indices/aerial_clip_index.npz --model-id openai/clip-vit-large-patch14
+```
+- Full combined strict-probe cross-view evaluation:
+```powershell
+.\.venv\Scripts\python -m src.tools.eval_realistic_crossview --test-pairs data/paris_realistic_v1_combined/splits_strict/test_pairs_probe240.csv --aerial-metadata data/paris_realistic_v1_combined/aerial/metadata.csv --street-images-dir data/paris_realistic_v1/street_combined --aerial-index data/paris_realistic_v1_combined/indices/aerial_clip_index.npz --embedding-model openai/clip-vit-large-patch14 --output runs/eval_realistic_crossview_combined_strict_probe240_baseline_full40k.json --top-k 50
+```
+- Current combined strict-probe baselines:
+  - sampled `10k` aerial index:
+    - `mean_km = 10.92`
+    - `within_2km_pct = 5.00`
+    - `within_5km_pct = 10.83`
+  - full `40k` aerial index:
+    - `mean_km = 10.97`
+    - `within_2km_pct = 5.83`
+    - `within_5km_pct = 12.50`
+- Realistic street-to-aerial cross-view evaluation:
+```powershell
+.\.venv\Scripts\python -m src.tools.eval_realistic_crossview --test-pairs data/paris_realistic_v1/splits_strict/test_pairs.csv --aerial-metadata data/paris_realistic_v1/aerial/metadata.csv --street-images-dir data/paris_realistic_v1/street_panoramax --aerial-index data/paris_realistic_v1/indices/aerial_clip_index.npz --embedding-model openai/clip-vit-large-patch14 --output runs/eval_realistic_crossview_strict.json --top-k 50
+```
 - Open geo bootstrap (Wikimedia API, broader coverage):
 ```powershell
 .\.venv\Scripts\python -m src.tools.download_open_geo --mode api --limit 300 --per-anchor 25 --output data/open_geo

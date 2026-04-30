@@ -395,6 +395,13 @@ def _write_metadata_csv(path: Path, rows: Iterable[dict]) -> None:
             writer.writerow(row)
 
 
+def _load_existing_metadata_rows(path: Path) -> List[dict]:
+    if not path.exists():
+        return []
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        return [dict(row) for row in csv.DictReader(handle)]
+
+
 def download_mapillary_dataset(
     *,
     bbox: Tuple[float, float, float, float],
@@ -424,10 +431,25 @@ def download_mapillary_dataset(
 
     selected_rows: List[dict] = []
     seen_image_ids: set[str] = set()
+    metadata_image_ids: set[str] = set()
     sequence_counts: Dict[str, int] = {}
     images_dir = out_dir / "images"
     failed_cells = 0
     failed_downloads = 0
+    existing_rows = _load_existing_metadata_rows(out_dir / "metadata.csv")
+    existing_file_ids: set[str] = set()
+    if images_dir.exists():
+        existing_file_ids = {path.stem for path in images_dir.glob("*") if path.is_file()}
+    for row in existing_rows:
+        image_id = str(row.get("image_id") or "").strip()
+        if not image_id:
+            continue
+        selected_rows.append(row)
+        seen_image_ids.add(image_id)
+        metadata_image_ids.add(image_id)
+        sequence = str(row.get("sequence") or "").strip()
+        if sequence:
+            sequence_counts[sequence] = sequence_counts.get(sequence, 0) + 1
 
     for cell in cells:
         if len(selected_rows) >= int(max_images):
@@ -453,6 +475,8 @@ def download_mapillary_dataset(
         for image in picked:
             if len(selected_rows) >= int(max_images):
                 break
+            if image.image_id in metadata_image_ids:
+                continue
             rel_path = f"images/{image.image_id}{_image_extension_from_url(image.thumb_url)}"
             if not dry_run:
                 images_dir.mkdir(parents=True, exist_ok=True)
@@ -481,6 +505,7 @@ def download_mapillary_dataset(
                 }
             )
             seen_image_ids.add(image.image_id)
+            metadata_image_ids.add(image.image_id)
             if image.sequence:
                 sequence_counts[image.sequence] = sequence_counts.get(image.sequence, 0) + 1
 
