@@ -737,6 +737,7 @@ def _with_forced_sidecar(cfg: HeimdallConfig) -> HeimdallConfig:
         cfg,
         detector=dataclass_replace(
             cfg.detector,
+            backend="sidecar",
             use_sidecar=True,
             weights_path=None,
         ),
