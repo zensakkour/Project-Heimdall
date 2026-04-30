@@ -2339,3 +2339,12 @@ Do not delete or edit past entries. Append new work at the end.
 - Validation command: Ran the frontend and verified that rfdetr successfully initialized and was used as the backend without timing out.
 - Artifacts: None.
 - Decision: Keep the fixes. No changes made to RESEARCH_PAPER.md because this was purely an engineering fix for the local analysis GUI server and did not affect the core modeling algorithms or research claims.
+
+## 2026-04-30 Tier 1: Default Config Upgrade
+- Hypothesis: Upgrading paris.json from single-index unprojected retrieval to the validated dual-index projected+DBA RRF config should match the paris_balanced_dual_rrf benchmark.
+- Change: Updated paris.json to use projected index, DBA companion index, retrieval_projection_path, RRF source fusion, and balanced index weights [1.0, 0.5].
+- Files touched: src/config/paris.json
+- Validation command: .venv\Scripts\python -m src.tools.run_geo_eval --images-dir data/spacenet_paris_test/chips --metadata data/spacenet_paris_test/metadata.csv --config src/config/paris.json --retrieval-only --limit 180 --seed 42 --output runs/geo_eval_tier1_upgraded_paris_180.json
+- Metrics (before -> after): mean_km 15.53->14.60, median_km 9.77->4.21, within_1km 10.56%->10.56%, within_2km 19.44%->31.11%, within_5km 37.22%->52.78%, within_10km 50.56%->65.56%
+- Artifacts: runs/geo_eval_tier1_upgraded_paris_180.json
+- Decision: Keep. Massive improvement in median (+57% reduction) and within_2km (+60% relative gain) with zero code changes.
