@@ -11,11 +11,12 @@ function syncProfileSelect() {
   const hasStoredProfile = Array.from(strategySelect.options).some(
     (opt) => opt.value === storedProfile
   );
-  const initialProfile = hasStoredProfile
+  const initialProfile = hasStoredProfile && storedProfile !== "legacy"
     ? storedProfile
-    : strategySelect.value || "paris";
+    : "paris";
   activeProfile = initialProfile;
   strategySelect.value = initialProfile;
+  localStorage.setItem(profileStorageKey, initialProfile);
 
   strategySelect.addEventListener("change", () => {
     activeProfile = strategySelect.value || "paris";

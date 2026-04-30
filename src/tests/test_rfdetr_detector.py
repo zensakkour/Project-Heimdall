@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import types
+import builtins
 
 import numpy as np
 
@@ -63,3 +64,27 @@ def test_factory_uses_rfdetr_backend(monkeypatch) -> None:
     )
 
     assert isinstance(detector, RFDetrDetector)
+
+
+def test_factory_falls_back_when_rfdetr_missing(monkeypatch) -> None:
+    monkeypatch.delitem(sys.modules, "rfdetr", raising=False)
+    real_import = builtins.__import__
+
+    def _fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "rfdetr":
+            raise ImportError("mocked missing rfdetr")
+        return real_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", _fake_import)
+
+    detector = create_detector(
+        DetectorConfig(
+            backend="rfdetr",
+            min_confidence=0.5,
+            use_sidecar=True,
+            use_classic=True,
+        )
+    )
+
+    assert detector is not None
+    assert detector.__class__.__name__ == "SidecarDetector"

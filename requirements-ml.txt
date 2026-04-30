@@ -2,6 +2,7 @@
 # Install torch/torchvision/torchaudio separately to match your CPU/CUDA target.
 opencv-python
 ultralytics
+rfdetr
 geoclip
 huggingface_hub
 safetensors

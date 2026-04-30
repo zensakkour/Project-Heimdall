@@ -716,9 +716,6 @@ def _load_config_from_env(profile: Optional[str] = None) -> Optional[HeimdallCon
             "paris-focused": "paris.json",
             "paris-test": "paris_test.json",
             "paris_test": "paris_test.json",
-            "legacy": "open_geo.json",
-            "open_geo": "open_geo.json",
-            "open-geo": "open_geo.json",
         }
         config_name = profile_map.get(key)
         if config_name:
@@ -755,9 +752,6 @@ def _config_path_for_profile(profile: Optional[str]) -> Path:
             "paris-focused": "paris.json",
             "paris-test": "paris_test.json",
             "paris_test": "paris_test.json",
-            "legacy": "open_geo.json",
-            "open_geo": "open_geo.json",
-            "open-geo": "open_geo.json",
         }
         config_name = profile_map.get(key)
         if config_name:
@@ -773,14 +767,12 @@ def _infer_profile_from_paths(images_dir: str, metadata: str) -> Optional[str]:
         return "paris_test"
     if "spacenet_paris" in joined:
         return "paris"
-    if "open_geo" in joined:
-        return "legacy"
     return None
 
 
 def _is_legacy_profile(profile: Optional[str]) -> bool:
     key = str(profile or "").strip().lower()
-    return key in {"legacy", "open_geo", "open-geo"}
+    return key == "legacy"
 
 
 def _resolve_eval_profile(
@@ -794,7 +786,7 @@ def _resolve_eval_profile(
     if inferred in {"paris", "paris_test"} and _is_legacy_profile(requested):
         warning = (
             f"profile auto-corrected to '{inferred}' because dataset paths are Paris SpaceNet "
-            "(requested legacy/open_geo)."
+            "(requested retired legacy profile)."
         )
         return inferred, warning
     if requested is None and inferred is not None:
@@ -815,6 +807,7 @@ def _check_python_deps() -> dict:
     checks = {}
     modules = [
         ("torch", True),
+        ("rfdetr", False),
         ("ultralytics", True),
         ("fastapi", True),
         ("cv2", False),
@@ -848,7 +841,6 @@ def _check_config_paths() -> dict:
         "defaults": config_dir / "defaults.json",
         "paris": config_dir / "paris.json",
         "paris_test": config_dir / "paris_test.json",
-        "open_geo": config_dir / "open_geo.json",
     }
     out = {}
     for key, path in files.items():

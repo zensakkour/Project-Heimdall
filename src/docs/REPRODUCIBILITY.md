@@ -7,10 +7,10 @@ This document captures exact evaluation steps for Project Heimdall as of 2026-01
 - Install dependencies: `pip install -r requirements.txt`
 
 ## Full evaluation run (stub pipeline)
-1. Prepare a list of images (sample images live in `data/samples`).
+1. Prepare a list of images (manual Paris upload samples live in `data/analysis_tests/paris_street/images`).
 2. Run the full pipeline:
    ```powershell
-   python -m src.tools.run_all data/samples/real_port_miami.jpg
+   python -m src.tools.run_all data/analysis_tests/paris_street/images/mapillary__1021055432583866.jpg
    ```
 3. Compute metrics (requires ground truth to be meaningful):
    ```powershell

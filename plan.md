@@ -13,8 +13,10 @@ The user goal is twofold:
 
 - Preserve the existing MapLibre globe and fusion output payload.
 - Add interaction and display layers around existing candidate/fusion data rather than inventing a separate map pipeline.
-- Add RF-DETR behind `detector.backend = "rfdetr"` so the default configs still work without the `rfdetr` package installed.
-- Keep RF-DETR as optional until it is benchmarked against the current detector path on the same UI/server workflow.
+- Make RF-DETR the default detector backend for active Paris configs.
+- Keep a sidecar/classic fallback so the app still opens if `rfdetr` is not installed yet.
+- Keep the runtime app Paris-focused; remove Open Geo/Wikimedia from active profile selection until a future expansion branch.
+- Keep local `data/` organized around current Paris work: final realistic street/aerial corpora, Paris indices, model cache, and a small manual analysis-test folder.
 
 ## RF-DETR Notes
 
@@ -25,7 +27,7 @@ The user goal is twofold:
 
 ## Implementation Plan
 
-1. Add optional RF-DETR detector adapter and config parsing.
+1. Add RF-DETR detector adapter and config parsing.
 2. Add tests with a mocked `rfdetr` module so CI does not require downloading model weights.
 3. Upgrade the `/analysis/` map:
    - pulsing candidate points
@@ -34,11 +36,14 @@ The user goal is twofold:
    - selected-to-mean support line
    - compact candidate inspector with rank, coordinates, posterior, retrieval score, interval, and source
 4. Update README and `PROGRESS.md`.
-5. Run focused detector tests plus frontend syntax checks.
-6. Push the branch separately.
+5. Remove non-Paris local data caches and stale Open Geo runtime profile.
+6. Create `data/analysis_tests/paris_street/` from real Paris street images for manual UI testing.
+7. Run focused detector tests plus frontend syntax checks.
+8. Push the branch separately.
 
 ## Decision Criteria
 
 - The UI change is acceptable if it preserves the existing analysis endpoint and improves verification without hiding raw evidence.
-- RF-DETR is acceptable as an optional backend if existing configs keep behaving the same and tests pass without RF-DETR installed.
-- RF-DETR should not replace the default detector until detector quality and geolocation impact are benchmarked.
+- RF-DETR is acceptable as the default detector backend if missing-package fallback keeps the app usable and tests pass without downloading model weights.
+- Open Geo should not appear in `/analysis/` or `/analysis/lab/` while the product is Paris-focused.
+- Local cleanup is acceptable only if it removes non-Paris or duplicated intermediate artifacts while preserving final Paris realistic datasets and Paris benchmark assets.

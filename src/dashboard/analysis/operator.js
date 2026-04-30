@@ -29,9 +29,11 @@ function syncProfileSelect() {
   const profileSelect = byId("profile-select");
   if (!profileSelect) return;
   const stored = localStorage.getItem(profileStorageKey);
-  const initial = stored || profileSelect.value || "paris";
+  const validValues = new Set(Array.from(profileSelect.options).map((option) => option.value));
+  const initial = stored && stored !== "legacy" && validValues.has(stored) ? stored : "paris";
   activeProfile = initial;
   profileSelect.value = initial;
+  localStorage.setItem(profileStorageKey, initial);
   profileSelect.addEventListener("change", () => {
     activeProfile = profileSelect.value || "paris";
     localStorage.setItem(profileStorageKey, activeProfile);

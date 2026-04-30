@@ -1,11 +1,11 @@
 {
   "profile_scope": "PARIS",
   "detector": {
-    "backend": "ultralytics_obb",
-    "weights_path": "yolo11x-obb.pt",
+    "backend": "rfdetr",
+    "weights_path": null,
     "min_confidence": 0.25,
     "nms_iou": 0.5,
-    "nms_mode": "obb",
+    "nms_mode": "aabb",
     "max_detections": 100,
     "min_area_px": 16.0,
     "class_agnostic_nms": false,

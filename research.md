@@ -11,6 +11,12 @@ Use this file when you need the exact sequence of major geolocation changes, mea
 
 ## Current Status
 
+Active scope:
+
+- Project Heimdall is currently Paris-focused.
+- Open Geo/Wikimedia runtime profiles and local Open Geo data caches are retired from the active app path until broad-scope geolocation is resumed on a dedicated branch.
+- Manual analysis uploads should use `data/analysis_tests/paris_street/images/` or the full `data/paris_realistic_v1/street_combined/images/` corpus.
+
 Best currently kept Paris realistic profiles on the canonical `n=180` split (`seed=42`):
 
 | Profile | Mean km | Median km | <=1 km | <=2 km | <=5 km | <=10 km | Status |
