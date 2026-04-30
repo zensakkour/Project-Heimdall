@@ -960,6 +960,38 @@ First combined cross-view training workflow used in this repo:
 - `Dual-space projection routing`: per-index query projection routing (`retrieval_index_projection_paths`) was added to safely combine projected and non-projected indices in one run.
 - First Paris realistic test (`n=180`, projected+raw CLIP with `rrf`) underperformed the current projection V2 baseline (`within_1km_pct`: `8.89` vs `11.67`; `within_2km_pct`: `18.89` vs `26.67`), so this remains experimental infrastructure.
 
+### 15.2 Apr 30, 2026 Geolocation Improvement Execution
+
+The April 30 execution converted the earlier strategy memo into a measured Tier 1 to Tier 4 rollout on the current Paris stack.
+
+- Tier 1 was the immediate serving win.
+  - `src/config/paris.json` was promoted from the older single-index setup to the validated dual-index projected+DBA `rrf` profile.
+  - On `runs/geo_eval_tier1_upgraded_paris_180.json`, the default serving path improved from `mean_km 15.53` to `14.60`, from `median_km 9.77` to `4.21`, and from `<=2km 19.44%` to `31.11%`, while `<=1km` stayed flat at `10.56%`.
+- Tier 2 scaled the realistic cross-view projection training to the full mined corpus.
+  - Training command used all `26204` triplets for `30` epochs and produced `runs/crossview_projection_paris_combined_v2_full.npz` plus `runs/crossview_projection_paris_combined_v2_full.report.json`.
+  - On the strict `probe240` benchmark, close-range results improved versus the first `6000`-triplet probe model:
+    - `<=1km 2.08% -> 4.17%`
+    - `<=2km 7.50% -> 12.08%`
+    - `<=5km 20.42% -> 22.92%`
+  - The tradeoff is that `mean_km 9.75 -> 9.83` and `median_km 10.24 -> 10.92` regressed slightly, so Tier 2 is a real but mixed gain.
+- Tier 3 added a DINOv2 aerial branch as a complementary retrieval source.
+  - Built `data/geo_index/spacenet_paris_chips_facebook_dinov2_base.npz`.
+  - Added `src/config/paris_dinov2_rrf_experimental.json`.
+  - Discovered and fixed a real infrastructure bug: `src/core/logic/config.py` had been deduplicating `retrieval_index_model_ids`, which broke positional routing whenever the same model id appeared more than once in a multi-index config.
+  - The fixed Tier 3 eval in `runs/geo_eval_paris_dinov2_rrf_experimental_180_fixed.json` showed:
+    - `mean_km 14.60 -> 14.42`
+    - `median_km 4.21 -> 4.47`
+    - `<=1km 10.56% -> 13.33%`
+    - `<=2km 31.11% -> 31.67%`
+    - `<=5km 52.78% -> 52.22%`
+  - Interpretation: DINOv2 contributes a real complementary signal, but the effect is still mixed, so it stays experimental instead of replacing `paris.json`.
+- Tier 4 prepared the full realistic cross-view encoder fine-tune path.
+  - Added `scripts/run_tier4_encoder_ft.ps1` to run the encoder fine-tune, realistic aerial-index rebuild, and strict `probe240` eval in one pipeline.
+  - Validated the end-to-end path with a one-triplet smoke run recorded in `runs/retrieval_encoder_finetune/smoke_one_triplet.report.json`.
+  - On this CPU-only workspace, repeated unattended background launches stalled after CLIP initialization, so no full Tier 4 benchmark is claimed yet.
+
+Operationally, the main outcome of this execution is that the default Paris serving path improved immediately through Tier 1, while the deeper architecture experiments are now better separated into three categories: measured close-range tradeoffs (Tier 2), mixed complementary fusion (Tier 3), and prepared-but-not-yet-benchmarked encoder adaptation (Tier 4).
+
 ## Appendix A: Major Algorithmic Knobs (Geo)
 - Retrieval:
   - `retrieval_projection_path`

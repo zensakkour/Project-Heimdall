@@ -120,6 +120,8 @@ def _load_query_embeddings(
             arr = np.asarray(vec, dtype=np.float32).reshape(-1)
             by_exact[norm_path] = arr
             by_name.setdefault(Path(norm_path).name, arr)
+        if (begin // max(1, int(batch_size))) % 10 == 0:
+            print(f"Embedded {begin + len(batch_keys)}/{len(unique)} query images...")
     return by_exact, by_name
 
 
