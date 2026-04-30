@@ -1,7 +1,7 @@
 ﻿# Project Heimdall: Full Research Paper Draft
 
-Version: v1.0  
-Date: April 21, 2026
+Version: v1.1  
+Date: April 29, 2026
 
 Companion external landscape review: `src/docs/MARKET_RESEARCH.md`.
 Chronological experiment ledger with the latest branch-era before/after metrics: `research.md`.
@@ -10,7 +10,7 @@ Chronological experiment ledger with the latest branch-era before/after metrics:
 Project Heimdall: Benchmark-Governed Geolocation from Imagery via Multi-Provider Retrieval, Robust Probabilistic Fusion, and Uncertainty-Aware Analysis
 
 ## Abstract
-This document presents a full research-style account of Project Heimdall, an engineering system for image geolocation developed from January to April 2026. Heimdall integrates oriented object detection, multi-provider geolocation candidate generation, retrieval index search, posterior fusion, and confidence-aware uncertainty outputs. Development progressed through multiple algorithmic iterations: retrieval diversification and locality reranking, query-time test-time augmentation (TTA), multi-index weighted retrieval, source-balanced candidate selection, score normalization across heterogeneous indices, source-aware fusion priors, cross-source agreement and spatial consensus likelihoods, adaptive outlier suppression, and temporal posterior filtering. We report controlled benchmark artifacts and ablations from repository runs. A central finding is that evaluation protocol quality dominates apparent model quality: leakage-prone evaluation can show near-perfect performance, while realistic split evaluation remains substantially more difficult. The resulting system emphasizes reproducibility, benchmark governance, and traceable accuracy claims.
+This document presents a full research-style account of Project Heimdall, an engineering system for image geolocation developed from January to April 2026. Heimdall integrates oriented object detection, multi-provider geolocation candidate generation, retrieval index search, posterior fusion, and confidence-aware uncertainty outputs. Development progressed through multiple algorithmic iterations: retrieval diversification and locality reranking, query-time test-time augmentation (TTA), multi-index weighted retrieval, source-balanced candidate selection, score normalization across heterogeneous indices, source-aware fusion priors, cross-source agreement and spatial consensus likelihoods, adaptive outlier suppression, and temporal posterior filtering. We report controlled benchmark artifacts and ablations from repository runs. A central finding is that evaluation protocol quality dominates apparent model quality: leakage-prone evaluation can show near-perfect performance, while realistic split evaluation remains substantially more difficult. A second major finding from the latest branch work is that algorithmic tuning plateaued near `14-15 km` mean error on the canonical realistic Paris benchmark; the project has therefore shifted into a data-building phase centered on realistic street-to-aerial supervision from Mapillary, Panoramax, and IGN orthophotos. The resulting system emphasizes reproducibility, benchmark governance, traceable accuracy claims, and explicit separation between validated stack improvements and still-open data bottlenecks.
 
 ## Keywords
 Image geolocation, retrieval, probabilistic fusion, uncertainty estimation, benchmark governance, aerial imagery, CLIP embeddings.
@@ -671,7 +671,7 @@ This system can increase location inference capability from images; misuse could
 - Research artifacts are engineering-oriented and not yet standardized into a public benchmark paper submission package.
 
 ## 14. Conclusion
-Project Heimdall demonstrates a practical path from prototype geolocation to a benchmark-governed retrieval+fusion platform. The most important technical lesson is methodological: robust evaluation protocol and governance are as important as algorithmic sophistication. The highest-impact near-term improvements remain data curation quality, leakage-safe benchmark design, and calibration-driven tuning.
+Project Heimdall demonstrates a practical path from prototype geolocation to a benchmark-governed retrieval+fusion platform. The most important technical lesson is methodological: robust evaluation protocol and governance are as important as algorithmic sophistication. The latest branch work sharpens a second lesson: after validating a large portion of the retrieval and fusion stack, the project hit a data bottleneck rather than a purely algorithmic bottleneck. The highest-impact near-term improvements therefore remain realistic street-to-aerial data curation, stricter leakage-safe benchmark design, and adaptation on that data before any serious claim toward a `~3 km` mean target.
 
 ## 15. Future Work
 1. Prioritize remote-sensing-native embedding backbones (RemoteCLIP/SatCLIP-style) and benchmark them against current CLIP/SigLIP retrieval on leakage-safe splits.
@@ -686,6 +686,67 @@ Project Heimdall demonstrates a practical path from prototype geolocation to a b
 - Cross-sensor/domain coverage: balanced `PAN`, `RGB-PanSharpen`, and `MUL-PanSharpen` examples with explicit pair/triplet links.
 - Leakage-safe split metadata: strict scene/tile-family separation between train/val/test to avoid inflated metrics.
 - Optional but high leverage: additional city datasets beyond Paris with the same metadata contract to reduce over-specialization.
+
+### 15.3 Realistic Paris Data Program: Current Status and Reproduction
+
+After the retrieval-side plateau, the project moved to a dedicated data branch to build realistic cross-view supervision instead of continuing to stack small reranking heuristics. The core claim from this phase is not that the `~3 km` target is solved. The claim is that the technology stack is now validated well enough to identify the next bottleneck honestly: realistic paired data.
+
+Current local dataset checkpoint:
+
+| Artifact | Count | Local path | Interpretation |
+|---|---:|---|---|
+| Mapillary street metadata | 20,000 | `data/paris_realistic_v1/street_mapillary/metadata.csv` | street-view crawl checkpoint |
+| Panoramax street metadata | 20,000 | `data/paris_realistic_v1/street_panoramax/metadata.csv` | street-view crawl checkpoint |
+| Combined street metadata | 40,000 | `data/paris_realistic_v1/street_combined/metadata.csv` | merged street corpus |
+| Panoramax -> IGN aerial pairs | 10,000 | `data/paris_realistic_v1/pairs.csv` | first complete cross-view training/eval checkpoint |
+| Full combined street -> IGN pairs | 40,000 | `data/paris_realistic_v1_combined/pairs.csv` | merged full realistic cross-view dataset |
+| Full combined aerial metadata | 40,000 | `data/paris_realistic_v1_combined/aerial/metadata.csv` | merged IGN aerial crop metadata |
+| Full combined strict split | 34,821 retained / 5,179 excluded | `data/paris_realistic_v1_combined/splits_strict/split_summary.json` | leakage-buffered benchmark split |
+
+Important qualification:
+
+- The older `data/paris_realistic_v1/` checkpoint remains useful as the first complete Panoramax -> IGN branch, but the benchmark-ready root is now `data/paris_realistic_v1_combined/`.
+- The strict combined split reports `min_cross_split_distance_m = 1201.23`, which is materially safer than the earlier permissive split.
+- Therefore the dataset phase is now complete enough to support realistic model-training work, even though the current frozen CLIP baseline is still far from a serious `~3 km` mean-accuracy claim.
+
+Replication path used in this repo:
+
+```powershell
+$env:MAPILLARY_ACCESS_TOKEN="..."
+.\.venv\Scripts\python -m src.tools.download_mapillary_paris --bbox 48.8156,2.2241,48.9022,2.4699 --out data/paris_realistic_v1/street_mapillary --grid-step-m 80 --street-per-cell 3 --max-images 20000 --seed 42
+.\.venv\Scripts\python -m src.tools.download_panoramax_paris --bbox 48.8156,2.2241,48.9022,2.4699 --out data/paris_realistic_v1/street_panoramax --grid-step-m 80 --street-per-cell 3 --max-images 20000 --seed 42
+.\.venv\Scripts\python -m src.tools.merge_realistic_street_datasets --metadata data/paris_realistic_v1/street_mapillary/metadata.csv data/paris_realistic_v1/street_panoramax/metadata.csv --out data/paris_realistic_v1/street_combined
+.\.venv\Scripts\python -m src.tools.build_aerial_pairs --street-metadata data/paris_realistic_v1/street_panoramax/metadata.csv --out data/paris_realistic_v1 --provider ign_geopf --crop-size-m 256 --crop-px 512 --allow-missing-aerial false --seed 42
+.\.venv\Scripts\python -m src.tools.recover_combined_aerial_dataset --existing-images-dir data/paris_realistic_v1/aerial/images --chunk-meta-dir data/paris_realistic_v1_combined_chunkmeta --chunk-out-dir data/paris_realistic_v1_combined_chunkpairs --final-out-dir data/paris_realistic_v1_combined --split-out-dir data/paris_realistic_v1_combined/splits_strict --provider ign_geopf --crop-size-m 256 --crop-px 512 --allow-missing-aerial false --seed 42 --max-workers 2 --train-ratio 0.70 --val-ratio 0.15 --test-ratio 0.15 --cell-size-m 300 --buffer-cells 2 --sort-axis auto
+.\.venv\Scripts\python -m src.tools.build_realistic_aerial_index --root data/paris_realistic_v1_combined --metadata aerial/metadata.csv --images-dir aerial/images --output indices/aerial_clip_index.npz --model-id openai/clip-vit-large-patch14
+.\.venv\Scripts\python -m src.tools.eval_realistic_crossview --test-pairs data/paris_realistic_v1_combined/splits_strict/test_pairs_probe240.csv --aerial-metadata data/paris_realistic_v1_combined/aerial/metadata.csv --street-images-dir data/paris_realistic_v1/street_combined --aerial-index data/paris_realistic_v1_combined/indices/aerial_clip_index.npz --embedding-model openai/clip-vit-large-patch14 --output runs/eval_realistic_crossview_combined_strict_probe240_baseline_full40k.json --top-k 50
+```
+
+Why this phase matters:
+
+1. It makes the research replicable by collaborators instead of relying on ad-hoc local imagery.
+2. It aligns training data with the real street-to-aerial task rather than the older aerial-only retrieval proxy.
+3. It makes it possible to test whether encoder adaptation, orientation-aware scoring, street-to-street retrieval, and fusion actually improve the task we care about.
+
+Research decision from the current checkpoint:
+
+- We should not claim that the current frozen CLIP baseline is already enough to deliver `~3 km` mean error.
+- We should now treat the data phase as complete enough to shift into model training on `data/paris_realistic_v1_combined/`.
+- The immediate next move is to mine harder triplets from the strict combined train split and compare projection/encoder training against the current merged-index baseline.
+
+Merged-dataset benchmark snapshots:
+
+| Benchmark | Query set | Reference set | Mean km | Median km | <=1 km | <=2 km | <=5 km | Notes |
+|---|---|---|---:|---:|---:|---:|---:|---|
+| Old strict realistic baseline | `120`-query probe on `data/paris_realistic_v1/splits_strict` | `10,000` Panoramax -> IGN pairs | 8.44 | 7.96 | 5.83% | 7.50% | 15.00% | Panoramax-only core dataset |
+| Combined strict probe, sampled aerial index | `240`-query probe on `data/paris_realistic_v1_combined/splits_strict` | sampled `10,000` combined aerial index | 10.92 | 11.05 | 2.08% | 5.00% | 10.83% | `runs/eval_realistic_crossview_combined_strict_probe240_baseline_sample10k.json` |
+| Combined strict probe, full aerial index | `240`-query probe on `data/paris_realistic_v1_combined/splits_strict` | full `40,000` combined aerial index | 10.97 | 11.75 | 2.92% | 5.83% | 12.50% | `runs/eval_realistic_crossview_combined_strict_probe240_baseline_full40k.json` |
+
+Interpretation:
+
+- The larger combined benchmark is harder than the older Panoramax-only core benchmark, so direct mean-km comparisons should be made cautiously.
+- Expanding from the sampled `10k` aerial index to the full `40k` index slightly improved close-range hit rates, but not mean or median error.
+- The system is therefore no longer blocked on missing realistic data; it is now blocked on the strength of the retrieval model trained on that data.
 
 ### 15.1 Possible Approaches Under Consideration (From `deep-research-report.md`)
 - `Domain-adapted embeddings` (highest priority): evaluate Remote Sensing foundation encoders as primary retrieval backbones.
