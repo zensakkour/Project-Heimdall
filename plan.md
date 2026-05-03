@@ -1,46 +1,31 @@
-# Branch Plan: `master`
+# Branch Plan: `feat/analysis-ui-v2`
 
 ## Purpose
 
-`master` is now the integration branch for the April 2026 Paris geolocation rollout. The immediate goal is no longer to merge feature branches. That work is already complete. The goal is to keep a correct view of shipped tier status and make the next experimental step explicit.
+Modernize and enhance the Analysis Dashboard UI. This branch focuses on improving the visualization of geolocation results, RF-DETR detections, and overall user experience for analyzing model performance.
 
-## Current Repository State
+## Objectives
 
-- Current branch: `master`
-- Working tree: clean
-- All local branches are already merged into `master`:
-  - `tech/analysis-ui-rfdetr`
-  - `tech/paris-realistic-data-v1`
-  - `tech/structure-analysis-cues-v2`
-- `git branch --no-merged master` is empty.
+1.  **UI Refresh**: Update `index.html` and `styles.css` for a more modern, responsive layout.
+2.  **Performance Visualization**: Improve how geolocation candidates and ground truth are displayed in the dashboard.
+3.  **Interactive Analysis**: Add features to filter and drill down into specific detection/geolocation cases.
+4.  **Backend Integration**: Ensure `dev_ui.py` and `dev_app.py` support any new frontend requirements.
 
-## Tier Status
+## Current State
 
-1. Tier 1 complete and kept as the default serving path.
-   - `src/config/paris.json` is the active kept config.
-   - Measured artifact: `runs/geo_eval_tier1_upgraded_paris_180.json`
-   - Result: `mean_km 15.53 -> 14.60`, `median_km 9.77 -> 4.21`, `<=2km 19.44% -> 31.11%`, `<=5km 37.22% -> 52.78%`.
-2. Tier 2 complete and measured.
-   - Full realistic cross-view projection retrain finished.
-   - Status: mixed gain, especially for close-range buckets, but not a clean replacement.
-3. Tier 3 complete and kept experimental.
-   - Experimental config: `src/config/paris_dinov2_rrf_experimental.json`
-   - Status: slightly better `mean_km` and very-close hits, but weaker `median_km` and `<=5km`; do not promote over Tier 1.
-4. Tier 4 prepared but not benchmarked.
-   - Runner: `scripts/run_tier4_encoder_ft.ps1`
-   - Smoke test passed for the encoder fine-tune path.
-   - Blocker: unattended full CPU execution stalled before usable training progress, so no benchmark artifact exists yet.
-5. Tier 5 not started.
-   - No CosPlace or MegaLoc integration is landed in this repo state.
+-   Dashboard exists in `src/dashboard/`.
+-   Uses `app.js`, `index.html`, `styles.css`.
+-   Basic functionality for viewing analysis results is present but needs polish and features.
 
-## Next Intended Move
+## Next Steps
 
-1. Either get Tier 4 to run reliably end to end on available hardware, or explicitly defer it until GPU-capable execution is available.
-2. Keep Tier 1 as the serving baseline unless a later tier beats it on both close-range and overall error, not just isolated buckets.
-3. Treat Tier 3 as an experimental side path until it shows a cleaner benchmark win.
+1.  Audit current `src/dashboard/` implementation.
+2.  Identify specific UI/UX bottlenecks.
+3.  Implement layout improvements.
+4.  Enhance data visualization components in `app.js`.
 
 ## Decision Criteria
 
-- Keep `src/config/paris.json` as default unless a candidate improves both practical close-range accuracy and broader error metrics.
-- Do not claim Tier 4 progress beyond "prepared" until a full benchmark artifact exists.
-- Do not start Tier 5 integration until Tier 4 is either measured or deliberately postponed.
+-   Keep changes if they improve the clarity of model analysis.
+-   Ensure compatibility with existing data schemas (e.g., `batch_result.schema.json`).
+-   Verify that the dev server (`dev_ui.py`) remains functional.
