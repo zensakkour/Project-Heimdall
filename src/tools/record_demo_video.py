@@ -140,8 +140,15 @@ def main() -> None:
             page.wait_for_timeout(450)
             page.click("#map-zoom-out")
             page.wait_for_timeout(450)
-            page.click("#map-zoom-reset")
-            page.wait_for_timeout(1200)
+            if page.locator("#map-reset-paris").count():
+                page.click("#map-reset-paris")
+                page.wait_for_timeout(700)
+            if page.locator("#map-reset-globe").count():
+                page.click("#map-reset-globe")
+                page.wait_for_timeout(1200)
+            elif page.locator("#map-zoom-reset").count():
+                page.click("#map-zoom-reset")
+                page.wait_for_timeout(1200)
 
             # Capture the updated desktop screenshot from the same clean state.
             page.screenshot(path=str(screenshot_path), full_page=True)
