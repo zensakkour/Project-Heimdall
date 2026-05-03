@@ -1,17 +1,14 @@
-/* --- Raven Operator UI Core --- */
+/* --- Heimdall Operator UI Refresh --- */
 
 :root {
-  --sidebar-w: 64px;
-  --panel-w: 430px;
-  --panel-bg: rgba(6, 10, 14, 0.88);
-  --panel-blur: 32px;
-  --panel-border: rgba(255, 255, 255, 0.08);
-  --purple-accent: #8b5cf6;
-  --purple-glow: rgba(139, 92, 246, 0.3);
-  --green-accent: #10b981;
-  --green-glow: rgba(16, 185, 129, 0.25);
-  --card-bg: rgba(15, 23, 30, 0.6);
-  --card-hover: rgba(25, 35, 45, 0.8);
+  --panel-w: 420px;
+  --glass-bg: rgba(6, 11, 16, 0.85);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --accent: #6fa7cb;
+  --accent-glow: rgba(111, 167, 203, 0.25);
+  --success: #10b981;
+  --danger: #ef4444;
+  --radius: 16px;
 }
 
 html, body {
@@ -22,340 +19,329 @@ html, body {
   overflow: hidden;
   background: #000;
   color: #fff;
-  font-family: "Space Grotesk", sans-serif;
+  font-family: "Space Grotesk", system-ui, sans-serif;
 }
 
 .app-shell {
-  position: fixed;
-  inset: 0;
-  display: flex;
+  position: relative;
+  width: 100%;
+  height: 100%;
 }
 
-/* --- Background Map --- */
-#live-map {
-  position: absolute !important;
-  inset: 0;
-  width: 100% !important;
-  height: 100% !important;
-  z-index: 1;
-}
-
-/* --- Left Rail (Sidebar) --- */
-.left-rail {
+/* --- Map Background (Layer 1) --- */
+.map-bg {
   position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: var(--sidebar-w);
-  background: #000;
-  border-right: 1px solid var(--panel-border);
-  z-index: 100;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 16px 0;
-  gap: 24px;
+  inset: 0;
+  z-index: 1;
+  background: #010203;
 }
 
-.rail-icon {
+/* --- Header Area (Layer 2) --- */
+.operator-header {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px 8px 8px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  pointer-events: auto;
+}
+
+.brand img {
   width: 32px;
   height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #666;
-  cursor: pointer;
-  transition: color 0.2s;
-}
-
-.rail-icon:hover, .rail-icon.active {
-  color: #fff;
-}
-
-.rail-logo {
-  margin-bottom: 12px;
-}
-
-.rail-logo img {
-  width: 36px;
-  height: 36px;
   border-radius: 8px;
 }
 
-.rail-spacer {
-  flex: 1;
+.brand-text {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: #fff;
 }
 
-.rail-avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: #222;
-  border: 1px solid #444;
-}
-
-/* --- Floating Pill --- */
-.target-pill {
+/* --- Right Analysis Panel (Layer 2) --- */
+.analysis-panel {
   position: absolute;
   top: 20px;
-  left: calc(var(--sidebar-w) + 24px);
-  z-index: 50;
-  background: var(--panel-bg);
-  backdrop-filter: blur(12px);
-  padding: 8px 16px;
-  border-radius: 999px;
-  border: 1px solid var(--panel-border);
-  font-size: 13px;
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-}
-
-.target-pill span {
-  color: var(--muted);
-}
-
-/* --- Right Results Panel --- */
-.results-panel {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  bottom: 12px;
+  right: 20px;
+  bottom: 20px;
   width: var(--panel-w);
-  z-index: 50;
-  background: var(--panel-bg);
-  backdrop-filter: blur(var(--panel-blur));
-  border: 1px solid var(--panel-border);
+  z-index: 10;
+  background: var(--glass-bg);
+  backdrop-filter: blur(24px);
+  border: 1px solid var(--glass-border);
   border-radius: 24px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  box-shadow: 0 20px 50px rgba(0,0,0,0.7);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
 }
 
-/* Panel Header */
-.panel-top {
-  padding: 16px;
+.panel-section {
+  padding: 20px;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.section-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #8ea1af;
+  margin-bottom: 16px;
+  font-weight: 600;
+}
+
+/* Ingest Controls */
+.ingest-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.file-picker {
   display: flex;
   align-items: center;
-  gap: 16px;
-  border-bottom: 1px solid var(--panel-border);
+  gap: 10px;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid var(--glass-border);
+  padding: 6px 6px 6px 14px;
+  border-radius: 12px;
+  cursor: pointer;
 }
 
-.source-thumb-wrap {
-  width: 48px;
-  height: 48px;
-  border-radius: 8px;
-  background: #111;
-  overflow: hidden;
-  border: 1px solid var(--panel-border);
-}
-
-.source-thumb {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.panel-title-area {
+.file-name {
   flex: 1;
-  min-width: 0;
-}
-
-.panel-filename {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 13px;
+  color: #ccd8e2;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.panel-subtitle {
-  font-size: 11px;
-  color: var(--muted);
-}
-
-.btn-pdf {
-  height: 32px;
-  padding: 0 12px;
-  font-size: 11px;
+.file-btn {
+  background: rgba(255,255,255,0.08);
+  padding: 6px 14px;
   border-radius: 8px;
-  opacity: 0.5;
-  pointer-events: none;
+  font-size: 12px;
+  font-weight: 600;
 }
 
-/* Nav Strip */
-.panel-nav-strip {
-  background: rgba(255, 255, 255, 0.03);
-  padding: 10px 16px;
+.profile-row {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid var(--panel-border);
-  font-size: 11px;
+  gap: 10px;
 }
 
-.btn-back {
+.profile-row select {
+  flex: 1;
+  min-height: 42px;
+  background: rgba(0,0,0,0.3);
+  border-color: var(--glass-border);
+}
+
+.primary-btn {
+  background: var(--accent);
+  color: #000;
+  border: 0;
+  font-weight: 700;
+  padding: 0 16px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+/* Progress */
+.progress-wrap {
+  padding: 0 20px 20px;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.progress-track {
+  height: 6px;
+  background: rgba(0,0,0,0.4);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  width: 30%;
+  background: var(--accent);
+  box-shadow: 0 0 10px var(--accent-glow);
+}
+
+.progress-label {
+  font-size: 12px;
   color: var(--accent);
-  text-decoration: none;
+  margin-top: 8px;
+  font-weight: 600;
 }
 
-/* Results List */
+/* Result Status */
+.status-section {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.thumb-preview {
+  width: 64px;
+  height: 64px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #111;
+  border: 1px solid var(--glass-border);
+}
+
+.thumb-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.status-metrics {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.metric-mini label {
+  font-size: 9px;
+  text-transform: uppercase;
+  color: #8ea1af;
+}
+
+.metric-mini span {
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+}
+
+/* Candidate Cards */
+.list-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
 .results-scroll {
   flex: 1;
   overflow-y: auto;
-  padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+  padding-right: 4px;
 }
 
 .candidate-card {
-  background: var(--card-bg);
-  border: 1px solid transparent;
-  border-radius: 16px;
   padding: 16px;
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  gap: 12px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
 }
 
 .candidate-card:hover {
-  background: var(--card-hover);
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.15);
 }
 
 .candidate-card.active {
-  background: rgba(139, 92, 246, 0.1);
-  border-color: var(--purple-accent);
-  box-shadow: 0 0 20px var(--purple-glow);
+  background: rgba(111, 167, 203, 0.1);
+  border-color: var(--accent);
+  box-shadow: 0 0 20px var(--accent-glow);
+}
+
+.card-top {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
 }
 
 .card-rank {
   font-size: 18px;
-  font-weight: 700;
-  color: #444;
+  font-weight: 800;
+  color: #3e505c;
 }
 
 .active .card-rank {
-  color: var(--purple-accent);
-}
-
-.card-body {
-  min-width: 0;
-}
-
-.card-address {
-  font-size: 15px;
-  font-weight: 700;
-  margin-bottom: 2px;
-}
-
-.card-location {
-  font-size: 12px;
-  color: var(--muted);
-}
-
-.card-meta {
-  margin-top: 12px;
-  font-size: 11px;
-  font-family: monospace;
-  color: #888;
-}
-
-.status-chip {
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: 700;
-  background: rgba(255, 255, 255, 0.1);
-  height: fit-content;
-}
-
-.card-confidence {
-  display: block;
-  font-size: 11px;
   color: var(--accent);
-  margin-bottom: 4px;
 }
 
-.btn-inspect {
-  margin-top: 12px;
-  width: 100%;
-  height: 36px;
-  border-radius: 8px;
+.card-score {
   font-size: 12px;
-  background: rgba(255, 255, 255, 0.05);
-  border-color: var(--panel-border);
+  font-weight: 700;
+  color: var(--accent);
 }
 
-/* Footer & Diagnostics */
+.card-coords {
+  font-family: monospace;
+  font-size: 13px;
+  color: #ccd8e2;
+}
+
+.card-sub {
+  font-size: 11px;
+  color: #8ea1af;
+  margin-top: 4px;
+}
+
+/* Footer / Diagnostics */
 .panel-footer {
-  padding: 12px 16px;
-  border-top: 1px solid var(--panel-border);
+  background: rgba(0,0,0,0.2);
 }
 
-.diagnostics-accordion {
-  border-top: 1px solid var(--panel-border);
-  background: rgba(0,0,0,0.3);
-}
-
-.diagnostics-accordion-head {
-  padding: 12px 16px;
-  cursor: pointer;
+.diag-toggle {
+  padding: 12px 20px;
   font-size: 11px;
   text-transform: uppercase;
-  color: var(--muted);
+  color: #8ea1af;
+  cursor: pointer;
   display: flex;
   justify-content: space-between;
 }
 
-.diagnostics-accordion-body {
-  max-height: 0;
-  overflow: hidden;
-  transition: max-height 0.3s ease;
+.diag-body {
+  display: none;
+  padding: 0 20px 20px;
 }
 
-.diagnostics-accordion.active .diagnostics-accordion-body {
-  max-height: 500px;
-  overflow-y: auto;
-  padding: 0 16px 16px;
+.diag-body.active {
+  display: block;
 }
 
-/* --- Ingest Trigger --- */
-.ingest-area {
-  padding: 16px;
-  border-bottom: 1px solid var(--panel-border);
+.diag-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 16px;
+  font-size: 12px;
+  margin-bottom: 12px;
 }
 
-.btn-upload {
-  width: 100%;
-  height: 48px;
-  border: 2px dashed var(--panel-border);
-  background: rgba(255,255,255,0.02);
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  font-size: 14px;
-  color: var(--muted);
-  cursor: pointer;
+.raw-json {
+  background: #000;
+  padding: 10px;
+  border-radius: 8px;
+  font-size: 10px;
+  overflow: auto;
+  max-height: 150px;
+  border: 1px solid var(--glass-border);
 }
 
-.btn-upload:hover {
-  border-color: var(--accent);
-  background: rgba(255,255,255,0.05);
-  color: #fff;
+.empty-state {
+  text-align: center;
+  margin-top: 60px;
+  color: #4b6170;
 }
-
-/* --- Hide Default UI Parts --- */
-.page-header, .hero, .card.section-card {
-  display: none !important;
-}
-
-/* --- Utility --- */
-.muted { color: #888; }
