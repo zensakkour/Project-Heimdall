@@ -1,13 +1,15 @@
-/* --- Heimdall Operator UI Refresh --- */
+/* --- Heimdall Operator UI Refresh (Grayscale Terminal) --- */
 
 :root {
   --panel-w: 420px;
-  --glass-bg: rgba(6, 11, 16, 0.85);
+  --bg-dark: #0b0b0b;
+  --bg-med: #111111;
+  --bg-light: #161616;
+  --glass-bg: rgba(20, 20, 20, 0.85);
   --glass-border: rgba(255, 255, 255, 0.08);
-  --accent: #6fa7cb;
-  --accent-glow: rgba(111, 167, 203, 0.25);
-  --success: #10b981;
-  --danger: #ef4444;
+  --text-primary: #eaeaea;
+  --text-secondary: #a0a0a0;
+  --accent: #d0d0d0;
   --radius: 16px;
 }
 
@@ -17,8 +19,8 @@ html, body {
   margin: 0;
   padding: 0;
   overflow: hidden;
-  background: #000;
-  color: #fff;
+  background: var(--bg-dark);
+  color: var(--text-primary);
   font-family: "Space Grotesk", system-ui, sans-serif;
 }
 
@@ -36,8 +38,7 @@ html, body {
   width: 100vw;
   height: 100vh;
   z-index: 0;
-  background: #0a1015;
-  border: 4px solid red; /* DEBUG BORDER */
+  background: #080c10; /* Dark slate fallback */
 }
 
 /* --- Header Area (Layer 2) --- */
@@ -65,13 +66,14 @@ html, body {
   width: 32px;
   height: 32px;
   border-radius: 8px;
+  filter: grayscale(1);
 }
 
 .brand-text {
   font-size: 14px;
   font-weight: 600;
   letter-spacing: -0.01em;
-  color: #fff;
+  color: var(--text-primary);
 }
 
 /* --- Right Analysis Panel (Layer 2) --- */
@@ -101,7 +103,7 @@ html, body {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  color: #8ea1af;
+  color: var(--text-secondary);
   margin-bottom: 16px;
   font-weight: 600;
 }
@@ -131,8 +133,8 @@ html, body {
 }
 
 .ingest-trigger:hover {
-  border-color: var(--accent);
-  background: rgba(111, 167, 203, 0.05);
+  border-color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .ingest-preview-wrap {
@@ -148,6 +150,7 @@ html, body {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  filter: grayscale(0.2);
 }
 
 #ingest-prompt {
@@ -160,17 +163,18 @@ html, body {
 .ingest-icon {
   font-size: 20px;
   margin-bottom: 4px;
+  filter: grayscale(1);
 }
 
 .ingest-label {
   font-size: 14px;
   font-weight: 700;
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .ingest-filename {
   font-size: 12px;
-  color: #8ea1af;
+  color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -197,7 +201,7 @@ html, body {
 .count-selector label {
   font-size: 10px;
   text-transform: uppercase;
-  color: #8ea1af;
+  color: var(--text-secondary);
 }
 
 .toggle-group {
@@ -211,7 +215,7 @@ html, body {
 .toggle-group button {
   background: transparent;
   border: 0;
-  color: #8ea1af;
+  color: var(--text-secondary);
   font-size: 11px;
   font-weight: 700;
   padding: 4px 10px;
@@ -223,13 +227,13 @@ html, body {
 }
 
 .toggle-group button.active {
-  background: var(--accent);
+  background: var(--text-primary);
   color: #000;
 }
 
 .toggle-group button:hover:not(.active) {
   background: rgba(255, 255, 255, 0.05);
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .profile-row {
@@ -240,8 +244,11 @@ html, body {
 .profile-row select {
   flex: 1;
   min-height: 42px;
-  background: rgba(0,0,0,0.3);
-  border-color: var(--glass-border);
+  background: rgba(0,0,0,0.4);
+  border: 1px solid var(--glass-border);
+  color: var(--text-primary);
+  border-radius: 10px;
+  padding: 0 10px;
 }
 
 .primary-btn {
@@ -252,6 +259,11 @@ html, body {
   padding: 0 16px;
   border-radius: 10px;
   cursor: pointer;
+  transition: background 0.2s;
+}
+
+.primary-btn:hover {
+  background: #f0f0f0;
 }
 
 /* Progress */
@@ -270,13 +282,12 @@ html, body {
 .progress-bar {
   height: 100%;
   width: 30%;
-  background: var(--accent);
-  box-shadow: 0 0 10px var(--accent-glow);
+  background: var(--text-primary);
 }
 
 .progress-label {
   font-size: 12px;
-  color: var(--accent);
+  color: var(--text-secondary);
   margin-top: 8px;
   font-weight: 600;
 }
@@ -286,21 +297,6 @@ html, body {
   display: flex;
   gap: 16px;
   align-items: center;
-}
-
-.thumb-preview {
-  width: 64px;
-  height: 64px;
-  border-radius: 12px;
-  overflow: hidden;
-  background: #111;
-  border: 1px solid var(--glass-border);
-}
-
-.thumb-preview img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
 }
 
 .status-metrics {
@@ -313,13 +309,13 @@ html, body {
 .metric-mini label {
   font-size: 9px;
   text-transform: uppercase;
-  color: #8ea1af;
+  color: var(--text-secondary);
 }
 
 .metric-mini span {
   font-size: 14px;
   font-weight: 600;
-  color: #fff;
+  color: var(--text-primary);
 }
 
 /* Candidate Cards */
@@ -354,9 +350,9 @@ html, body {
 }
 
 .candidate-card.active {
-  background: rgba(111, 167, 203, 0.1);
-  border-color: var(--accent);
-  box-shadow: 0 0 20px var(--accent-glow);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--text-primary);
+  box-shadow: none;
 }
 
 .card-top {
@@ -368,28 +364,28 @@ html, body {
 .card-rank {
   font-size: 18px;
   font-weight: 800;
-  color: #3e505c;
+  color: #444;
 }
 
 .active .card-rank {
-  color: var(--accent);
+  color: var(--text-primary);
 }
 
 .card-score {
   font-size: 12px;
   font-weight: 700;
-  color: var(--accent);
+  color: var(--text-primary);
 }
 
 .card-coords {
   font-family: monospace;
   font-size: 13px;
-  color: #ccd8e2;
+  color: var(--text-primary);
 }
 
 .card-sub {
   font-size: 11px;
-  color: #8ea1af;
+  color: var(--text-secondary);
   margin-top: 4px;
 }
 
@@ -402,7 +398,7 @@ html, body {
   padding: 12px 20px;
   font-size: 11px;
   text-transform: uppercase;
-  color: #8ea1af;
+  color: var(--text-secondary);
   cursor: pointer;
   display: flex;
   justify-content: space-between;
@@ -425,6 +421,14 @@ html, body {
   margin-bottom: 12px;
 }
 
+.diag-grid span {
+  color: var(--text-secondary);
+}
+
+.diag-grid strong {
+  color: var(--text-primary);
+}
+
 .raw-json {
   background: #000;
   padding: 10px;
@@ -433,10 +437,11 @@ html, body {
   overflow: auto;
   max-height: 150px;
   border: 1px solid var(--glass-border);
+  color: var(--text-secondary);
 }
 
 .empty-state {
   text-align: center;
   margin-top: 60px;
-  color: #4b6170;
+  color: #444;
 }
