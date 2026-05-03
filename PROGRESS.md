@@ -2402,3 +2402,19 @@ Do not delete or edit past entries. Append new work at the end.
   - eval report: `runs/eval_realistic_crossview_combined_strict_probe240_encoderft_v1_e1_full40k.json`
 - Dataset scale for this run: `26204` triplets, `26204` unique street queries, `27171` unique aerial reference paths, `40000` aerial reference records in the evaluation index root.
 - Decision: Tier 4 is prepared but not yet benchmarked. The training path itself is valid, but the full unattended CPU run needs a reliable execution path before I can claim Tier 4 metrics.
+
+## 2026-05-01
+- Hypothesis: The branch-plan rule is still too easy to violate unless the contributor workflow explicitly says that `plan.md` must stay branch-specific and must not be carried unchanged across merges or branch switches.
+- Change:
+  - tightened `AGENT.md` so branch changes and merges must rewrite `plan.md` for the destination branch's own purpose
+  - updated `CONTRIBUTING.md` to say each branch needs its own `plan.md` and that copying another branch's file verbatim is not allowed
+  - updated `scripts/new-branch.ps1` template to remind contributors that the scaffold must be replaced with a branch-specific plan
+- Files touched:
+  - `AGENT.md`
+  - `CONTRIBUTING.md`
+  - `scripts/new-branch.ps1`
+  - `PROGRESS.md`
+- Validation command:
+  - `rg -n --hidden -S "branch-specific|do not copy another branch's|do not reuse another branch's|destination branch" AGENT.md CONTRIBUTING.md scripts/new-branch.ps1`
+- Artifacts: None.
+- Decision: Keep. `plan.md` should remain a branch-local contract and should not spread unchanged across branches.

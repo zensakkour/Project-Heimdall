@@ -26,6 +26,7 @@ $plan = @"
 ## Status
 - Branch purpose:
 - Completion policy:
+- Branch-specific note: replace this stub with this branch's own plan; do not reuse another branch's `plan.md` verbatim.
 
 ## Problem
 
