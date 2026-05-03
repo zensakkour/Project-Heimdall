@@ -90,10 +90,112 @@ function updateLastRun() {
   lastUpdated.textContent = formatUtcNowLabel("Last run: ");
 }
 
+function renderRavenResults(result) {
+  const container = byId("results-list");
+  if (!container) return;
+  container.replaceChildren();
+
+  const fusion = result?.result?.fusion;
+  const candidates = Array.isArray(fusion?.candidates) ? fusion.candidates : [];
+
+  if (candidates.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "muted";
+    empty.style.textAlign = "center";
+    empty.style.marginTop = "40px";
+    empty.textContent = "No candidates found for this image.";
+    container.appendChild(empty);
+    return;
+  }
+
+  const sorted = [...candidates].sort((a, b) => weightFrom(b) - weightFrom(a));
+
+  sorted.slice(0, 20).forEach((item, idx) => {
+    const cand = item.candidate || {};
+    const rank = idx + 1;
+    const card = document.createElement("div");
+    card.className = `candidate-card ${rank === 1 ? "active" : ""}`;
+    card.dataset.rank = String(rank);
+
+    const rankEl = document.createElement("div");
+    rankEl.className = "card-rank";
+    rankEl.textContent = String(rank);
+
+    const bodyEl = document.createElement("div");
+    bodyEl.className = "card-body";
+
+    const titleEl = document.createElement("div");
+    titleEl.className = "card-address";
+    titleEl.textContent = `Target Point ${rank}`;
+
+    const locEl = document.createElement("div");
+    locEl.className = "card-location";
+    locEl.textContent = `Paris, France`;
+
+    const confLabel = document.createElement("span");
+    confLabel.className = "card-confidence";
+    confLabel.textContent = rank === 1 ? "Top match" : `Rank #${rank}`;
+
+    const metaEl = document.createElement("div");
+    metaEl.className = "card-meta";
+    metaEl.textContent = `${Number(cand.latitude).toFixed(5)}, ${Number(cand.longitude).toFixed(5)}`;
+
+    const inspectBtn = document.createElement("button");
+    inspectBtn.className = "btn-inspect";
+    inspectBtn.textContent = "Inspect on map";
+
+    bodyEl.append(confLabel, titleEl, locEl, metaEl, inspectBtn);
+
+    const statusEl = document.createElement("div");
+    statusEl.className = "status-chip";
+    statusEl.textContent = rank === 1 ? "Confirmed" : "Unreviewed";
+
+    card.append(rankEl, bodyEl, statusEl);
+
+    card.addEventListener("click", () => {
+      document.querySelectorAll(".candidate-card").forEach(c => c.classList.remove("active"));
+      card.classList.add("active");
+      setSelectedRank(rank);
+      if (liveMap) {
+        liveMap.flyTo({
+          center: [cand.longitude, cand.latitude],
+          zoom: Math.max(liveMap.getZoom(), 12),
+          duration: 1000
+        });
+      }
+    });
+
+    container.appendChild(card);
+  });
+}
+
 function renderSummary(result) {
   const geo = result.result.geo;
   const fusion = result.result.fusion;
   const geoDebug = result.geo_debug;
+
+  // Raven Title/Thumb Updates
+  const thumb = byId("source-thumb");
+  if (thumb) {
+    thumb.src = result.image_data || "";
+    thumb.style.display = result.image_data ? "block" : "none";
+  }
+  const filename = byId("panel-filename");
+  if (filename) filename.textContent = result.filename || "Untitled Analysis";
+
+  // Diagnostics Update
+  const diagConf = byId("diag-conf");
+  if (diagConf) diagConf.textContent = result.result?.geo?.confidence_tier || "-";
+  const diagRadius = byId("diag-radius");
+  if (diagRadius) diagRadius.textContent = fusion?.uncertainty_radius_m ? `${fusion.uncertainty_radius_m.toFixed(1)}m` : "-";
+  const rawJson = byId("raw-json");
+  if (rawJson) rawJson.textContent = JSON.stringify(result, null, 2);
+  const diagBackend = byId("diag-backend");
+  if (diagBackend) diagBackend.textContent = result.result?.backend || "-";
+  const diagWorker = byId("diag-worker");
+  if (diagWorker) diagWorker.textContent = result.runtime?.worker_mode || "-";
+
+  renderRavenResults(result);
 
   const geoConfidence = () => {
     if (fusion && Array.isArray(fusion.candidates) && fusion.candidates.length > 0) {
@@ -336,6 +438,8 @@ function ensureLiveMap() {
     style: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
     center: initialCenter,
     zoom: initialZoom,
+    pitch: 45, // Raven tilted view
+    bearing: -15,
     attributionControl: false,
   });
 
@@ -392,10 +496,20 @@ function ensureLiveMap() {
         type: "line",
         source: "ring",
         paint: {
-          "line-color": "rgba(142, 220, 245, 0.62)",
-          "line-width": 1.8,
-          "line-dasharray": [2, 2.2],
-          "line-opacity": 0.85,
+          "line-color": "rgba(16, 185, 129, 0.4)",
+          "line-width": 2,
+          "line-dasharray": [2, 1],
+          "line-opacity": 0.8,
+        },
+      });
+
+      liveMap.addLayer({
+        id: "ring-fill",
+        type: "fill",
+        source: "ring",
+        paint: {
+          "fill-color": "rgba(16, 185, 129, 0.05)",
+          "fill-opacity": 0.3,
         },
       });
 
@@ -457,18 +571,17 @@ function ensureLiveMap() {
         },
       });
 
-      liveMap.addLayer({
-        id: "candidate-layer",
-        type: "circle",
-        source: "candidates",
-        paint: {
-          "circle-color": ["get", "color"],
-          "circle-radius": ["interpolate", ["linear"], ["get", "weightNorm"], 0, 3, 1, 10],
-          "circle-opacity": ["case", ["==", ["get", "rank"], 1], 0.95, 0.72],
-          "circle-stroke-color": "rgba(218, 244, 255, 0.85)",
-          "circle-stroke-width": ["case", ["==", ["get", "rank"], 1], 1.6, 0.8],
-        },
-      });
+  liveMap.addLayer({
+    id: "candidate-layer",
+    type: "circle",
+    source: "candidates",
+    paint: {
+      "circle-color": ["case", ["==", ["get", "rank"], 1], "rgba(16, 185, 129, 0.95)", ["get", "color"]],
+      "circle-radius": ["case", ["==", ["get", "rank"], 1], 12, ["interpolate", ["linear"], ["get", "weightNorm"], 0, 4, 1, 8]],
+      "circle-stroke-color": "#fff",
+      "circle-stroke-width": 1.5,
+    },
+  });
 
       liveMap.addLayer({
         id: "mean-halo-layer",
@@ -1197,37 +1310,11 @@ function updateSelectedCandidateGeometry() {
 }
 
 function setupDiagnostics() {
-  const drawer = byId("diagnostics-drawer");
-  const openBtn = byId("open-diagnostics");
-  const closeBtn = byId("close-diagnostics");
-
-  if (openBtn && drawer) {
-    openBtn.addEventListener("click", () => drawer.classList.add("active"));
-  }
-  if (closeBtn && drawer) {
-    closeBtn.addEventListener("click", () => drawer.classList.remove("active"));
-  }
-
-  // Accordion Toggles
-  document.querySelectorAll(".diag-accordion-head").forEach((head) => {
-    head.addEventListener("click", () => {
-      const accordion = head.parentElement;
+  const trigger = byId("diag-trigger");
+  const accordion = byId("diag-accordion");
+  if (trigger && accordion) {
+    trigger.addEventListener("click", () => {
       accordion.classList.toggle("active");
-    });
-  });
-
-  // Copy JSON
-  const copyBtn = byId("copy-json");
-  const rawJson = byId("raw-json");
-  if (copyBtn && rawJson) {
-    copyBtn.addEventListener("click", () => {
-      navigator.clipboard.writeText(rawJson.textContent).then(() => {
-        const originalText = copyBtn.textContent;
-        copyBtn.textContent = "Copied!";
-        setTimeout(() => {
-          copyBtn.textContent = originalText;
-        }, 2000);
-      });
     });
   }
 }
