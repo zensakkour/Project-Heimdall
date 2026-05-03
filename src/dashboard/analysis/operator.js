@@ -232,6 +232,7 @@ function renderCandidateList(result) {
     // Check source
     const isExif = cand.match_id === "exif:gps";
     const sourceLabel = isExif ? "IMAGE METADATA (EXIF)" : `MATCH ID: ${cand.match_id || "N/A"}`;
+    const subtitle = `Paris, France - ${sourceLabel}`;
 
     card.innerHTML = `
       <div class="card-top">
@@ -240,6 +241,9 @@ function renderCandidateList(result) {
       </div>
       <div class="card-address">Target Point ${rank}</div>
       <div class="card-sub">Paris, France • ${sourceLabel}</div>
+      <div class="card-sub-actions">
+        <button class="btn-inline-toggle source-toggle" type="button" hidden>More</button>
+      </div>
       <div class="card-coords-row">
         <div class="card-coords">${coordString}</div>
         <button class="btn-icon-small copy-coords" title="Copy Coordinates">COPY</button>
@@ -256,6 +260,34 @@ function renderCandidateList(result) {
         setTimeout(() => hint.classList.remove("visible"), 2000);
       });
     });
+
+    const subEl = card.querySelector(".card-sub");
+    if (subEl) {
+      const fullText = subtitle;
+      subEl.textContent = subtitle;
+      subEl.title = fullText;
+      const toggleBtn = card.querySelector(".source-toggle");
+      if (toggleBtn && fullText.length > 72) {
+        toggleBtn.hidden = false;
+        toggleBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const expanded = subEl.classList.toggle("expanded");
+          toggleBtn.textContent = expanded ? "Less" : "More";
+        });
+      }
+      subEl.addEventListener("click", (e) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(fullText).then(() => {
+          const hint = card.querySelector(".copied-hint");
+          hint.textContent = "Source copied";
+          hint.classList.add("visible");
+          setTimeout(() => {
+            hint.classList.remove("visible");
+            hint.textContent = "Copied";
+          }, 2000);
+        });
+      });
+    }
 
     card.querySelector(".open-maps").addEventListener("click", (e) => {
       e.stopPropagation();
