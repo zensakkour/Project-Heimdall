@@ -389,9 +389,317 @@ html, body {
   margin-top: 4px;
 }
 
-/* Footer / Diagnostics */
-.panel-footer {
-  background: rgba(0,0,0,0.2);
+/* --- Map Controls (Bottom Left) --- */
+.map-controls {
+  position: absolute;
+  bottom: 24px;
+  left: 20px;
+  z-index: 10;
+  display: flex;
+  flex-direction: row; /* Horizontal layout */
+  align-items: center;
+  gap: 0; /* No gap for unified bar */
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  padding: 2px 4px;
+  backdrop-filter: blur(8px);
+}
+
+.map-controls button {
+  background: transparent;
+  border: 0; /* No individual borders */
+  color: var(--text-primary);
+  height: 32px;
+  min-width: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s;
+  padding: 0 8px;
+}
+
+.map-controls button:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.map-controls .btn-text {
+  min-width: 64px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.compass-btn {
+  padding: 0 !important;
+}
+
+.compass-icon {
+  display: block;
+  width: 14px;
+  height: 14px;
+  transition: transform 0.1s ease-out;
+}
+
+.control-sep {
+  width: 1px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.1);
+  margin: 0 4px;
+}
+
+/* --- Preview Header --- */
+.preview-header {
+  padding: 16px 20px;
+}
+
+.preview-block {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.thumb-container {
+  width: 170px;
+  height: 100px;
+  border-radius: 8px;
+  overflow: hidden;
+  position: relative;
+  background: #000;
+  border: 1px solid var(--glass-border);
+  flex-shrink: 0;
+}
+
+.thumb-container img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.expand-btn, .remove-btn {
+  position: absolute !important;
+  top: 8px !important;
+  width: 26px !important;
+  height: 26px !important;
+  min-width: 26px !important;
+  max-width: 26px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 7px !important;
+  background: rgba(12, 12, 12, 0.72) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  backdrop-filter: blur(6px) !important;
+  color: var(--text-primary) !important;
+  line-height: 1 !important;
+  flex: 0 0 auto !important;
+  cursor: pointer !important;
+  opacity: 0.9 !important;
+  transition: all 0.2s !important;
+  z-index: 5 !important;
+}
+
+.expand-btn { right: 8px !important; }
+.remove-btn { left: 8px !important; }
+
+.expand-btn svg, .remove-btn svg {
+  width: 13px !important;
+  height: 13px !important;
+  display: block !important;
+}
+
+.expand-btn:hover, .remove-btn:hover {
+  opacity: 1 !important;
+  background: rgba(25, 25, 25, 0.85) !important;
+  border-color: rgba(255, 255, 255, 0.25) !important;
+}
+
+.error-msg {
+  padding: 10px 14px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 8px;
+  color: #ef4444;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: pre-line;
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.08), 0 12px 28px rgba(120, 18, 18, 0.18);
+}
+
+.preview-info {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+}
+
+.preview-filename {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.preview-filename:hover {
+  text-decoration: underline;
+}
+
+.copy-status {
+  position: absolute;
+  bottom: -20px;
+  left: 0;
+  font-size: 10px;
+  color: var(--accent);
+  text-transform: uppercase;
+  font-weight: 700;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.copy-status.visible {
+  opacity: 1;
+}
+
+.ingest-actions {
+  margin-top: 16px;
+}
+
+/* --- Lightbox Modal --- */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+
+.lightbox.active {
+  display: flex;
+}
+
+.lightbox-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(12px);
+}
+
+.lightbox-content {
+  position: relative;
+  z-index: 10;
+  max-width: 90vw;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.lightbox-content img {
+  max-width: 100%;
+  max-height: 80vh;
+  border-radius: 12px;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.lightbox-filename {
+  font-size: 14px;
+  color: #fff;
+  font-weight: 600;
+}
+
+.lightbox-close {
+  position: absolute;
+  top: -40px;
+  right: -40px;
+  background: transparent;
+  border: 0;
+  color: #fff;
+  font-size: 24px;
+  cursor: pointer;
+}
+
+/* --- Enhanced Candidate Cards --- */
+.results-scroll:focus {
+  outline: none;
+}
+
+.candidate-card {
+  opacity: 0.6;
+}
+
+.candidate-card.active {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--text-primary);
+}
+
+.card-coords-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+
+.btn-icon-small {
+  background: transparent;
+  border: 0;
+  color: var(--text-secondary);
+  padding: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.btn-icon-small:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.btn-card-action {
+  width: 100%;
+  margin-top: 12px;
+  height: 32px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--glass-border);
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.btn-card-action:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--text-secondary);
+}
+
+.copied-hint {
+  font-size: 9px;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-left: 8px;
+  display: none;
+}
+
+.copied-hint.visible {
+  display: inline;
 }
 
 .diag-toggle {
