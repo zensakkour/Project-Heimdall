@@ -49,22 +49,54 @@ def test_analyze_image_sets_request_id_and_runtime_meta(monkeypatch) -> None:
     assert payload["runtime"]["manifest"]["env"]["limits"]["max_image_bytes"] > 0
 
 
-def test_analyze_image_worker_failure_falls_back_to_safe_demo(monkeypatch) -> None:
+def test_analyze_image_worker_failure_retries_inline_pipeline(monkeypatch) -> None:
     monkeypatch.setenv("HEIMDALL_USE_INFERENCE_WORKER", "1")
 
     def _boom_worker(_task: dict, timeout_s: float):
         _ = timeout_s
         return None, "synthetic worker crash", 3.2
 
+    def _fake_inline(**_kwargs):
+        return {
+            "generated_at": "2026-05-03T00:00:00Z",
+            "result": {"backend": "rfdetr", "score": 0.42},
+            "geo_debug": {"safe_demo": False},
+            "safe_demo": False,
+        }
+
     monkeypatch.setattr(ui_server, "_run_inference_worker", _boom_worker)
+    monkeypatch.setattr(ui_server, "_run_image_pipeline_local", _fake_inline)
     client = TestClient(ui_server.app)
     files = {"image": ("demo.png", _png_bytes(), "image/png")}
     res = client.post("/analyze/image", files=files)
     assert res.status_code == 200
     payload = res.json()
-    assert payload["safe_demo"] is True
-    assert payload["runtime"]["worker_mode"] == "process"
-    assert "worker failure" in (payload["geo_debug"]["fallback_reason"] or "")
+    assert payload["safe_demo"] is False
+    assert payload["runtime"]["worker_mode"] == "process-inline-fallback"
+    assert payload["result"]["backend"] == "rfdetr"
+
+
+def test_analyze_image_worker_and_inline_failure_returns_503(monkeypatch) -> None:
+    monkeypatch.setenv("HEIMDALL_USE_INFERENCE_WORKER", "1")
+
+    def _boom_worker(_task: dict, timeout_s: float):
+        _ = timeout_s
+        return None, "synthetic worker crash", 3.2
+
+    def _boom_inline(**_kwargs):
+        raise RuntimeError("pipeline init failed: dependency unavailable")
+
+    monkeypatch.setattr(ui_server, "_run_inference_worker", _boom_worker)
+    monkeypatch.setattr(ui_server, "_run_image_pipeline_local", _boom_inline)
+    client = TestClient(ui_server.app)
+    files = {"image": ("demo.png", _png_bytes(), "image/png")}
+    res = client.post("/analyze/image", files=files)
+    assert res.status_code == 503
+    payload = res.json()
+    assert payload["safe_demo"] is False
+    assert payload["runtime"]["worker_mode"] == "process-inline-fallback"
+    assert "worker failure" in payload["error"]
+    assert "inline retry failed" in payload["error"]
 
 
 def test_analyze_image_rejects_unsupported_content_type(monkeypatch) -> None:

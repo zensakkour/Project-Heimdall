@@ -28,6 +28,15 @@
 
 Do not delete or edit past entries. Append new work at the end.
 
+## 2026-05-03
+
+- Changed `/analyze/image` failure handling so real-image analysis no longer silently returns safe-demo payloads on worker or pipeline failure.
+- Added inline retry when the spawned inference worker fails, then return HTTP 503 if real inference still cannot run.
+- Updated the V2 analysis UI to reject demo payloads from the image endpoint instead of rendering them as real geolocation results.
+- Updated UI server tests to cover inline retry success and explicit 503 failure paths.
+- Added a stronger red failure alert in the V2 analysis UI so users are told fallback/demo output may be random or synthetic and should not be trusted.
+- Improved frontend network-error reporting so `Failed to fetch` is shown as an explicit backend-unreachable message instead of a generic browser error.
+
 ## 2026-01-29
 - Initialized repo structure: core/, ingestion/, data/, dashboard/ with .gitkeep placeholders.
 - Added .gitignore for Python, C++ artifacts, and data/weights folders.

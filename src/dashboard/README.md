@@ -54,7 +54,7 @@ Open:
 
 Safe demo mode:
 
-- If runtime dependencies fail, analysis endpoints return mock outputs so the UI remains usable.
+- Image analysis no longer auto-substitutes mock outputs when real inference fails; the endpoint now returns an explicit error unless demo mode was requested.
 - Force fallback explicitly: `POST /analyze/image?safe_demo=1`
 
 ## Screenshot Assets
