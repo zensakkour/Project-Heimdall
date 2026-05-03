@@ -20,21 +20,53 @@ const emptyFeatureCollection = { type: "FeatureCollection", features: [] };
 function ensureLiveMap() {
   if (liveMap) return liveMapReady;
   const el = byId("live-map");
-  if (!el) return Promise.resolve();
+  if (!el) {
+    console.error("CRITICAL: Map container #live-map not found in DOM");
+    return Promise.reject("No map container");
+  }
 
-  liveMap = new maplibregl.Map({
-    container: el,
-    style: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
-    center: initialCenter,
-    zoom: initialZoom,
-    pitch: 60,
-    bearing: -20,
-    projection: "globe",
-    attributionControl: false,
+  const rect = el.getBoundingClientRect();
+  console.log(`Initializing map in container: ${rect.width}x${rect.height}`, rect);
+
+  const styleUrl = "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json";
+  console.log("Using map style:", styleUrl);
+
+  try {
+    liveMap = new maplibregl.Map({
+      container: el,
+      style: styleUrl,
+      center: initialCenter,
+      zoom: initialZoom,
+      pitch: 60,
+      bearing: -20,
+      attributionControl: false,
+      // Removed projection: "globe" from initial config to prevent hard crashes
+    });
+
+    console.log("Map instance created");
+  } catch (err) {
+    console.error("Hard error during map instance creation:", err);
+    return Promise.reject(err);
+  }
+
+  liveMap.on("error", (e) => {
+    console.error("MapLibre error event:", e.error ? e.error : e);
   });
 
   liveMapReady = new Promise((resolve) => {
     liveMap.on("load", () => {
+      console.log("Map loaded successfully");
+      
+      // Try to set globe projection if supported by this version
+      try {
+        if (liveMap.setProjection) {
+          console.log("Attempting to set globe projection...");
+          liveMap.setProjection({ type: "globe" });
+        }
+      } catch (projErr) {
+        console.warn("Globe projection not supported or failed:", projErr);
+      }
+
       if (liveMap.setFog) {
         liveMap.setFog({
           color: "rgb(11, 20, 27)",
@@ -44,6 +76,7 @@ function ensureLiveMap() {
           "star-intensity": 0.4,
         });
       }
+      
       // Sources
       liveMap.addSource("candidates", { type: "geojson", data: emptyFeatureCollection });
       liveMap.addSource("ring", { type: "geojson", data: emptyFeatureCollection });
@@ -80,6 +113,9 @@ function ensureLiveMap() {
         paint: { "circle-color": "#fff", "circle-radius": 4, "circle-stroke-color": "#10b981", "circle-stroke-width": 2 }
       });
 
+      // Force resize to fix container size issues
+      liveMap.resize();
+      
       resolve();
     });
   });
