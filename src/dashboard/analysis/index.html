@@ -11,107 +11,104 @@
       crossorigin=""
     />
     <link rel="stylesheet" href="../theme.css?v=7" />
-    <link rel="stylesheet" href="operator.css?v=6" />
+    <link rel="stylesheet" href="operator.css?v=7" />
   </head>
   <body>
     <div class="app-shell">
-      <!-- Background Map -->
-      <div id="live-map" aria-label="Target Map"></div>
+      <!-- Background Map (ALWAYS VISIBLE) -->
+      <div id="live-map" class="map-bg"></div>
 
-      <!-- Left Rail Sidebar -->
-      <aside class="left-rail">
-        <div class="rail-logo">
-          <img src="../assets/logo-mark.png" alt="Logo" />
+      <!-- Top Header Area -->
+      <header class="operator-header">
+        <div class="brand">
+          <img src="../assets/logo-mark.png" alt="Heimdall" />
+          <span class="brand-text">Paris — Project Heimdall</span>
         </div>
-        <div class="rail-icon active">🔍</div>
-        <div class="rail-icon">🕒</div>
-        <div class="rail-icon">📁</div>
-        <div class="rail-spacer"></div>
-        <div class="rail-icon">🛡️</div>
-        <div class="rail-icon">❓</div>
-        <div class="rail-avatar"></div>
-      </aside>
+      </header>
 
-      <!-- Floating Targeting Pill -->
-      <div class="target-pill">
-        📍 <span>Street targeting</span> <strong id="current-city">Paris</strong>
-      </div>
-
-      <!-- Right Results Panel -->
-      <main class="results-panel">
-        <div class="panel-top">
-          <div class="source-thumb-wrap">
-            <img id="source-thumb" class="source-thumb" src="" alt="" />
+      <!-- Right Analysis Panel -->
+      <main class="analysis-panel">
+        <!-- Ingest Section -->
+        <section class="panel-section ingest-section">
+          <div class="section-title">Analysis Input</div>
+          <div class="ingest-controls">
+            <label class="file-picker">
+              <input type="file" id="image-file" accept="image/*" />
+              <span id="image-file-name" class="file-name">No file selected</span>
+              <span class="file-btn">Browse</span>
+            </label>
+            <div class="profile-row">
+              <select id="profile-select">
+                <option value="paris">Paris (Standard)</option>
+                <option value="paris_test">Paris (Test)</option>
+              </select>
+              <button id="analyze-image" class="primary-btn">Analyze Image</button>
+            </div>
           </div>
-          <div class="panel-title-area">
-            <div id="panel-filename" class="panel-filename">Untitled Analysis</div>
-            <div class="panel-subtitle">Imagery Intelligence Analysis</div>
+        </section>
+
+        <!-- Progress Overlay (Functional) -->
+        <div id="progress" class="progress-wrap" style="display: none;">
+          <div class="progress-track"><div id="progress-bar" class="progress-bar"></div></div>
+          <div id="progress-text" class="progress-label">Analyzing...</div>
+        </div>
+
+        <!-- Result Status Section -->
+        <section id="result-status" class="panel-section status-section" style="display: none;">
+          <div class="thumb-preview">
+            <img id="source-thumb" src="" alt="Source" />
           </div>
-          <button class="btn-pdf" disabled>PDF</button>
-        </div>
-
-        <div class="panel-nav-strip">
-          <span>Viewing street results for <strong id="nav-city">Paris</strong></span>
-          <a href="#" class="btn-back">Back to Worldwide</a>
-        </div>
-
-        <!-- Ingest Area (Integrated) -->
-        <div class="ingest-area">
-          <label class="btn-upload">
-            <input type="file" id="image-file" accept="image/*" style="display: none;" />
-            <span>📤 Upload new photo</span>
-          </label>
-          <div id="progress" class="progress" style="margin-top: 12px; display: none;">
-            <div class="progress-track"><div id="progress-bar" class="progress-bar"></div></div>
+          <div class="status-metrics">
+            <div class="metric-mini">
+              <label>Location</label>
+              <span id="metric-location">-</span>
+            </div>
+            <div class="metric-mini">
+              <label>Confidence</label>
+              <span id="metric-confidence">-</span>
+            </div>
           </div>
-        </div>
+        </section>
 
-        <!-- Results Scrollable Area -->
-        <div id="results-list" class="results-scroll">
-          <div class="muted" style="text-align: center; margin-top: 40px;">
-            Upload an image to begin localization.
+        <!-- Candidate List -->
+        <section class="panel-section list-section">
+          <div class="section-title">Localized Candidates</div>
+          <div id="results-list" class="results-scroll">
+            <div class="empty-state">Upload imagery to begin.</div>
           </div>
-        </div>
+        </section>
 
-        <!-- Diagnostics Accordion (Inside Panel) -->
-        <div class="diagnostics-accordion" id="diag-accordion">
-          <div class="diagnostics-accordion-head" id="diag-trigger">
+        <!-- Diagnostics (Hidden/Collapsible) -->
+        <footer class="panel-footer">
+          <div id="diag-trigger" class="diag-toggle">
             System Diagnostics <span>▾</span>
           </div>
-          <div class="diagnostics-accordion-body">
-            <div class="diag-grid" style="margin-top: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 11px;">
-              <span class="muted">Backend:</span> <strong id="diag-backend">-</strong>
-              <span class="muted">Mode:</span> <strong id="diag-worker">-</strong>
-              <span class="muted">Confidence:</span> <strong id="diag-conf">-</strong>
-              <span class="muted">Radius:</span> <strong id="diag-radius">-</strong>
-            </div>
-            <div style="margin-top: 16px;">
-              <div class="muted" style="font-size: 10px; text-transform: uppercase; margin-bottom: 4px;">Raw Response</div>
-              <pre id="raw-json" style="background: #000; padding: 8px; border-radius: 4px; font-size: 10px; overflow: auto; max-height: 200px;">{}</pre>
-            </div>
+          <div id="diag-accordion" class="diag-body">
+             <div class="diag-grid">
+               <span>Backend:</span> <strong id="diag-backend">-</strong>
+               <span>Worker:</span> <strong id="diag-worker">-</strong>
+               <span>Tier:</span> <strong id="diag-tier">-</strong>
+               <span>Radius:</span> <strong id="diag-radius">-</strong>
+             </div>
+             <pre id="raw-json" class="raw-json">{}</pre>
           </div>
-        </div>
+        </footer>
       </main>
     </div>
 
-    <!-- Hidden original elements for script compatibility (if needed) -->
+    <!-- Hidden elements for legacy script compatibility -->
     <div style="display: none;">
-      <select id="profile-select"><option value="paris">Paris</option></select>
-      <button id="analyze-image">Analyze</button>
-      <div id="metric-location"></div>
-      <div id="metric-tier"></div>
-      <div id="metric-confidence"></div>
-      <div id="metric-radius"></div>
-      <div id="metric-mode"></div>
-      <div id="summary"></div>
-      <select id="live-topn"><option value="20">20</option></select>
-      <div id="geo-ranking"></div>
-      <div id="detection-list"></div>
-      <pre id="details"></pre>
-      <canvas id="canvas"></canvas>
+        <div id="summary"></div>
+        <div id="metric-tier"></div>
+        <div id="metric-mode"></div>
+        <select id="live-topn"><option value="20">20</option></select>
+        <div id="geo-ranking"></div>
+        <div id="detection-list"></div>
+        <pre id="details"></pre>
+        <canvas id="canvas"></canvas>
     </div>
 
     <script src="https://unpkg.com/maplibre-gl@5.0.0/dist/maplibre-gl.js" crossorigin=""></script>
-    <script type="module" src="operator.js?v=6"></script>
+    <script type="module" src="operator.js?v=7"></script>
   </body>
 </html>
