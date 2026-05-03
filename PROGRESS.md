@@ -36,6 +36,7 @@ Do not delete or edit past entries. Append new work at the end.
 - Updated UI server tests to cover inline retry success and explicit 503 failure paths.
 - Added a stronger red failure alert in the V2 analysis UI so users are told fallback/demo output may be random or synthetic and should not be trusted.
 - Improved frontend network-error reporting so `Failed to fetch` is shown as an explicit backend-unreachable message instead of a generic browser error.
+- Updated candidate cards so long source labels stay collapsed by default with a `More` toggle, full hover title, and copy-on-click support without horizontal overflow.
 
 ## 2026-01-29
 - Initialized repo structure: core/, ingestion/, data/, dashboard/ with .gitkeep placeholders.
