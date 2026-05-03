@@ -9,7 +9,10 @@ let liveCandidatePoints = [];
 let liveFusionSummary = null;
 
 const initialCenter = [2.3522, 48.8566]; // Paris
-const initialZoom = 2;
+const initialZoom = 11;
+let topLimit = 3;
+let lastResult = null;
+
 const emptyFeatureCollection = { type: "FeatureCollection", features: [] };
 
 /* --- Map Core --- */
@@ -24,13 +27,23 @@ function ensureLiveMap() {
     style: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
     center: initialCenter,
     zoom: initialZoom,
-    pitch: 45,
-    bearing: -15,
+    pitch: 60,
+    bearing: -20,
+    projection: "globe",
     attributionControl: false,
   });
 
   liveMapReady = new Promise((resolve) => {
     liveMap.on("load", () => {
+      if (liveMap.setFog) {
+        liveMap.setFog({
+          color: "rgb(11, 20, 27)",
+          "high-color": "rgb(8, 13, 18)",
+          "space-color": "rgb(2, 5, 9)",
+          "horizon-blend": 0.2,
+          "star-intensity": 0.4,
+        });
+      }
       // Sources
       liveMap.addSource("candidates", { type: "geojson", data: emptyFeatureCollection });
       liveMap.addSource("ring", { type: "geojson", data: emptyFeatureCollection });
@@ -108,14 +121,17 @@ function renderCandidateList(result) {
   }
 
   const sorted = [...candidates].sort((a, b) => (b.posterior_weight ?? 0) - (a.posterior_weight ?? 0));
-  liveCandidatePoints = sorted.map((item, idx) => ({
-    rank: idx + 1,
-    lat: item.candidate?.latitude,
-    lon: item.candidate?.longitude,
-    weight: item.posterior_weight ?? 0
-  }));
+  
+  if (sorted.length === 1) {
+    const note = document.createElement("div");
+    note.className = "card-sub";
+    note.style.textAlign = "center";
+    note.style.marginBottom = "8px";
+    note.textContent = "Only 1 candidate returned";
+    container.appendChild(note);
+  }
 
-  sorted.slice(0, 20).forEach((item, idx) => {
+  sorted.slice(0, topLimit).forEach((item, idx) => {
     const rank = idx + 1;
     const cand = item.candidate || {};
     const card = document.createElement("div");
@@ -134,7 +150,13 @@ function renderCandidateList(result) {
       document.querySelectorAll(".candidate-card").forEach(c => c.classList.remove("active"));
       card.classList.add("active");
       if (liveMap) {
-        liveMap.flyTo({ center: [cand.longitude, cand.latitude], zoom: 14, duration: 1000 });
+        liveMap.flyTo({ 
+          center: [cand.longitude, cand.latitude], 
+          zoom: 18, 
+          pitch: 65,
+          bearing: -20,
+          duration: 1200 
+        });
       }
     });
 
@@ -149,7 +171,7 @@ function renderLiveMap(result) {
   
   if (!fusion || candidates.length === 0) return;
 
-  const features = candidates.slice(0, 20).map((item, idx) => ({
+  const features = candidates.slice(0, topLimit).map((item, idx) => ({
     type: "Feature",
     geometry: { type: "Point", coordinates: [item.candidate.longitude, item.candidate.latitude] },
     properties: { rank: idx + 1 }
@@ -169,7 +191,11 @@ function renderLiveMap(result) {
       features: [{ type: "Feature", geometry: { type: "Point", coordinates: [fusion.mean_longitude, fusion.mean_latitude] } }]
     });
 
-    liveMap.easeTo({ center: [fusion.mean_longitude, fusion.mean_latitude], zoom: 12, duration: 800 });
+    // Default view for first result after geolocating
+    if (candidates.length > 0) {
+      const top = candidates[0].candidate;
+      liveMap.easeTo({ center: [top.longitude, top.latitude], zoom: 15, pitch: 60, duration: 800 });
+    }
   });
 }
 
@@ -200,21 +226,36 @@ function renderSummary(result) {
 
   renderCandidateList(result);
   renderLiveMap(result);
-}
-
-/* --- Logic & Setup --- */
-
 function setupFilePicker() {
   const input = byId("image-file");
-  const name = byId("image-file-name");
-  if (!input || !name) return;
+  const trigger = byId("ingest-trigger");
+  const filename = byId("ingest-filename");
+  const previewWrap = byId("ingest-preview-wrap");
+  const previewImg = byId("ingest-preview");
+
+  if (!input || !trigger) return;
+
+  trigger.addEventListener("click", () => input.click());
+
   input.addEventListener("change", () => {
-    name.textContent = input.files?.[0]?.name || "No file selected";
+    const file = input.files?.[0];
+    if (file) {
+      filename.textContent = file.name;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        if (previewImg) previewImg.src = e.target.result;
+        if (previewWrap) previewWrap.style.display = "block";
+      };
+      reader.readAsDataURL(file);
+    } else {
+      filename.textContent = "No file selected";
+      if (previewWrap) previewWrap.style.display = "none";
+    }
   });
 }
 
 function setupAnalysis() {
-  const btn = byId("analyze-image");
+  const btn = byId("geolocate-image");
   const input = byId("image-file");
   const progress = byId("progress");
   if (!btn || !input) return;
@@ -223,12 +264,13 @@ function setupAnalysis() {
     if (!input.files?.[0]) return;
     const form = new FormData();
     form.append("image", input.files[0]);
-    
+
     try {
       if (progress) progress.style.display = "block";
       btn.disabled = true;
       const profile = byId("profile-select").value || "paris";
       const result = await postForm(`/analyze/image?profile=${profile}`, form);
+      lastResult = result;
       renderSummary(result);
     } catch (err) {
       console.error(err);
@@ -239,7 +281,30 @@ function setupAnalysis() {
   });
 }
 
-function setupDiagnostics() {
+function setupToggles() {
+  const toggleGroup = byId("top-n-toggle");
+  if (!toggleGroup) return;
+
+  toggleGroup.querySelectorAll("button").forEach(btn => {
+    btn.addEventListener("click", () => {
+      toggleGroup.querySelectorAll("button").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      topLimit = parseInt(btn.dataset.value || "3");
+      if (lastResult) {
+        renderCandidateList(lastResult);
+        renderLiveMap(lastResult);
+      }
+    });
+  });
+}
+
+function init() {
+  ensureLiveMap();
+  setupFilePicker();
+  setupAnalysis();
+  setupDiagnostics();
+  setupToggles();
+
   const trigger = byId("diag-trigger");
   const body = byId("diag-accordion");
   if (trigger && body) {

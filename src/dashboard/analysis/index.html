@@ -30,19 +30,27 @@
       <main class="analysis-panel">
         <!-- Ingest Section -->
         <section class="panel-section ingest-section">
-          <div class="section-title">Analysis Input</div>
+          <div class="section-title">Image Geolocation Input</div>
           <div class="ingest-controls">
-            <label class="file-picker">
-              <input type="file" id="image-file" accept="image/*" />
-              <span id="image-file-name" class="file-name">No file selected</span>
-              <span class="file-btn">Browse</span>
-            </label>
+            <div id="ingest-block" class="sci-fi-ingest">
+              <input type="file" id="image-file" accept="image/*" style="display: none;" />
+              <div id="ingest-trigger" class="ingest-trigger">
+                <div id="ingest-preview-wrap" class="ingest-preview-wrap" style="display: none;">
+                  <img id="ingest-preview" src="" alt="Preview" />
+                </div>
+                <div id="ingest-prompt">
+                  <span class="ingest-icon">📤</span>
+                  <span class="ingest-label">Select source image</span>
+                  <span id="ingest-filename" class="ingest-filename">No file selected</span>
+                </div>
+              </div>
+            </div>
             <div class="profile-row">
               <select id="profile-select">
                 <option value="paris">Paris (Standard)</option>
                 <option value="paris_test">Paris (Test)</option>
               </select>
-              <button id="analyze-image" class="primary-btn">Analyze Image</button>
+              <button id="geolocate-image" class="primary-btn">Geolocate Image</button>
             </div>
           </div>
         </section>
@@ -50,14 +58,11 @@
         <!-- Progress Overlay (Functional) -->
         <div id="progress" class="progress-wrap" style="display: none;">
           <div class="progress-track"><div id="progress-bar" class="progress-bar"></div></div>
-          <div id="progress-text" class="progress-label">Analyzing...</div>
+          <div id="progress-text" class="progress-label">Geolocating...</div>
         </div>
 
         <!-- Result Status Section -->
         <section id="result-status" class="panel-section status-section" style="display: none;">
-          <div class="thumb-preview">
-            <img id="source-thumb" src="" alt="Source" />
-          </div>
           <div class="status-metrics">
             <div class="metric-mini">
               <label>Location</label>
@@ -72,7 +77,19 @@
 
         <!-- Candidate List -->
         <section class="panel-section list-section">
-          <div class="section-title">Localized Candidates</div>
+          <div class="section-head-row">
+            <div class="section-title">Localized Candidates</div>
+            <div class="count-selector">
+              <label>Show top:</label>
+              <div class="toggle-group" id="top-n-toggle">
+                <button data-value="1">1</button>
+                <button data-value="2">2</button>
+                <button data-value="3" class="active">3</button>
+                <button data-value="5">5</button>
+                <button data-value="10">10</button>
+              </div>
+            </div>
+          </div>
           <div id="results-list" class="results-scroll">
             <div class="empty-state">Upload imagery to begin.</div>
           </div>
