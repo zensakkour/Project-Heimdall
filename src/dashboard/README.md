@@ -87,5 +87,5 @@ Recommended demo interactions to include:
 1. Upload image and run `Analyze Image`.
 2. Rotate/pan the 3D globe by dragging.
 3. Zoom in/out with mouse scroll on globe.
-4. Use map buttons: `Zoom In`, `Zoom Out`, `Reset`.
+4. Use map buttons: `Zoom In`, `Zoom Out`, `Paris`, `Globe`.
 5. In Lab, run `Run Random Samples` and review distance/accuracy output.

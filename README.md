@@ -78,7 +78,7 @@ Record the new demo while showing these interactions:
 1. Keep recording clean (no error banners in UI).
 1. In the 3D globe, drag to rotate/pan.
 1. Use mouse wheel scroll to zoom in and zoom out on the globe.
-1. Click map controls (`Zoom In`, `Zoom Out`, `Reset`) to show full interaction flow.
+1. Click map controls (`Zoom In`, `Zoom Out`, `Paris`, `Globe`) to show full interaction flow.
 1. Keep final files at `docs/images/analysis-demo.webm` and `docs/images/analysis-desktop.png`.
 
 ## Architecture Overview
@@ -342,7 +342,7 @@ PowerShell/manual:
 1. Review detections, geo ranking, and fusion map.
 1. Interact with 3D globe: drag to rotate/pan.
 1. Scroll wheel to zoom in and zoom out.
-1. Use `Zoom In`, `Zoom Out`, and `Reset` buttons.
+1. Use `Zoom In`, `Zoom Out`, `Paris`, and `Globe` buttons.
 1. Open `/analysis/lab/` for benchmark/eval tools (separate from upload/live analysis).
 
 Benchmark comparison in UI:
