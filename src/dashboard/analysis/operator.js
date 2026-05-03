@@ -153,25 +153,35 @@ function renderSummary(result) {
   setMetric("metric-radius", radiusText);
   setMetric("metric-mode", modeText);
 
-  // Update System Info in Evidence Drawer
-  const backendEl = byId("details-backend");
-  if (backendEl) {
-    backendEl.textContent = result.result?.backend || (result.safe_demo ? "demo" : "-");
-  }
-  const workerEl = byId("details-worker");
-  if (workerEl) {
-    workerEl.textContent = result.runtime?.worker_mode || "-";
+  // Update Diagnostics Drawer
+  const rawJsonEl = byId("raw-json");
+  if (rawJsonEl) {
+    rawJsonEl.textContent = JSON.stringify(result, null, 2);
   }
 
-  const reasonRow = byId("details-reason-row");
-  const reasonEl = byId("details-reason");
-  if (reasonRow && reasonEl) {
-    if (result.fallback_reason) {
-      reasonRow.style.display = "flex";
-      reasonEl.textContent = result.fallback_reason;
-    } else {
-      reasonRow.style.display = "none";
-    }
+  const diagBackend = byId("diag-backend");
+  if (diagBackend) {
+    diagBackend.textContent = result.result?.backend || (result.safe_demo ? "demo" : "-");
+  }
+  const diagWorker = byId("diag-worker");
+  if (diagWorker) {
+    diagWorker.textContent = result.runtime?.worker_mode || "-";
+  }
+
+  const diagTierBadge = byId("diag-tier-badge");
+  if (diagTierBadge) {
+    diagTierBadge.textContent = tier.toUpperCase();
+    diagTierBadge.className = "diag-value badge " + (
+      tier === "high" ? "badge-success" : 
+      tier === "medium" ? "badge-warning" : 
+      "badge-danger"
+    );
+  }
+
+  const diagReason = byId("diag-reason");
+  if (diagReason) {
+    diagReason.textContent = result.fallback_reason || "Nominal";
+    diagReason.style.color = result.fallback_reason ? "var(--danger)" : "var(--text-soft)";
   }
 
   const debugParts = [];
@@ -1186,12 +1196,49 @@ function updateSelectedCandidateGeometry() {
   renderCandidateInspector(selected);
 }
 
+function setupDiagnostics() {
+  const drawer = byId("diagnostics-drawer");
+  const openBtn = byId("open-diagnostics");
+  const closeBtn = byId("close-diagnostics");
+
+  if (openBtn && drawer) {
+    openBtn.addEventListener("click", () => drawer.classList.add("active"));
+  }
+  if (closeBtn && drawer) {
+    closeBtn.addEventListener("click", () => drawer.classList.remove("active"));
+  }
+
+  // Accordion Toggles
+  document.querySelectorAll(".diag-accordion-head").forEach((head) => {
+    head.addEventListener("click", () => {
+      const accordion = head.parentElement;
+      accordion.classList.toggle("active");
+    });
+  });
+
+  // Copy JSON
+  const copyBtn = byId("copy-json");
+  const rawJson = byId("raw-json");
+  if (copyBtn && rawJson) {
+    copyBtn.addEventListener("click", () => {
+      navigator.clipboard.writeText(rawJson.textContent).then(() => {
+        const originalText = copyBtn.textContent;
+        copyBtn.textContent = "Copied!";
+        setTimeout(() => {
+          copyBtn.textContent = originalText;
+        }, 2000);
+      });
+    });
+  }
+}
+
 function init() {
   syncProfileSelect();
   setupFilePicker();
   setupAnalyzeAction();
   setupCanvasControls();
   setupMapControls();
+  setupDiagnostics();
   setMetricsBaseline();
   setSummaryState("idle", "Upload an image and click Analyze Image to start.");
   renderGeoRanking([]);

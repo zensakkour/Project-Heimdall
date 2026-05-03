@@ -12,7 +12,7 @@
     />
     <link rel="stylesheet" href="../theme.css?v=7" />
     <link rel="stylesheet" href="../styles.css?v=6" />
-    <link rel="stylesheet" href="operator.css?v=4" />
+    <link rel="stylesheet" href="operator.css?v=5" />
   </head>
   <body>
     <div class="layout">
@@ -27,10 +27,12 @@
               <p class="muted">Operational Intelligence interface.</p>
             </div>
           </div>
-          <nav class="mode-tabs" aria-label="Workspace">
-            <a class="mode-link active" href="/analysis/" aria-current="page">Analysis</a>
-            <a class="mode-link" href="/analysis/lab/">Lab</a>
-          </nav>
+          <div class="header-right">
+            <nav class="mode-tabs" aria-label="Workspace">
+              <a class="mode-link active" href="/analysis/" aria-current="page">Analysis</a>
+              <a class="mode-link" href="/analysis/lab/">Lab</a>
+            </nav>
+          </div>
         </header>
 
         <section class="card section-card ingest-card">
@@ -66,6 +68,9 @@
             <div>
               <h2>Localization Result</h2>
               <p class="muted">Most likely location, confidence, and supporting evidence.</p>
+            </div>
+            <div class="diagnostics-trigger-wrap">
+              <button id="open-diagnostics" class="btn-diagnostics">Diagnostics</button>
             </div>
           </div>
 
@@ -165,46 +170,68 @@
               </div>
             </article>
           </div>
-
-          <details class="evidence-drawer">
-            <summary>Inspect Evidence</summary>
-            <div class="evidence-grid">
-              <section class="evidence-panel">
-                <h3>System Info</h3>
-                <div class="list">
-                  <div class="list-item" style="cursor: default; border-bottom: 1px solid var(--color-border-dim);">
-                    <span>Detector Backend</span>
-                    <strong id="details-backend" style="color: var(--color-text-bright);">-</strong>
-                  </div>
-                  <div class="list-item" style="cursor: default;">
-                    <span>Process Mode</span>
-                    <strong id="details-worker" style="color: var(--color-text-bright);">-</strong>
-                  </div>
-                  <div id="details-reason-row" class="list-item" style="cursor: default; display: none;">
-                    <span>Status Note</span>
-                    <strong id="details-reason" style="color: var(--color-error); font-size: 0.85em;">-</strong>
-                  </div>
-                </div>
-              </section>
-              <section class="evidence-panel">
-                <h3>Geo Ranking</h3>
-                <div id="geo-ranking" class="geo-ranking muted"></div>
-              </section>
-              <section class="evidence-panel">
-                <h3>Detections</h3>
-                <div id="detection-list" class="list"></div>
-              </section>
-              <section class="evidence-panel">
-                <h3>Details</h3>
-                <pre id="details" class="details">Select a detection to inspect details.</pre>
-              </section>
-            </div>
-          </details>
         </section>
       </div>
     </div>
 
+    <!-- Diagnostics Drawer -->
+    <div id="diagnostics-drawer" class="diagnostics-drawer">
+      <div class="diagnostics-header">
+        <h3>System Diagnostics</h3>
+        <button id="close-diagnostics" class="close-diagnostics" aria-label="Close">✕</button>
+      </div>
+      <div class="diagnostics-content">
+        <!-- Accuracy & Model Details -->
+        <div class="diag-accordion active" id="diag-acc-accordion">
+          <div class="diag-accordion-head">Accuracy & System Info <span>▾</span></div>
+          <div class="diag-accordion-body">
+            <div class="diag-grid">
+              <span class="diag-label">Detector Backend</span>
+              <strong id="diag-backend" class="diag-value">-</strong>
+              <span class="diag-label">Process Mode</span>
+              <strong id="diag-worker" class="diag-value">-</strong>
+              <span class="diag-label">Confidence Tier</span>
+              <strong id="diag-tier-badge" class="diag-value">-</strong>
+              <span class="diag-label">Status Note</span>
+              <strong id="diag-reason" class="diag-value">-</strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- Geo Ranking / Candidates -->
+        <div class="diag-accordion" id="diag-geo-accordion">
+          <div class="diag-accordion-head">Geo Ranking <span>▾</span></div>
+          <div class="diag-accordion-body" style="padding: 0;">
+            <div id="geo-ranking" class="geo-ranking muted"></div>
+          </div>
+        </div>
+
+        <!-- Detections -->
+        <div class="diag-accordion" id="diag-det-accordion">
+          <div class="diag-accordion-head">Detections <span>▾</span></div>
+          <div class="diag-accordion-body" style="padding: 0;">
+            <div id="detection-list" class="list"></div>
+            <div style="padding: 12px; border-top: 1px solid var(--border);">
+               <h4 style="margin: 0 0 8px; font-size: 11px; text-transform: uppercase; color: var(--muted);">Detection Detail</h4>
+               <pre id="details" class="details" style="min-height: 100px;">Select a detection to inspect.</pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- Raw JSON -->
+        <div class="diag-accordion" id="diag-json-accordion">
+          <div class="diag-accordion-head">Raw Backend Response <span>▾</span></div>
+          <div class="diag-accordion-body">
+            <div style="display: flex; justify-content: flex-end; margin-bottom: 8px;">
+               <button id="copy-json" class="copy-btn">Copy JSON</button>
+            </div>
+            <pre id="raw-json" class="diag-json">{}</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <script src="https://unpkg.com/maplibre-gl@5.0.0/dist/maplibre-gl.js" crossorigin=""></script>
-    <script type="module" src="operator.js?v=1"></script>
+    <script type="module" src="operator.js?v=2"></script>
   </body>
 </html>
