@@ -21,7 +21,7 @@ Examples:
 
 ## Workflow
 1. Branch off `master`.
-2. Create or update the branch root `plan.md` immediately after branching. It must describe the branch goal, comparison plan, decision gates, and intended next move.
+2. Create or update the branch root `plan.md` immediately after branching. It must describe that branch's own goal, comparison plan, decision gates, and intended next move. Do not copy another branch's `plan.md` verbatim.
 3. Commit small, focused changes.
 4. Open a pull request using the PR template.
 5. Run local tests before merge (`python -m pytest -q`).
@@ -66,5 +66,6 @@ This creates `feat/yyyymmdd-geo-accuracy-tuning` and switches to it.
 
 ## Notes
 - `master` is the default branch.
+- Keep `plan.md` branch-specific. When a branch is merged, the destination branch must keep or receive its own `plan.md` instead of inheriting the merged branch's plan unchanged.
 - Large datasets live outside git (see README).
 - Dependency and action updates are automated through Dependabot.

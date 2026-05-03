@@ -78,6 +78,7 @@ A performance claim should include:
 - Keep model work on dedicated branches (for example `tech/*`).
 - Every branch must carry a root-level `plan.md` that states the branch goal, planned comparisons, decision gates, and next intended move.
 - Treat `plan.md` as branch-local: update it every time the branch objective, comparison set, decision criteria, or intended next step changes, and do not reuse another branch's plan verbatim.
+- When creating, switching to, or merging into another branch, rewrite `plan.md` for that branch's own purpose instead of carrying forward the previous branch's plan unchanged.
 - `master` must also have a `plan.md`, but its role is integration, validation, merge hygiene, and prioritization rather than unfinished feature work.
 - Before merge, run focused tests first, then broader suites when dependencies allow.
 - Keep commits scoped: one conceptual change per commit when possible.
