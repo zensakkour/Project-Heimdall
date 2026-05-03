@@ -30,10 +30,25 @@ export function normalizeError(err) {
 }
 
 export async function postForm(url, formData) {
-  const res = await fetch(url, {
-    method: "POST",
-    body: formData,
-  });
+  let res;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      body: formData,
+    });
+  } catch (err) {
+    const msg = normalizeError(err);
+    const networkLike =
+      msg.toLowerCase() === "failed to fetch" ||
+      msg.toLowerCase().includes("networkerror") ||
+      msg.toLowerCase().includes("load failed");
+    if (networkLike) {
+      throw new Error(
+        "Backend unreachable. Open the analysis UI through the Heimdall FastAPI server and verify /health/runtime is up."
+      );
+    }
+    throw err;
+  }
   if (!res.ok) {
     const text = await res.text();
     const message = parseServerError(text) || `Request failed (HTTP ${res.status}).`;

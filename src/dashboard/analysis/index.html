@@ -11,12 +11,21 @@
       crossorigin=""
     />
     <link rel="stylesheet" href="../theme.css?v=7" />
-    <link rel="stylesheet" href="operator.css?v=7" />
+    <link rel="stylesheet" href="operator.css?v=8" />
   </head>
   <body>
     <div class="app-shell">
       <!-- Background Map (ALWAYS VISIBLE) -->
       <div id="live-map" class="map-bg"></div>
+
+      <!-- Map Controls (Bottom Left) -->
+      <div id="map-controls" class="map-controls">
+        <button id="map-zoom-in" title="Zoom In">+</button>
+        <button id="map-zoom-out" title="Zoom Out">−</button>
+        <div class="control-sep"></div>
+        <button id="map-reset-paris" class="btn-text">Paris</button>
+        <button id="map-reset-globe" class="btn-text">Globe</button>
+      </div>
 
       <!-- Top Header Area -->
       <header class="operator-header">
@@ -28,31 +37,48 @@
 
       <!-- Right Analysis Panel -->
       <main class="analysis-panel">
-        <!-- Ingest Section -->
-        <section class="panel-section ingest-section">
-          <div class="section-title">Image Geolocation Input</div>
-          <div class="ingest-controls">
-            <div id="ingest-block" class="sci-fi-ingest">
+        <!-- Preview / Ingest Header -->
+        <section class="panel-section preview-header" id="panel-header">
+           <div id="ingest-block" class="sci-fi-ingest">
               <input type="file" id="image-file" accept="image/*" style="display: none;" />
               <div id="ingest-trigger" class="ingest-trigger">
-                <div id="ingest-preview-wrap" class="ingest-preview-wrap" style="display: none;">
-                  <img id="ingest-preview" src="" alt="Preview" />
-                </div>
-                <div id="ingest-prompt">
-                  <span class="ingest-icon">📤</span>
-                  <span class="ingest-label">Select source image</span>
-                  <span id="ingest-filename" class="ingest-filename">No file selected</span>
-                </div>
+                <span class="ingest-icon">📤</span>
+                <span class="ingest-label">Select source image</span>
               </div>
             </div>
-            <div class="profile-row">
-              <select id="profile-select">
-                <option value="paris">Paris (Standard)</option>
-                <option value="paris_test">Paris (Test)</option>
-              </select>
-              <button id="geolocate-image" class="primary-btn">Geolocate Image</button>
+
+            <div id="preview-block" class="preview-block" style="display: none;">
+              <div class="thumb-container">
+                <img id="source-thumb" src="" alt="Source" />
+                <button id="remove-image" class="remove-btn" title="Remove image">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 6L6 18M6 6l12 12"/>
+                  </svg>
+                </button>
+                <button id="expand-image" class="expand-btn" title="Expand Imagery">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+                  </svg>
+                </button>
+              </div>
+              <div class="preview-info">
+                <div class="section-title" style="margin-bottom: 4px;">Source Imagery</div>
+                <div id="preview-filename" class="preview-filename" title="Click to copy filename">No file selected</div>
+                <div id="copy-status" class="copy-status">Copied</div>
+              </div>
             </div>
-          </div>
+
+            <div id="analysis-error" class="error-msg" style="display: none; margin-top: 12px;"></div>
+
+            <div class="ingest-actions">
+              <div class="profile-row">
+                <select id="profile-select">
+                  <option value="paris">Paris (Standard)</option>
+                  <option value="paris_test">Paris (Test)</option>
+                </select>
+                <button id="geolocate-image" class="primary-btn">Geolocate Image</button>
+              </div>
+            </div>
         </section>
 
         <!-- Progress Overlay (Functional) -->
@@ -61,18 +87,10 @@
           <div id="progress-text" class="progress-label">Geolocating...</div>
         </div>
 
-        <!-- Result Status Section -->
-        <section id="result-status" class="panel-section status-section" style="display: none;">
-          <div class="status-metrics">
-            <div class="metric-mini">
-              <label>Location</label>
-              <span id="metric-location">-</span>
-            </div>
-            <div class="metric-mini">
-              <label>Confidence</label>
-              <span id="metric-confidence">-</span>
-            </div>
-          </div>
+        <!-- Result Status Section (Hidden, legacy compatibility) -->
+        <section id="result-status" style="display: none;">
+          <span id="metric-location">-</span>
+          <span id="metric-confidence">-</span>
         </section>
 
         <!-- Candidate List -->
@@ -80,7 +98,6 @@
           <div class="section-head-row">
             <div class="section-title">Localized Candidates</div>
             <div class="count-selector">
-              <label>Show top:</label>
               <div class="toggle-group" id="top-n-toggle">
                 <button data-value="1">1</button>
                 <button data-value="2">2</button>
@@ -90,7 +107,7 @@
               </div>
             </div>
           </div>
-          <div id="results-list" class="results-scroll">
+          <div id="results-list" class="results-scroll" tabindex="0">
             <div class="empty-state">Upload imagery to begin.</div>
           </div>
         </section>
@@ -101,16 +118,53 @@
             System Diagnostics <span>▾</span>
           </div>
           <div id="diag-accordion" class="diag-body">
-             <div class="diag-grid">
+             <div style="display: flex; justify-content: flex-end; margin-bottom: 12px;">
+                <button id="copy-diag-all" class="btn-icon-small" title="Copy summary text">COPY SUMMARY</button>
+             </div>
+             <div class="diag-grid" id="diag-summary-grid">
                <span>Backend:</span> <strong id="diag-backend">-</strong>
                <span>Worker:</span> <strong id="diag-worker">-</strong>
+               <span>Model Status:</span> <strong id="diag-model-status">-</strong>
                <span>Tier:</span> <strong id="diag-tier">-</strong>
                <span>Radius:</span> <strong id="diag-radius">-</strong>
              </div>
-             <pre id="raw-json" class="raw-json">{}</pre>
+             
+             <div class="json-container" style="position: relative; margin-top: 16px;">
+                <div class="json-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                   <span class="section-title" style="font-size: 9px; margin: 0;">Raw JSON Response</span>
+                   <div style="display: flex; gap: 8px;">
+                      <button id="copy-json" class="btn-icon-small">COPY</button>
+                      <button id="expand-json" class="btn-icon-small">EXPAND</button>
+                   </div>
+                </div>
+                <pre id="raw-json" class="raw-json">{}</pre>
+             </div>
           </div>
         </footer>
       </main>
+    </div>
+
+    <!-- Lightbox Modal (Imagery) -->
+    <div id="lightbox" class="lightbox">
+      <div class="lightbox-backdrop" id="lightbox-backdrop"></div>
+      <div class="lightbox-content">
+        <img id="lightbox-img" src="" alt="Large Preview" />
+        <div id="lightbox-filename" class="lightbox-filename"></div>
+        <button id="close-lightbox" class="lightbox-close">✕</button>
+      </div>
+    </div>
+
+    <!-- JSON Modal (Large Inspection) -->
+    <div id="json-modal" class="lightbox">
+      <div class="lightbox-backdrop" id="json-modal-backdrop"></div>
+      <div class="lightbox-content" style="width: 85vw; max-width: 1100px;">
+        <div class="modal-header" style="width: 100%; display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid var(--glass-border); padding-bottom: 12px;">
+           <span class="brand-text" style="font-size: 16px;">Raw Backend Payload</span>
+           <button id="copy-json-modal" class="primary-btn" style="height: 28px; font-size: 11px; padding: 0 16px;">COPY JSON</button>
+        </div>
+        <pre id="modal-json-text" class="raw-json" style="max-height: 70vh; width: 100%; font-size: 12px; line-height: 1.5; color: #eaeaea; background: #000; border: 1px solid var(--glass-border); padding: 20px; overflow: auto;"></pre>
+        <button id="close-json-modal" class="lightbox-close">✕</button>
+      </div>
     </div>
 
     <!-- Hidden elements for legacy script compatibility -->
@@ -126,6 +180,6 @@
     </div>
 
     <script src="https://unpkg.com/maplibre-gl@5.0.0/dist/maplibre-gl.js" crossorigin=""></script>
-    <script type="module" src="operator.js?v=7"></script>
+    <script type="module" src="operator.js?v=8"></script>
   </body>
 </html>

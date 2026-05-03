@@ -711,6 +711,29 @@ def _make_demo_image_payload(image_path: Path, reason: Optional[str]) -> dict:
     }
 
 
+def _analysis_error_response(
+    error: str,
+    *,
+    request_id: str,
+    timings_ms: dict[str, float],
+    worker_mode: str,
+    manifest: Optional[dict] = None,
+    status_code: int = 503,
+) -> JSONResponse:
+    payload = {
+        "error": error,
+        "safe_demo": False,
+    }
+    _attach_runtime_meta(
+        payload,
+        request_id=request_id,
+        timings_ms=timings_ms,
+        worker_mode=worker_mode,
+        manifest=manifest,
+    )
+    return JSONResponse(payload, status_code=status_code)
+
+
 def _load_config_from_env(profile: Optional[str] = None) -> Optional[HeimdallConfig]:
     config_dir = APP_ROOT / "src" / "config"
     default_path = config_dir / "defaults.json"
@@ -1003,6 +1026,7 @@ def _run_image_pipeline_local(
     profile: Optional[str],
     force_safe_demo: bool,
     force_sidecar: bool = False,
+    allow_demo_fallback: bool = True,
 ) -> dict:
     fallback_reason: Optional[str] = "forced" if force_safe_demo else None
     pipeline = None
@@ -1032,7 +1056,9 @@ def _run_image_pipeline_local(
             }
         except Exception as exc:
             fallback_reason = f"pipeline run failed: {exc}"
-    return _make_demo_image_payload(image_path, fallback_reason)
+    if allow_demo_fallback:
+        return _make_demo_image_payload(image_path, fallback_reason)
+    raise RuntimeError(fallback_reason or "image pipeline failed")
 
 
 def _run_video_pipeline_local(
@@ -1113,6 +1139,7 @@ def _inference_worker(task: dict, result_queue: Any) -> None:
                 image_path=Path(task["image_path"]),
                 profile=task.get("profile"),
                 force_safe_demo=bool(task.get("force_safe_demo", False)),
+                allow_demo_fallback=bool(task.get("force_safe_demo", False)),
             )
         elif action == "video":
             payload = _run_video_pipeline_local(
@@ -1311,7 +1338,14 @@ async def analyze_image(
                     timeout_s=_WORKER_IMAGE_TIMEOUT_S,
                 )
                 timings_ms["worker_roundtrip"] = worker_roundtrip_ms
-                if payload is None:
+                if payload is not None and payload.get("safe_demo") and not force_safe_demo:
+                    worker_error = (
+                        payload.get("geo_debug", {}).get("fallback_reason")
+                        or payload.get("fallback_reason")
+                        or "worker returned demo fallback"
+                    )
+                    payload = None
+                if payload is None and force_safe_demo:
                     fallback_reason = f"worker failure: {worker_error}"
                     payload = _make_demo_image_payload(image_path, fallback_reason)
                     _log_event(
@@ -1322,13 +1356,87 @@ async def analyze_image(
                     )
             else:
                 infer_started = time.perf_counter()
-                payload = _run_image_pipeline_local(
-                    image_path=image_path,
-                    profile=profile,
-                    force_safe_demo=force_safe_demo,
-                    force_sidecar=has_uploaded_sidecars,
-                )
+                try:
+                    payload = _run_image_pipeline_local(
+                        image_path=image_path,
+                        profile=profile,
+                        force_safe_demo=force_safe_demo,
+                        force_sidecar=has_uploaded_sidecars,
+                        allow_demo_fallback=force_safe_demo,
+                    )
+                except Exception as exc:
+                    timings_ms["inline_inference"] = round((time.perf_counter() - infer_started) * 1000, 2)
+                    timings_ms["total"] = round((time.perf_counter() - started) * 1000, 2)
+                    error = f"analysis failed: {exc}"
+                    _log_event(
+                        "analyze.image.failed",
+                        request_id=request_id,
+                        worker_mode=worker_mode,
+                        reason=error,
+                        total_ms=timings_ms["total"],
+                    )
+                    return _analysis_error_response(
+                        error,
+                        request_id=request_id,
+                        timings_ms=timings_ms,
+                        worker_mode=worker_mode,
+                        manifest=manifest,
+                    )
                 timings_ms["inline_inference"] = round((time.perf_counter() - infer_started) * 1000, 2)
+            if worker_mode == "process" and payload is None and not force_safe_demo:
+                infer_started = time.perf_counter()
+                worker_mode = "process-inline-fallback"
+                try:
+                    payload = _run_image_pipeline_local(
+                        image_path=image_path,
+                        profile=profile,
+                        force_safe_demo=False,
+                        force_sidecar=has_uploaded_sidecars,
+                        allow_demo_fallback=False,
+                    )
+                except Exception as exc:
+                    timings_ms["inline_inference"] = round((time.perf_counter() - infer_started) * 1000, 2)
+                    timings_ms["total"] = round((time.perf_counter() - started) * 1000, 2)
+                    error = f"analysis failed: worker failure: {worker_error}; inline retry failed: {exc}"
+                    _log_event(
+                        "analyze.image.failed",
+                        request_id=request_id,
+                        worker_mode=worker_mode,
+                        reason=error,
+                        total_ms=timings_ms["total"],
+                    )
+                    return _analysis_error_response(
+                        error,
+                        request_id=request_id,
+                        timings_ms=timings_ms,
+                        worker_mode=worker_mode,
+                        manifest=manifest,
+                    )
+                timings_ms["inline_inference"] = round((time.perf_counter() - infer_started) * 1000, 2)
+            elif worker_mode == "process" and payload is None:
+                payload = _make_demo_image_payload(image_path, f"worker failure: {worker_error}")
+            if payload.get("safe_demo") and not force_safe_demo:
+                timings_ms["total"] = round((time.perf_counter() - started) * 1000, 2)
+                reason = (
+                    payload.get("geo_debug", {}).get("fallback_reason")
+                    or payload.get("fallback_reason")
+                    or "unexpected demo fallback"
+                )
+                error = f"analysis failed: {reason}"
+                _log_event(
+                    "analyze.image.failed",
+                    request_id=request_id,
+                    worker_mode=worker_mode,
+                    reason=error,
+                    total_ms=timings_ms["total"],
+                )
+                return _analysis_error_response(
+                    error,
+                    request_id=request_id,
+                    timings_ms=timings_ms,
+                    worker_mode=worker_mode,
+                    manifest=manifest,
+                )
 
         timings_ms["total"] = round((time.perf_counter() - started) * 1000, 2)
         _attach_runtime_meta(
