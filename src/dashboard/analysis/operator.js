@@ -4,62 +4,112 @@ const profileStorageKey = "heimdallProfile";
 let activeProfile = "paris";
 let liveMap = null;
 let liveMapReady = null;
-let selectedRank = null;
-let liveCandidatePoints = [];
-let liveFusionSummary = null;
-
-const initialCenter = [2.3522, 48.8566]; // Paris
-const initialZoom = 11;
 let topLimit = 3;
 let lastResult = null;
 
+const initialCenter = [2.3522, 48.8566]; // Paris
+const initialZoom = 11;
 const emptyFeatureCollection = { type: "FeatureCollection", features: [] };
 
 /* --- Map Core --- */
+
+function getMapPadding() {
+  const panel = document.querySelector(".analysis-panel");
+  const panelWidth = panel ? panel.offsetWidth : 420;
+  return { left: 0, right: panelWidth + 40, top: 0, bottom: 0 };
+}
 
 function ensureLiveMap() {
   if (liveMap) return liveMapReady;
   const el = byId("live-map");
   if (!el) {
-    console.error("CRITICAL: Map container #live-map not found in DOM");
+    console.error("CRITICAL: Map container #live-map not found");
     return Promise.reject("No map container");
   }
 
-  // Force style visibility for debug
-  el.style.display = "block";
-  el.style.visibility = "visible";
-  el.style.opacity = "1";
-
-  const rect = el.getBoundingClientRect();
-  console.log(`CRITICAL: Map Container Found. Size: ${rect.width}x${rect.height}`);
-  console.log("CRITICAL: MapLibre Object:", typeof maplibregl !== 'undefined' ? "Loaded" : "MISSING");
+  console.log("LOG: Initializing Map sequence with padding...");
 
   const styleUrl = "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json";
-  
+  const padding = getMapPadding();
+
   try {
-    console.log("CRITICAL: Creating Map instance...");
     liveMap = new maplibregl.Map({
       container: el,
       style: styleUrl,
       center: initialCenter,
       zoom: initialZoom,
-      pitch: 60,
+      pitch: initialZoom < 5 ? 0 : 60,
       bearing: -20,
-      attributionControl: false
+      padding: padding,
+      attributionControl: false,
+      antialias: true
     });
   } catch (err) {
-    console.error("CRITICAL: Map Constructor failed:", err);
+    console.error("CRITICAL: Map constructor error:", err);
     return Promise.reject(err);
   }
 
+  liveMap.on("zoom", () => {
+    const zoom = liveMap.getZoom();
+    const currentPitch = liveMap.getPitch();
+    const targetPitch = zoom < 5 ? 0 : 60;
+    
+    if (Math.abs(currentPitch - targetPitch) > 1) {
+      liveMap.easeTo({
+        pitch: targetPitch,
+        padding: getMapPadding(),
+        duration: 400
+      });
+    }
+  });
+
   liveMap.on("error", (e) => {
-    console.error("CRITICAL: MapLibre Internal Error:", e);
+    console.error("LOG: MapLibre runtime error:", e.error || e);
   });
 
   liveMapReady = new Promise((resolve) => {
     liveMap.on("load", () => {
-      console.log("CRITICAL: Map 'load' event fired");
+      console.log("LOG: Map base load complete");
       
+      try {
+        if (typeof liveMap.setProjection === "function") {
+          liveMap.setProjection({ type: "globe" });
+        }
+      } catch (e) {
+        console.warn("LOG: Globe fallback:", e);
+      }
+
+      // Neutralize Background Layer
+      const style = liveMap.getStyle();
+      const bgLayer = style.layers.find(l => l.type === "background");
+      if (bgLayer) {
+        liveMap.setPaintProperty(bgLayer.id, "background-color", "#0B0B0B");
+      }
+
+      // Neutralize Atmosphere / Fog
+      if (typeof liveMap.setFog === "function") {
+        liveMap.setFog({
+          color: "#0B0B0B",
+          "high-color": "#0B0B0B",
+          "space-color": "#0B0B0B",
+          "horizon-blend": 0.02
+        });
+      }
+
+      // Fallback Canvas Background
+      liveMap.getCanvas().style.backgroundColor = "#0B0B0B";
+
+      const currentPadding = getMapPadding();
+      liveMap.setPadding(currentPadding);
+
+      liveMap.easeTo({
+        center: initialCenter,
+        zoom: initialZoom,
+        pitch: initialZoom < 5 ? 0 : 60,
+        padding: currentPadding,
+        duration: 1000
+      });
+
       // Sources
       liveMap.addSource("candidates", { type: "geojson", data: emptyFeatureCollection });
       liveMap.addSource("ring", { type: "geojson", data: emptyFeatureCollection });
@@ -96,11 +146,16 @@ function ensureLiveMap() {
         paint: { "circle-color": "#fff", "circle-radius": 4, "circle-stroke-color": "#10b981", "circle-stroke-width": 2 }
       });
 
-      console.log("CRITICAL: Map Sources/Layers added. Calling resize().");
-      liveMap.resize();
+      window.addEventListener("resize", () => {
+        liveMap.setPadding(getMapPadding());
+        liveMap.resize();
+      });
+
+      setTimeout(() => liveMap.resize(), 100);
       resolve();
     });
   });
+
   return liveMapReady;
 }
 
@@ -209,7 +264,6 @@ function renderLiveMap(result) {
       features: [{ type: "Feature", geometry: { type: "Point", coordinates: [fusion.mean_longitude, fusion.mean_latitude] } }]
     });
 
-    // Default view for first result after geolocating
     if (candidates.length > 0) {
       const top = candidates[0].candidate;
       liveMap.easeTo({ center: [top.longitude, top.latitude], zoom: 15, pitch: 60, duration: 800 });
@@ -221,12 +275,8 @@ function renderSummary(result) {
   const fusion = result.result.fusion;
   const geo = result.result.geo;
 
-  // Status Section
   const statusEl = byId("result-status");
   if (statusEl) statusEl.style.display = "flex";
-  
-  const thumb = byId("source-thumb");
-  if (thumb) thumb.src = result.image_data || "";
   
   const topLat = fusion?.mean_latitude || result.result.candidates?.[0]?.latitude;
   const topLon = fusion?.mean_longitude || result.result.candidates?.[0]?.longitude;
@@ -235,7 +285,6 @@ function renderSummary(result) {
   const weight = fusion?.candidates?.[0]?.posterior_weight ?? result.result.candidates?.[0]?.retrieval_score ?? 0;
   setMetric("metric-confidence", `${(weight * 100).toFixed(1)}%`);
 
-  // Diagnostics
   setMetric("diag-backend", result.result?.backend || "-");
   setMetric("diag-worker", result.runtime?.worker_mode || "-");
   setMetric("diag-tier", geo?.confidence_tier || "-");
@@ -244,13 +293,17 @@ function renderSummary(result) {
 
   renderCandidateList(result);
   renderLiveMap(result);
+}
+
+/* --- Logic & Setup --- */
+
 function setupFilePicker() {
   const input = byId("image-file");
   const trigger = byId("ingest-trigger");
   const filename = byId("ingest-filename");
   const previewWrap = byId("ingest-preview-wrap");
   const previewImg = byId("ingest-preview");
-
+  
   if (!input || !trigger) return;
 
   trigger.addEventListener("click", () => input.click());
@@ -282,7 +335,7 @@ function setupAnalysis() {
     if (!input.files?.[0]) return;
     const form = new FormData();
     form.append("image", input.files[0]);
-
+    
     try {
       if (progress) progress.style.display = "block";
       btn.disabled = true;
@@ -316,13 +369,7 @@ function setupToggles() {
   });
 }
 
-function init() {
-  ensureLiveMap();
-  setupFilePicker();
-  setupAnalysis();
-  setupDiagnostics();
-  setupToggles();
-
+function setupDiagnostics() {
   const trigger = byId("diag-trigger");
   const body = byId("diag-accordion");
   if (trigger && body) {
@@ -331,18 +378,20 @@ function init() {
 }
 
 function init() {
+  console.log("LOG: App Init Start");
   ensureLiveMap();
   setupFilePicker();
   setupAnalysis();
   setupDiagnostics();
+  setupToggles();
   
-  // Sync profile select
   const profileSelect = byId("profile-select");
   if (profileSelect) {
     const stored = localStorage.getItem(profileStorageKey);
     if (stored) profileSelect.value = stored;
     profileSelect.addEventListener("change", () => localStorage.setItem(profileStorageKey, profileSelect.value));
   }
+  console.log("LOG: App Init End");
 }
 
 window.addEventListener("load", init);
