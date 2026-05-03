@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Heimdall Analysis</title>
+    <title>Heimdall Operator</title>
     <link rel="icon" type="image/png" href="../assets/logo-mark.png?v=1" />
     <link
       rel="stylesheet"
@@ -11,227 +11,107 @@
       crossorigin=""
     />
     <link rel="stylesheet" href="../theme.css?v=7" />
-    <link rel="stylesheet" href="../styles.css?v=6" />
-    <link rel="stylesheet" href="operator.css?v=5" />
+    <link rel="stylesheet" href="operator.css?v=6" />
   </head>
   <body>
-    <div class="layout">
-      <div class="layout-shell">
-        <header class="page-header">
-          <div class="page-header-brand">
-            <div class="brand-mark" aria-hidden="true">
-              <img class="brand-logo" src="../assets/logo-mark.png?v=1" alt="Heimdall logo" />
-            </div>
-            <div class="hero-copy">
-              <h1>Project Heimdall</h1>
-              <p class="muted">Operational Intelligence interface.</p>
-            </div>
-          </div>
-          <div class="header-right">
-            <nav class="mode-tabs" aria-label="Workspace">
-              <a class="mode-link active" href="/analysis/" aria-current="page">Analysis</a>
-              <a class="mode-link" href="/analysis/lab/">Lab</a>
-            </nav>
-          </div>
-        </header>
+    <div class="app-shell">
+      <!-- Background Map -->
+      <div id="live-map" aria-label="Target Map"></div>
 
-        <section class="card section-card ingest-card">
-          <div class="section-head">
-            <div>
-              <h2>Ingest</h2>
-              <p class="muted">Upload one photo, then run geospatial localization.</p>
-            </div>
-            <span id="last-updated" class="muted"></span>
-          </div>
-          <div class="ingest-grid">
-            <div class="file-input">
-              <div class="file-label">Image</div>
-              <label class="file-picker">
-                <input type="file" id="image-file" accept="image/*" />
-                <span class="file-button">Choose file</span>
-                <span class="file-name" id="image-file-name">No file selected</span>
-              </label>
-            </div>
-            <label class="profile-select">
-              Profile
-              <select id="profile-select">
-                <option value="paris">Paris (SpaceNet)</option>
-                <option value="paris_test">Paris Test (SpaceNet)</option>
-              </select>
-            </label>
-            <button id="analyze-image">Analyze Image</button>
-          </div>
-        </section>
+      <!-- Left Rail Sidebar -->
+      <aside class="left-rail">
+        <div class="rail-logo">
+          <img src="../assets/logo-mark.png" alt="Logo" />
+        </div>
+        <div class="rail-icon active">🔍</div>
+        <div class="rail-icon">🕒</div>
+        <div class="rail-icon">📁</div>
+        <div class="rail-spacer"></div>
+        <div class="rail-icon">🛡️</div>
+        <div class="rail-icon">❓</div>
+        <div class="rail-avatar"></div>
+      </aside>
 
-        <section class="card section-card result-card">
-          <div class="section-head">
-            <div>
-              <h2>Localization Result</h2>
-              <p class="muted">Most likely location, confidence, and supporting evidence.</p>
-            </div>
-            <div class="diagnostics-trigger-wrap">
-              <button id="open-diagnostics" class="btn-diagnostics">Diagnostics</button>
-            </div>
-          </div>
-
-          <div class="result-metrics" aria-live="polite">
-            <article class="metric">
-              <span class="metric-label">Most Likely</span>
-              <span id="metric-location" class="metric-value">-</span>
-            </article>
-            <article class="metric">
-              <span class="metric-label">Confidence Tier</span>
-              <span id="metric-tier" class="metric-value">-</span>
-            </article>
-            <article class="metric">
-              <span class="metric-label">Geo Confidence</span>
-              <span id="metric-confidence" class="metric-value">-</span>
-            </article>
-            <article class="metric">
-              <span class="metric-label">Uncertainty Radius</span>
-              <span id="metric-radius" class="metric-value">-</span>
-            </article>
-            <article class="metric">
-              <span class="metric-label">Inference Mode</span>
-              <span id="metric-mode" class="metric-value">-</span>
-            </article>
-          </div>
-
-          <div id="summary" class="summary state-idle">Upload an image and start analysis.</div>
-          <div id="progress" class="progress" aria-live="polite">
-            <div class="progress-track">
-              <div id="progress-bar" class="progress-bar"></div>
-            </div>
-            <span id="progress-text" class="muted">Analyzing...</span>
-          </div>
-
-          <div class="hero-grid">
-            <article class="hero-panel map-stage">
-              <div class="panel-head">
-                <h3 class="panel-title">Fused Location (Primary)</h3>
-                <label class="legend-control muted">
-                  Show top
-                  <select id="live-topn">
-                    <option value="1">1</option>
-                    <option value="2">2</option>
-                    <option value="3">3</option>
-                    <option value="5">5</option>
-                    <option value="10">10</option>
-                    <option value="20" selected>20</option>
-                  </select>
-                </label>
-              </div>
-              <div id="live-map" class="globe-canvas" aria-label="Fusion map"></div>
-              <div class="map-legend muted">
-                <span class="legend-dot candidate"></span> Candidate confidence
-                <span class="legend-dot mean"></span> Fused mean
-                <span class="legend-dot ring"></span> Uncertainty radius
-                <span class="legend-sep"></span>
-                <span id="live-topn-label">Showing top 20 candidates on map</span>
-              </div>
-              <div class="map-toolbar">
-                <button id="map-zoom-in">Zoom In</button>
-                <button id="map-zoom-out">Zoom Out</button>
-                <button id="map-zoom-reset">Reset</button>
-              </div>
-              <div id="geo-inspector" class="geo-inspector muted">
-                <div class="geo-inspector-kicker">Candidate Inspector</div>
-                <div id="geo-inspector-title" class="geo-inspector-title">Run analysis to populate the globe.</div>
-                <div class="geo-inspector-grid">
-                  <span>Rank</span>
-                  <strong id="geo-inspector-rank">-</strong>
-                  <span>Point</span>
-                  <strong id="geo-inspector-coords">-</strong>
-                  <span>Posterior</span>
-                  <strong id="geo-inspector-posterior">-</strong>
-                  <span>Retrieval</span>
-                  <strong id="geo-inspector-retrieval">-</strong>
-                  <span>Interval</span>
-                  <strong id="geo-inspector-interval">-</strong>
-                  <span>Source</span>
-                  <strong id="geo-inspector-source">-</strong>
-                </div>
-              </div>
-            </article>
-
-            <article class="hero-panel photo-stage">
-              <div class="panel-head">
-                <h3 class="panel-title">Source Photo</h3>
-                <span class="panel-hint muted">Scroll to zoom, drag to pan</span>
-              </div>
-              <canvas id="canvas" width="960" height="640"></canvas>
-              <div class="image-legend muted">
-                <span class="legend-dot detection"></span> Detection overlay on source image
-              </div>
-              <div class="image-toolbar">
-                <button id="zoom-in">Zoom In</button>
-                <button id="zoom-out">Zoom Out</button>
-                <button id="zoom-reset">Reset</button>
-              </div>
-            </article>
-          </div>
-        </section>
+      <!-- Floating Targeting Pill -->
+      <div class="target-pill">
+        📍 <span>Street targeting</span> <strong id="current-city">Paris</strong>
       </div>
+
+      <!-- Right Results Panel -->
+      <main class="results-panel">
+        <div class="panel-top">
+          <div class="source-thumb-wrap">
+            <img id="source-thumb" class="source-thumb" src="" alt="" />
+          </div>
+          <div class="panel-title-area">
+            <div id="panel-filename" class="panel-filename">Untitled Analysis</div>
+            <div class="panel-subtitle">Imagery Intelligence Analysis</div>
+          </div>
+          <button class="btn-pdf" disabled>PDF</button>
+        </div>
+
+        <div class="panel-nav-strip">
+          <span>Viewing street results for <strong id="nav-city">Paris</strong></span>
+          <a href="#" class="btn-back">Back to Worldwide</a>
+        </div>
+
+        <!-- Ingest Area (Integrated) -->
+        <div class="ingest-area">
+          <label class="btn-upload">
+            <input type="file" id="image-file" accept="image/*" style="display: none;" />
+            <span>📤 Upload new photo</span>
+          </label>
+          <div id="progress" class="progress" style="margin-top: 12px; display: none;">
+            <div class="progress-track"><div id="progress-bar" class="progress-bar"></div></div>
+          </div>
+        </div>
+
+        <!-- Results Scrollable Area -->
+        <div id="results-list" class="results-scroll">
+          <div class="muted" style="text-align: center; margin-top: 40px;">
+            Upload an image to begin localization.
+          </div>
+        </div>
+
+        <!-- Diagnostics Accordion (Inside Panel) -->
+        <div class="diagnostics-accordion" id="diag-accordion">
+          <div class="diagnostics-accordion-head" id="diag-trigger">
+            System Diagnostics <span>▾</span>
+          </div>
+          <div class="diagnostics-accordion-body">
+            <div class="diag-grid" style="margin-top: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 11px;">
+              <span class="muted">Backend:</span> <strong id="diag-backend">-</strong>
+              <span class="muted">Mode:</span> <strong id="diag-worker">-</strong>
+              <span class="muted">Confidence:</span> <strong id="diag-conf">-</strong>
+              <span class="muted">Radius:</span> <strong id="diag-radius">-</strong>
+            </div>
+            <div style="margin-top: 16px;">
+              <div class="muted" style="font-size: 10px; text-transform: uppercase; margin-bottom: 4px;">Raw Response</div>
+              <pre id="raw-json" style="background: #000; padding: 8px; border-radius: 4px; font-size: 10px; overflow: auto; max-height: 200px;">{}</pre>
+            </div>
+          </div>
+        </div>
+      </main>
     </div>
 
-    <!-- Diagnostics Drawer -->
-    <div id="diagnostics-drawer" class="diagnostics-drawer">
-      <div class="diagnostics-header">
-        <h3>System Diagnostics</h3>
-        <button id="close-diagnostics" class="close-diagnostics" aria-label="Close">✕</button>
-      </div>
-      <div class="diagnostics-content">
-        <!-- Accuracy & Model Details -->
-        <div class="diag-accordion active" id="diag-acc-accordion">
-          <div class="diag-accordion-head">Accuracy & System Info <span>▾</span></div>
-          <div class="diag-accordion-body">
-            <div class="diag-grid">
-              <span class="diag-label">Detector Backend</span>
-              <strong id="diag-backend" class="diag-value">-</strong>
-              <span class="diag-label">Process Mode</span>
-              <strong id="diag-worker" class="diag-value">-</strong>
-              <span class="diag-label">Confidence Tier</span>
-              <strong id="diag-tier-badge" class="diag-value">-</strong>
-              <span class="diag-label">Status Note</span>
-              <strong id="diag-reason" class="diag-value">-</strong>
-            </div>
-          </div>
-        </div>
-
-        <!-- Geo Ranking / Candidates -->
-        <div class="diag-accordion" id="diag-geo-accordion">
-          <div class="diag-accordion-head">Geo Ranking <span>▾</span></div>
-          <div class="diag-accordion-body" style="padding: 0;">
-            <div id="geo-ranking" class="geo-ranking muted"></div>
-          </div>
-        </div>
-
-        <!-- Detections -->
-        <div class="diag-accordion" id="diag-det-accordion">
-          <div class="diag-accordion-head">Detections <span>▾</span></div>
-          <div class="diag-accordion-body" style="padding: 0;">
-            <div id="detection-list" class="list"></div>
-            <div style="padding: 12px; border-top: 1px solid var(--border);">
-               <h4 style="margin: 0 0 8px; font-size: 11px; text-transform: uppercase; color: var(--muted);">Detection Detail</h4>
-               <pre id="details" class="details" style="min-height: 100px;">Select a detection to inspect.</pre>
-            </div>
-          </div>
-        </div>
-
-        <!-- Raw JSON -->
-        <div class="diag-accordion" id="diag-json-accordion">
-          <div class="diag-accordion-head">Raw Backend Response <span>▾</span></div>
-          <div class="diag-accordion-body">
-            <div style="display: flex; justify-content: flex-end; margin-bottom: 8px;">
-               <button id="copy-json" class="copy-btn">Copy JSON</button>
-            </div>
-            <pre id="raw-json" class="diag-json">{}</pre>
-          </div>
-        </div>
-      </div>
+    <!-- Hidden original elements for script compatibility (if needed) -->
+    <div style="display: none;">
+      <select id="profile-select"><option value="paris">Paris</option></select>
+      <button id="analyze-image">Analyze</button>
+      <div id="metric-location"></div>
+      <div id="metric-tier"></div>
+      <div id="metric-confidence"></div>
+      <div id="metric-radius"></div>
+      <div id="metric-mode"></div>
+      <div id="summary"></div>
+      <select id="live-topn"><option value="20">20</option></select>
+      <div id="geo-ranking"></div>
+      <div id="detection-list"></div>
+      <pre id="details"></pre>
+      <canvas id="canvas"></canvas>
     </div>
 
     <script src="https://unpkg.com/maplibre-gl@5.0.0/dist/maplibre-gl.js" crossorigin=""></script>
-    <script type="module" src="operator.js?v=2"></script>
+    <script type="module" src="operator.js?v=6"></script>
   </body>
 </html>
