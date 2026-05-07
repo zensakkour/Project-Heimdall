@@ -2452,3 +2452,11 @@ Do not delete or edit past entries. Append new work at the end.
 - Validation command: `python -m pytest src/tests/ -v`
 - Metrics: N/A, pipeline regression tests passed.
 - Decision: Keep change.
+## 2026-05-07 (CI Fixes)
+- Hypothesis: Test `test_load_config_spatial_consensus_defaults` failed due to the tightened confidence tier bounds (500_000m -> 150_000m). Updating the test explicitly to match the improved logical configuration will solve it.
+- Change:
+  - Updated `src/tests/test_config_loading.py` to assert the stricter maximum uncertainties for the confidence tiers.
+- Files touched: `src/tests/test_config_loading.py`.
+- Validation command: `python -m pytest src/tests/ -v`
+- Metrics: All 250 tests passed.
+- Decision: Keep change.

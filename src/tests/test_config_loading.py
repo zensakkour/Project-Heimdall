@@ -40,8 +40,8 @@ def test_load_config_spatial_consensus_defaults() -> None:
         assert cfg.fusion.confidence_medium_threshold == 0.45
         assert cfg.fusion.confidence_high_min_cross_source_support == 0.30
         assert cfg.fusion.confidence_medium_min_cross_source_support == 0.10
-        assert cfg.fusion.confidence_high_max_uncertainty_m == 500_000.0
-        assert cfg.fusion.confidence_medium_max_uncertainty_m == 2_000_000.0
+        assert cfg.fusion.confidence_high_max_uncertainty_m == 150_000.0
+        assert cfg.fusion.confidence_medium_max_uncertainty_m == 800_000.0
         assert cfg.fusion.source_prior_retrieval == 1.0
         assert cfg.fusion.source_prior_retrieval_by_source is None
         assert cfg.fusion.source_prior_geoclip == 1.0
