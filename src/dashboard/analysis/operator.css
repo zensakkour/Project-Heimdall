@@ -788,3 +788,55 @@ html, body {
 }
 
 /* Redefine .analysis-panel to fit inside columns if needed, or remove it */
+
+
+.maplibregl-popup-content {
+    background: transparent !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+}
+
+.maplibregl-popup-tip {
+    border-top-color: var(--text-primary) !important;
+}
+
+/* Additional UI Polish */
+.btn-card-action:hover {
+    background: rgba(16, 185, 129, 0.15) !important;
+    border-color: #10b981 !important;
+    color: #10b981 !important;
+}
+
+.map-bg {
+    filter: saturate(0.8) contrast(1.1);
+}
+
+.session-timeline {
+    padding-bottom: 12px;
+}
+.timeline-item {
+    transition: background 0.2s ease;
+    border-radius: 4px;
+    padding: 6px !important;
+}
+.timeline-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.clues-list::-webkit-scrollbar,
+.session-timeline::-webkit-scrollbar,
+.results-scroll::-webkit-scrollbar {
+    width: 6px;
+}
+.clues-list::-webkit-scrollbar-thumb,
+.session-timeline::-webkit-scrollbar-thumb,
+.results-scroll::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+}
+
+#operator-note-input:focus {
+    outline: none;
+    border-color: #10b981;
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+}

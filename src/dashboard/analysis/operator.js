@@ -284,10 +284,7 @@ function renderLiveMap(result) {
   const features = candidates.slice(0, topLimit).map((item, idx) => ({
     type: "Feature",
     geometry: { type: "Point", coordinates: [item.display_lon, item.display_lat] },
-    properties: { 
-      rank: idx + 1,
-      index: idx 
-    }
+    properties: { rank: idx + 1, index: idx, lat: item.display_lat, lon: item.display_lon }
   }));
 
   const ringRadius = fusion.uncertainty_radius_m || (fusion.ellipse?.major_axis_m ? fusion.ellipse.major_axis_m * 0.6 : null) || result.result?.geo?.uncertainty_m;
@@ -305,14 +302,16 @@ function renderLiveMap(result) {
     });
 
     if (candidates.length > 0) {
-      const top = candidates[0].candidate;
-      liveMap.easeTo({ 
-        center: [top.longitude, top.latitude], 
-        zoom: 15, 
-        pitch: 0, 
-        padding: getMapPadding(),
-        duration: 800 
-      });
+      const top = candidates[0];
+      if (top.display_lat !== undefined && top.display_lon !== undefined) {
+         liveMap.easeTo({
+           center: [top.display_lon, top.display_lat],
+           zoom: 15,
+           pitch: 0,
+           padding: getMapPadding(),
+           duration: 800
+         });
+      }
     }
   });
 }
@@ -331,9 +330,7 @@ function renderSummary(result) {
   // Radius: prefer non-zero fusion radius, fallback to geo uncertainty
   let radius = "-";
   if (fusion.radius_km !== undefined && fusion.radius_km > 0) {
-    radius = `${(fusion.radius_km * 1000).toFixed(1)}m`;
-  }m`;
-  }
+    radius = `${(fusion.radius_km * 1000).toFixed(1)}
   setMetric("diag-radius", radius);
   
   // Model Status: Check safe_demo or backend name

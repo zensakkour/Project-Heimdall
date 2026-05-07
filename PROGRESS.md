@@ -2440,3 +2440,15 @@ Do not delete or edit past entries. Append new work at the end.
 - Metrics (before -> after): Not an ML change.
 - Artifacts: none
 - Decision: Keep change. Meets Heimdall Operator Mode requirements.
+## 2026-05-07 (Follow up)
+- Hypothesis: Improving map interactivity (Mapbox/MapLibre popups, pointer cursors, center bounding) and tightening the logic around confidence bands will produce a more professional, "geoguessr-style" UI that meets the polished requirements of a visual intelligence dashboard.
+- Change:
+  - Enhanced `operator.js` to draw maplibregl.Popup elements over candidate pins upon click, displaying target coordinate info.
+  - Adjusted map centering and zooming (`easeTo`) so the viewport dynamically frames selected components.
+  - Reduced `confidence_high_max_uncertainty_m` (500_000m -> 150_000m) and `confidence_medium_max_uncertainty_m` (2_000_000m -> 800_000m) in `src/core/logic/config.py` to make the prediction of geolocation accuracy stricter and more reliable.
+  - Increased `spatial_consensus_weight` floor in `src/core/logic/fusion.py` to gently improve candidate cluster reward calculations.
+  - Applied CSS polishes to the dashboard scrolls, input focuses, and timelines.
+- Files touched: `src/core/logic/config.py`, `src/core/logic/fusion.py`, `src/dashboard/analysis/operator.js`, `src/dashboard/analysis/operator.css`.
+- Validation command: `python -m pytest src/tests/ -v`
+- Metrics: N/A, pipeline regression tests passed.
+- Decision: Keep change.
