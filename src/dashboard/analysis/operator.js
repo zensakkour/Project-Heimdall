@@ -204,8 +204,8 @@ function renderCandidateList(result) {
   if (!container) return;
   container.replaceChildren();
 
-  const fusion = result?.result?.fusion;
-  const candidates = Array.isArray(fusion?.candidates) ? fusion.candidates : [];
+  const fusion = result?.fused_estimate;
+  const candidates = Array.isArray(result?.candidates) ? result.candidates : [];
 
   if (candidates.length === 0) {
     container.innerHTML = '<div class="empty-state">No candidates found.</div>';
@@ -217,9 +217,9 @@ function renderCandidateList(result) {
 
   slice.forEach((item, idx) => {
     const rank = idx + 1;
-    const cand = item.candidate || {};
-    const lat = cand.latitude;
-    const lon = cand.longitude;
+    const cand = item || {};
+    const lat = cand.display_lat;
+    const lon = cand.display_lon;
     const card = document.createElement("div");
     card.className = "candidate-card";
     card.dataset.lat = lat;
@@ -243,6 +243,10 @@ function renderCandidateList(result) {
       <div class="card-coords-row">
         <div class="card-coords">${coordString}</div>
         <button class="btn-icon-small copy-coords" title="Copy Coordinates">COPY</button>
+      </div>
+      <div style="display: flex; gap: 8px; margin-top: 8px;" class="card-actions-wrapper">
+       <button class="btn-card-action" onclick="document.getElementById('btn-confirm-cand').click();">CONFIRM</button>
+       <button class="btn-card-action" onclick="document.getElementById('btn-reject-cand').click();">REJECT</button>
       </div>
       <button class="btn-card-action open-maps">Open in Google Maps</button>
       <span class="copied-hint">Copied</span>
@@ -272,14 +276,14 @@ function renderCandidateList(result) {
 
 function renderLiveMap(result) {
   ensureLiveMap();
-  const fusion = result?.result?.fusion;
-  const candidates = Array.isArray(fusion?.candidates) ? fusion.candidates : [];
+  const fusion = result?.fused_estimate;
+  const candidates = Array.isArray(result?.candidates) ? result.candidates : [];
   
   if (!fusion || candidates.length === 0) return;
 
   const features = candidates.slice(0, topLimit).map((item, idx) => ({
     type: "Feature",
-    geometry: { type: "Point", coordinates: [item.candidate.longitude, item.candidate.latitude] },
+    geometry: { type: "Point", coordinates: [item.display_lon, item.display_lat] },
     properties: { 
       rank: idx + 1,
       index: idx 
@@ -287,9 +291,9 @@ function renderLiveMap(result) {
   }));
 
   const ringRadius = fusion.uncertainty_radius_m || (fusion.ellipse?.major_axis_m ? fusion.ellipse.major_axis_m * 0.6 : null) || result.result?.geo?.uncertainty_m;
-  const ringFeature = (fusion.mean_latitude && fusion.mean_longitude && ringRadius) ? {
+  const ringFeature = (fusion.display_lat && fusion.display_lon && ringRadius) ? {
     type: "Feature",
-    geometry: { type: "Polygon", coordinates: [circlePolygon(fusion.mean_latitude, fusion.mean_longitude, ringRadius)] }
+    geometry: { type: "Polygon", coordinates: [circlePolygon(fusion.display_lat, fusion.display_lon, ringRadius)] }
   } : null;
 
   liveMapReady.then(() => {
@@ -297,7 +301,7 @@ function renderLiveMap(result) {
     liveMap.getSource("ring").setData({ type: "FeatureCollection", features: ringFeature ? [ringFeature] : [] });
     liveMap.getSource("mean").setData({
       type: "FeatureCollection",
-      features: [{ type: "Feature", geometry: { type: "Point", coordinates: [fusion.mean_longitude, fusion.mean_latitude] } }]
+      features: [{ type: "Feature", geometry: { type: "Point", coordinates: [fusion.display_lon, fusion.display_lat] } }]
     });
 
     if (candidates.length > 0) {
@@ -315,26 +319,25 @@ function renderLiveMap(result) {
 
 function renderSummary(result) {
   console.log("LOG: Rendering Summary", result);
-  const res = result.result || {};
-  const fusion = res.fusion || {};
-  const geo = res.geo || {};
+  const res = result || {};
+  const fusion = result.fused_estimate || {};
+  const geo = result.fused_estimate || {};
 
   // Diagnostics
-  setMetric("diag-backend", res.backend || "-");
+  setMetric("diag-backend", result.source?.filename || "-");
   setMetric("diag-worker", result.runtime?.worker_mode || "-");
-  setMetric("diag-tier", geo.confidence_tier || "-");
+  setMetric("diag-tier", geo.tier || "-");
   
   // Radius: prefer non-zero fusion radius, fallback to geo uncertainty
   let radius = "-";
-  if (fusion.uncertainty_radius_m !== undefined && fusion.uncertainty_radius_m > 0) {
-    radius = `${fusion.uncertainty_radius_m.toFixed(1)}m`;
-  } else if (geo.uncertainty_m !== undefined) {
-    radius = `${geo.uncertainty_m}m`;
+  if (fusion.radius_km !== undefined && fusion.radius_km > 0) {
+    radius = `${(fusion.radius_km * 1000).toFixed(1)}m`;
+  }m`;
   }
   setMetric("diag-radius", radius);
   
   // Model Status: Check safe_demo or backend name
-  const isDemo = result.safe_demo || res.backend === "demo";
+  const isDemo = false;
   const modelStatus = isDemo ? "DEMO FALLBACK" : "REAL MODEL";
   const modelStatusEl = byId("diag-model-status");
   if (modelStatusEl) {
@@ -346,6 +349,8 @@ function renderSummary(result) {
 
   renderCandidateList(result);
   renderLiveMap(result);
+  renderTimeline(result);
+  renderClues(result);
 }
 
 function showAnalysisAlert(message) {
@@ -463,7 +468,18 @@ function setupAnalysis() {
       btn.disabled = true;
       
       const startTime = performance.now();
-      const result = await postForm(`/analyze/image?profile=${profile}`, form);
+
+      const devMode = byId("dev-mode-toggle")?.checked ? "1" : "";
+      form.append("profile", profile);
+      if (devMode) form.append("dev_mode", devMode);
+      const result = await postForm(`/api/operator/analyze`, form);
+
+      // Handle the case where the server returns an error JSON with a session attached
+      if (result.error && result.session) {
+          lastResult = result.session;
+          throw new Error(result.error);
+      }
+
       const duration = (performance.now() - startTime) / 1000;
       
       console.log(`LOG: Pipeline finished in ${duration.toFixed(2)}s`);
@@ -481,7 +497,13 @@ function setupAnalysis() {
       const msg = normalizeError(err);
       console.error("LOG: Pipeline error", err);
       clearAnalysisResults();
-      showAnalysisAlert(`Analysis failed. Output is not trustworthy.\n${msg}`);
+
+      if (lastResult) {
+          renderSummary(lastResult);
+      }
+      showAnalysisAlert(`Analysis failed.
+${msg}`);
+
     } finally {
       if (progress) progress.style.display = "none";
       btn.disabled = false;
@@ -605,3 +627,105 @@ function init() {
 }
 
 window.addEventListener("load", init);
+
+
+function renderTimeline(session) {
+  const timelineEl = byId("session-timeline");
+  if (!timelineEl) return;
+  timelineEl.innerHTML = "";
+
+  if (!session || !session.timeline) return;
+  session.timeline.forEach(event => {
+     const div = document.createElement("div");
+     div.className = `timeline-item ${event.level}`;
+     div.innerHTML = `
+        <div class="timeline-time">${event.timestamp.split(" ").slice(1).join(" ")}</div>
+        <div class="timeline-msg">${event.message}</div>
+     `;
+     timelineEl.appendChild(div);
+  });
+}
+
+function renderClues(session) {
+  const cluesEl = byId("clues-list");
+  if (!cluesEl) return;
+  cluesEl.innerHTML = "";
+
+  if (!session || !session.clues || session.clues.length === 0) {
+      cluesEl.innerHTML = '<div class="empty-state">No clues extracted.</div>';
+      return;
+  }
+
+  session.clues.forEach(clue => {
+      const div = document.createElement("div");
+      div.className = "clue-chip";
+      div.innerHTML = `<strong>${clue.name}</strong> <span>(${(clue.score*100).toFixed(0)}%)</span> - ${clue.description}`;
+      cluesEl.appendChild(div);
+  });
+}
+
+function setupOperatorActions() {
+    const confirmBtn = byId("btn-confirm-cand");
+    const rejectBtn = byId("btn-reject-cand");
+    const noteInput = byId("operator-note-input");
+    const saveNoteBtn = byId("btn-save-note");
+    const exportBtn = byId("btn-export-session");
+
+    if (confirmBtn) {
+        confirmBtn.addEventListener("click", () => {
+             if (selectedIndex >= 0) {
+                 postForm("/api/operator/confirm", JSON.stringify({rank: selectedIndex + 1, action: "confirm"}));
+             }
+        });
+    }
+    if (rejectBtn) {
+        rejectBtn.addEventListener("click", () => {
+             if (selectedIndex >= 0) {
+                 postForm("/api/operator/confirm", JSON.stringify({rank: selectedIndex + 1, action: "reject"}));
+             }
+        });
+    }
+    if (saveNoteBtn && noteInput) {
+        saveNoteBtn.addEventListener("click", () => {
+             postForm("/api/operator/note", JSON.stringify({note: noteInput.value}));
+        });
+    }
+
+    if (exportBtn) {
+        exportBtn.addEventListener("click", () => {
+             fetch("/api/operator/export.json").then(r=>r.json()).then(data => {
+                  const blob = new Blob([JSON.stringify(data, null, 2)], {type: "application/json"});
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = "session_export.json";
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                  URL.revokeObjectURL(url);
+             });
+        });
+    }
+
+    // allow manual map pin
+    if (liveMap) {
+        liveMap.on('click', (e) => {
+             const manualPinMode = byId("manual-pin-mode")?.checked;
+             if (manualPinMode) {
+                  const lat = e.lngLat.lat;
+                  const lon = e.lngLat.lng;
+                  postForm("/api/operator/pin", JSON.stringify({lat, lon, label: "Operator Pin"})).then(() => {
+                      // refresh UI
+                      fetch("/api/operator/session").then(r=>r.json()).then(renderSummary);
+                  });
+             }
+        });
+    }
+}
+
+// override init to call setupOperatorActions
+const oldInit = init;
+init = function() {
+   oldInit();
+   setupOperatorActions();
+};

@@ -12,6 +12,19 @@
     />
     <link rel="stylesheet" href="../theme.css?v=7" />
     <link rel="stylesheet" href="operator.css?v=8" />
+
+<style>
+.session-timeline { font-size: 11px; color: var(--text-secondary); max-height: 150px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+.timeline-item { display: flex; gap: 8px; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+.timeline-time { font-family: monospace; color: #888; }
+.timeline-item.error .timeline-msg { color: #ef4444; }
+.timeline-item.warning .timeline-msg { color: #ffc864; }
+.timeline-item.success .timeline-msg { color: #10b981; }
+.clues-list { display: flex; flex-direction: column; gap: 4px; max-height: 150px; overflow-y: auto; }
+.clue-chip { background: rgba(255,255,255,0.05); padding: 6px 10px; border-radius: 6px; font-size: 11px; color: #ccc; border: 1px solid rgba(255,255,255,0.1); }
+.clue-chip strong { color: #fff; }
+</style>
+
   </head>
   <body>
     <div class="app-shell">
@@ -33,10 +46,11 @@
           <img src="../assets/logo-mark.png" alt="Heimdall" />
           <span class="brand-text">Project Heimdall — Paris</span>
         </div>
+      <button id="btn-export-session" class="primary-btn" style="height: 28px; font-size: 11px; padding: 0 12px; margin-right: 20px;">Export Report</button>
       </header>
 
       <!-- Right Analysis Panel -->
-      <main class="analysis-panel">
+      <aside class="left-panel">
         <!-- Preview / Ingest Header -->
         <section class="panel-section preview-header" id="panel-header">
            <div id="ingest-block" class="sci-fi-ingest">
@@ -78,14 +92,36 @@
                 </select>
                 <button id="geolocate-image" class="primary-btn">Geolocate Image</button>
               </div>
+
+              <div class="profile-row" style="margin-top: 10px;">
+                <label style="color: var(--text-secondary); font-size: 11px; display: flex; align-items: center; gap: 4px;">
+                    <input type="checkbox" id="dev-mode-toggle" /> Dev Mode (Mock UI Test)
+                </label>
+              </div>
+
             </div>
         </section>
 
-        <!-- Progress Overlay (Functional) -->
-        <div id="progress" class="progress-wrap" style="display: none;">
-          <div class="progress-track"><div id="progress-bar" class="progress-bar"></div></div>
+
           <div id="progress-text" class="progress-label">Geolocating...</div>
         </div>
+
+
+          <!-- Progress Overlay (Functional) -->
+          <div id="progress" class="progress-wrap" style="display: none; padding: 20px;">
+            <div class="progress-track"><div id="progress-bar" class="progress-bar"></div></div>
+            <div id="progress-text" class="progress-label">Processing...</div>
+          </div>
+
+          <!-- Session Timeline -->
+          <section class="panel-section timeline-section" style="margin-top: 12px; border-top: 1px solid var(--glass-border); padding-top: 12px;">
+              <div class="section-title" style="padding: 0 20px;">Session Timeline</div>
+              <div id="session-timeline" class="session-timeline" style="padding: 0 20px;"></div>
+          </section>
+        </aside>
+
+        <!-- Right Analysis Panel -->
+        <aside class="right-panel">
 
         <!-- Result Status Section (Hidden, legacy compatibility) -->
         <section id="result-status" style="display: none;">
@@ -111,6 +147,25 @@
             <div class="empty-state">Upload imagery to begin.</div>
           </div>
         </section>
+
+        <!-- Clues List -->
+        <section class="panel-section clues-section" style="margin-top: 12px;">
+            <div class="section-title">Extracted Intelligence</div>
+            <div id="clues-list" class="clues-list"></div>
+        </section>
+
+
+
+        <!-- Operator Notes -->
+        <section class="panel-section notes-section" style="margin-top: 12px; border-top: 1px solid var(--glass-border); padding-top: 12px;">
+             <div class="section-title">Operator Notes</div>
+             <textarea id="operator-note-input" rows="3" style="width: 100%; background: rgba(0,0,0,0.4); border: 1px solid var(--glass-border); color: #fff; padding: 8px; border-radius: 8px; font-size: 12px; resize: vertical;"></textarea>
+             <div style="display: flex; justify-content: space-between; margin-top: 8px; align-items: center;">
+                 <label style="color: var(--text-secondary); font-size: 11px; display: flex; align-items: center; gap: 4px;"><input type="checkbox" id="manual-pin-mode" /> Enable Manual Map Pin</label>
+                 <button id="btn-save-note" class="primary-btn" style="height: 28px; font-size: 11px; padding: 0 12px;">Save Note</button>
+             </div>
+        </section>
+
 
         <!-- Diagnostics (Hidden/Collapsible) -->
         <footer class="panel-footer">
@@ -141,7 +196,7 @@
              </div>
           </div>
         </footer>
-      </main>
+      </aside>
     </div>
 
     <!-- Lightbox Modal (Imagery) -->
@@ -181,5 +236,9 @@
 
     <script src="https://unpkg.com/maplibre-gl@5.0.0/dist/maplibre-gl.js" crossorigin=""></script>
     <script type="module" src="operator.js?v=8"></script>
+
+        <button id="btn-confirm-cand" style="display:none;"></button>
+        <button id="btn-reject-cand" style="display:none;"></button>
+
   </body>
 </html>

@@ -77,23 +77,6 @@ html, body {
 }
 
 /* --- Right Analysis Panel (Layer 2) --- */
-.analysis-panel {
-  position: absolute;
-  top: 20px;
-  right: 20px;
-  bottom: 20px;
-  width: var(--panel-w);
-  z-index: 10;
-  background: var(--glass-bg);
-  backdrop-filter: blur(24px);
-  border: 1px solid var(--glass-border);
-  border-radius: 24px;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
-}
-
 .panel-section {
   padding: 20px;
   border-bottom: 1px solid var(--glass-border);
@@ -753,3 +736,55 @@ html, body {
   margin-top: 60px;
   color: #444;
 }
+
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 350px 1fr 380px;
+  grid-template-rows: 60px 1fr;
+  grid-template-areas:
+    "header header header"
+    "left   map    right";
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.operator-header {
+  grid-area: header;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  z-index: 10;
+}
+
+.left-panel {
+  grid-area: left;
+  background: var(--glass-bg);
+  border-right: 1px solid var(--glass-border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  z-index: 5;
+}
+
+.map-bg {
+  grid-area: map;
+  position: relative;
+  z-index: 1;
+}
+
+.right-panel {
+  grid-area: right;
+  background: var(--glass-bg);
+  border-left: 1px solid var(--glass-border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  z-index: 5;
+}
+
+/* Redefine .analysis-panel to fit inside columns if needed, or remove it */

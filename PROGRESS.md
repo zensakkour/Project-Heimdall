@@ -2427,3 +2427,16 @@ Do not delete or edit past entries. Append new work at the end.
   - `rg -n --hidden -S "branch-specific|do not copy another branch's|do not reuse another branch's|destination branch" AGENT.md CONTRIBUTING.md scripts/new-branch.ps1`
 - Artifacts: None.
 - Decision: Keep. `plan.md` should remain a branch-local contract and should not spread unchanged across branches.
+## 2026-05-07
+- Hypothesis: Adding dedicated endpoints for operator workflow and tracking the timeline will meet the product requirement for a single-operator visual investigation console.
+- Change:
+  - Added `/api/operator/analyze`, `/api/operator/session`, `/api/operator/reset`, `/api/operator/pin`, `/api/operator/note`, `/api/operator/confirm`, and `/api/operator/export.json` routes to `ui_server.py`.
+  - Migrated `index.html` structure to a three-column layout (left/right panels + center map).
+  - Modified `operator.js` to hit `/api/operator/analyze`, render the session timeline and clues directly, and interact with the session endpoints.
+  - Added explicit exception catching in the analyze route to log pipeline errors and emit 500 status with session object, removing silent failures.
+  - Added a UI "Dev Mode" checkbox to skip ML pipeline and mock candidates for faster dashboard debugging.
+- Files touched: `src/tools/ui_server.py`, `src/dashboard/analysis/index.html`, `src/dashboard/analysis/operator.js`, `src/dashboard/analysis/operator.css`, `src/dashboard/analysis/shared.js`.
+- Validation command: `python -m pytest src/tests/ -v`
+- Metrics (before -> after): Not an ML change.
+- Artifacts: none
+- Decision: Keep change. Meets Heimdall Operator Mode requirements.
