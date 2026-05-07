@@ -14,8 +14,8 @@
 }
 
 html, body {
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
   margin: 0;
   padding: 0;
   overflow: hidden;
@@ -32,33 +32,33 @@ html, body {
 
 /* --- Map Background (Layer 1) --- */
 .map-bg {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
+
+
+
+  width: 100%;
+  height: 100%;
   z-index: 0;
   background: #080c10; /* Dark slate fallback */
 }
 
 /* --- Header Area (Layer 2) --- */
 .operator-header {
-  position: absolute;
-  top: 20px;
-  left: 20px;
+
+
+
   z-index: 10;
-  pointer-events: none;
+
 }
 
 .brand {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 8px 16px 8px 8px;
+  padding: 8px 16px 8px 20px;
   background: var(--glass-bg);
   backdrop-filter: blur(12px);
-  border: 1px solid var(--glass-border);
-  border-radius: 999px;
+  border: none;
+  border-radius: 0;
   pointer-events: auto;
 }
 
@@ -112,6 +112,7 @@ html, body {
   padding: 16px;
   border-radius: 16px;
   cursor: pointer;
+  pointer-events: auto;
   transition: border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), background 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -125,7 +126,7 @@ html, body {
   height: 64px;
   border-radius: 8px;
   overflow: hidden;
-  border: 1px solid var(--glass-border);
+  border: none;
   flex-shrink: 0;
 }
 
@@ -190,7 +191,7 @@ html, body {
 .toggle-group {
   display: flex;
   background: rgba(0, 0, 0, 0.3);
-  border: 1px solid var(--glass-border);
+  border: none;
   border-radius: 8px;
   padding: 2px;
 }
@@ -228,7 +229,7 @@ html, body {
   flex: 1;
   min-height: 42px;
   background: rgba(0,0,0,0.4);
-  border: 1px solid var(--glass-border);
+  border: none;
   color: var(--text-primary);
   border-radius: 10px;
   padding: 0 10px;
@@ -258,7 +259,7 @@ html, body {
 .progress-track {
   height: 6px;
   background: rgba(0,0,0,0.4);
-  border-radius: 999px;
+  border-radius: 0;
   overflow: hidden;
 }
 
@@ -321,7 +322,7 @@ html, body {
 .candidate-card {
   padding: 16px;
   background: rgba(255,255,255,0.03);
-  border: 1px solid var(--glass-border);
+  border: none;
   border-radius: 16px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
   cursor: pointer;
@@ -376,16 +377,16 @@ html, body {
 
 /* --- Map Controls (Bottom Left) --- */
 .map-controls {
-  position: absolute;
+
   bottom: 24px;
-  left: 20px;
+
   z-index: 10;
   display: flex;
   flex-direction: row; /* Horizontal layout */
   align-items: center;
   gap: 0; /* No gap for unified bar */
   background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
+  border: none;
   border-radius: 8px;
   padding: 2px 4px;
   backdrop-filter: blur(8px);
@@ -455,7 +456,7 @@ html, body {
   overflow: hidden;
   position: relative;
   background: #000;
-  border: 1px solid var(--glass-border);
+  border: none;
   flex-shrink: 0;
 }
 
@@ -540,9 +541,9 @@ html, body {
 }
 
 .copy-status {
-  position: absolute;
+
   bottom: -20px;
-  left: 0;
+
   font-size: 10px;
   color: var(--accent);
   text-transform: uppercase;
@@ -574,7 +575,7 @@ html, body {
 }
 
 .lightbox-backdrop {
-  position: absolute;
+
   inset: 0;
   background: rgba(0, 0, 0, 0.85);
   backdrop-filter: blur(12px);
@@ -606,7 +607,7 @@ html, body {
 }
 
 .lightbox-close {
-  position: absolute;
+
   top: -40px;
   right: -40px;
   background: transparent;
@@ -658,7 +659,7 @@ html, body {
   margin-top: 12px;
   height: 32px;
   background: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--glass-border);
+  border: none;
   color: var(--text-primary);
   font-size: 11px;
   font-weight: 600;
@@ -729,7 +730,7 @@ html, body {
   font-size: 10px;
   overflow: auto;
   max-height: 150px;
-  border: 1px solid var(--glass-border);
+  border: none;
   color: var(--text-secondary);
 }
 
@@ -747,8 +748,8 @@ html, body {
   grid-template-areas:
     "header header header"
     "left   map    right";
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
   overflow: hidden;
 }
 
@@ -770,7 +771,7 @@ html, body {
   display: flex;
   flex-direction: column;
   overflow-y: auto;
-  z-index: 5;
+  z-index: 20;
 }
 
 .map-bg {
@@ -786,7 +787,7 @@ html, body {
   display: flex;
   flex-direction: column;
   overflow-y: auto;
-  z-index: 5;
+  z-index: 20;
 }
 
 /* Redefine .analysis-panel to fit inside columns if needed, or remove it */

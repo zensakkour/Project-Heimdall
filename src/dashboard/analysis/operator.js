@@ -140,7 +140,7 @@ function ensureLiveMap() {
         liveMap.resize();
       });
 
-      setTimeout(() => liveMap.resize(), 100);
+      setTimeout(() => liveMap.resize(), 500);
       resolve();
     });
   });
