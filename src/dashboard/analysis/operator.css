@@ -112,7 +112,7 @@ html, body {
   padding: 16px;
   border-radius: 16px;
   cursor: pointer;
-  transition: border-color 0.2s, background 0.2s;
+  transition: border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), background 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .ingest-trigger:hover {
@@ -206,7 +206,7 @@ html, body {
   cursor: pointer;
   min-width: auto;
   height: auto;
-  transition: all 0.2s;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .toggle-group button.active {
@@ -242,7 +242,7 @@ html, body {
   padding: 0 16px;
   border-radius: 10px;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: background 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .primary-btn:hover {
@@ -323,13 +323,15 @@ html, body {
   background: rgba(255,255,255,0.03);
   border: 1px solid var(--glass-border);
   border-radius: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .candidate-card:hover {
   background: rgba(255,255,255,0.06);
   border-color: rgba(255,255,255,0.15);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
 }
 
 .candidate-card.active {
@@ -402,7 +404,7 @@ html, body {
   font-weight: 600;
   cursor: pointer;
   border-radius: 4px;
-  transition: all 0.2s;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   padding: 0 8px;
 }
 
@@ -425,7 +427,7 @@ html, body {
   display: block;
   width: 14px;
   height: 14px;
-  transition: transform 0.1s ease-out;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .control-sep {
@@ -484,7 +486,7 @@ html, body {
   flex: 0 0 auto !important;
   cursor: pointer !important;
   opacity: 0.9 !important;
-  transition: all 0.2s !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
   z-index: 5 !important;
 }
 
@@ -546,7 +548,7 @@ html, body {
   text-transform: uppercase;
   font-weight: 700;
   opacity: 0;
-  transition: opacity 0.3s;
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .copy-status.visible {
@@ -815,7 +817,7 @@ html, body {
     padding-bottom: 12px;
 }
 .timeline-item {
-    transition: background 0.2s ease;
+    transition: background 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     border-radius: 4px;
     padding: 6px !important;
 }

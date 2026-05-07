@@ -513,10 +513,10 @@ function setupMapControls() {
   byId("map-zoom-out").addEventListener("click", () => liveMap?.zoomOut());
   
   byId("map-reset-paris").addEventListener("click", () => {
-    liveMap?.easeTo({ center: initialCenter, zoom: 11, pitch: 0, bearing: 0, padding: getMapPadding(), duration: 1000 });
+    liveMap?.easeTo({ center: initialCenter, zoom: 11, pitch: 0, bearing: 0, padding: getMapPadding(), duration: 1400 });
   });
   byId("map-reset-globe").addEventListener("click", () => {
-    liveMap?.easeTo({ center: [10, 20], zoom: 1.8, pitch: 0, bearing: 0, padding: getMapPadding(), duration: 1500 });
+    liveMap?.easeTo({ center: [10, 20], zoom: 1.8, pitch: 0, bearing: 0, padding: getMapPadding(), duration: 1800 });
   });
 }
 
