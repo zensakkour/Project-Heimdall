@@ -8,6 +8,7 @@ let topLimit = 3;
 let lastResult = null;
 let selectedIndex = -1;
 let candidateMarkers = [];
+let activeCandidateCoords = [];
 let selectedLightboxDetectionIndex = 0;
 
 const parisCenter = [2.3522, 48.8566];
@@ -20,6 +21,8 @@ const maxCandidateLayers = 10;
 const emptyFeatureCollection = { type: "FeatureCollection", features: [] };
 const mapStyleUrl = "https://tiles.openfreemap.org/styles/dark";
 const globePitchResetZoom = 4;
+const candidateOffsetStartZoom = 9;
+const candidateOffsetFullZoom = 13;
 
 /* --- Map Core --- */
 
@@ -194,6 +197,67 @@ function updatePinScale() {
   });
 }
 
+function candidateOffsetScale() {
+  if (!liveMap) return 0;
+  const zoom = liveMap.getZoom();
+  if (zoom <= candidateOffsetStartZoom) return 0;
+  if (zoom >= candidateOffsetFullZoom) return 1;
+  return (zoom - candidateOffsetStartZoom) / (candidateOffsetFullZoom - candidateOffsetStartZoom);
+}
+
+function candidateDisplayOffset(index) {
+  if (!candidateNeedsDisplayOffset(index)) return [0, 0];
+  const offsets = [
+    [0, 0],
+    [26, 0],
+    [-26, 0],
+    [0, 26],
+    [0, -26],
+    [20, 20],
+    [-20, 20],
+    [20, -20],
+    [-20, -20],
+    [38, 0]
+  ];
+  const [x, y] = offsets[index] || [0, 0];
+  const scale = candidateOffsetScale();
+  return [Math.round(x * scale), Math.round(y * scale)];
+}
+
+function candidateNeedsDisplayOffset(index) {
+  if (!liveMap || candidateOffsetScale() === 0 || index <= 0) return false;
+  const coord = activeCandidateCoords[index];
+  if (!coord) return false;
+
+  const point = liveMap.project([coord.lon, coord.lat]);
+  return activeCandidateCoords.some((other, otherIndex) => {
+    if (!other || otherIndex === index) return false;
+    const otherPoint = liveMap.project([other.lon, other.lat]);
+    const dx = point.x - otherPoint.x;
+    const dy = point.y - otherPoint.y;
+    return Math.hypot(dx, dy) < 36;
+  });
+}
+
+function setCandidateLayerOffset(layerId, property, offset) {
+  if (!liveMap?.getLayer(layerId)) return;
+  liveMap.setPaintProperty(layerId, property, offset);
+}
+
+function updateCandidateLayerOffsets() {
+  if (!liveMap) return;
+  for (let i = 0; i < maxCandidateLayers; i += 1) {
+    const offset = candidateDisplayOffset(i);
+    if (candidateMarkers[i]?.setOffset) {
+      candidateMarkers[i].setOffset(offset);
+    }
+    setCandidateLayerOffset(`candidate-rank-halo-${i}`, "circle-translate", offset);
+    setCandidateLayerOffset(`candidate-rank-dot-${i}`, "circle-translate", offset);
+    setCandidateLayerOffset(`candidate-rank-label-${i}`, "text-translate", offset);
+    setCandidateLayerOffset(`candidate-rank-hit-${i}`, "circle-translate", offset);
+  }
+}
+
 function fusedMapCoord(result) {
   const fusion = result?.fused_estimate || {};
   const lat = Number(fusion.display_lat ?? fusion.lat);
@@ -203,16 +267,16 @@ function fusedMapCoord(result) {
   return { lat, lon };
 }
 
-function operatorMapCoord(item, result) {
-  return fusedMapCoord(result) || numericCandidateCoord(item);
+function operatorMapCoord(item) {
+  return numericCandidateCoord(item);
 }
 
-function renderHtmlCandidateMarkers(candidates, result) {
+function renderHtmlCandidateMarkers(candidates) {
   clearCandidateMarkers();
   if (!liveMap) return;
 
   candidates.slice(0, topLimit).forEach((item, idx) => {
-    const coord = operatorMapCoord(item, result);
+    const coord = operatorMapCoord(item);
     if (!coord) return;
 
     const el = document.createElement("button");
@@ -229,12 +293,13 @@ function renderHtmlCandidateMarkers(candidates, result) {
     const marker = new maplibregl.Marker({
       element: el,
       anchor: "center",
-      offset: candidateScreenOffset(idx)
+      offset: candidateDisplayOffset(idx)
     })
       .setLngLat([coord.lon, coord.lat])
       .addTo(liveMap);
-    candidateMarkers.push(marker);
+    candidateMarkers[idx] = marker;
   });
+
   updatePinScale();
 }
 
@@ -246,20 +311,9 @@ function numericCandidateCoord(item) {
   return { lat, lon };
 }
 
-function candidateScreenOffset(index) {
-  const offsets = [
-    [0, -20],
-    [22, 0],
-    [-22, 0],
-    [0, 22],
-    [18, -18],
-    [-18, -18],
-    [18, 18],
-    [-18, 18],
-    [34, -6],
-    [-34, 6]
-  ];
-  return offsets[index] || [0, 0];
+function candidateScreenOffset() {
+  // Initial offset is zero; zoom-aware separation is applied by updateCandidateLayerOffsets().
+  return [0, 0];
 }
 
 function candidateRankLayerIds() {
@@ -286,7 +340,7 @@ function rankLayerStyle(index, selected = selectedIndex) {
 
 function addCandidateRankLayers() {
   for (let i = 0; i < maxCandidateLayers; i += 1) {
-    const offset = candidateScreenOffset(i);
+    const offset = candidateScreenOffset();
     const style = rankLayerStyle(i);
     const filter = ["==", ["get", "index"], i];
 
@@ -544,11 +598,16 @@ function ensureLiveMap() {
         liveMap.on("mouseleave", `candidate-rank-dot-${i}`, clearPointer);
         liveMap.on("mouseleave", `candidate-rank-hit-${i}`, clearPointer);
       }
-      liveMap.on("zoom", updatePinScale);
+      liveMap.on("zoom", () => {
+        updatePinScale();
+        updateCandidateLayerOffsets();
+      });
+      liveMap.on("move", updateCandidateLayerOffsets);
       liveMap.on("zoomend", () => {
         if (liveMap.getZoom() <= globePitchResetZoom && liveMap.getPitch() !== 0) {
           easeToCentered({ center: liveMap.getCenter(), pitch: 0, duration: 180 });
         }
+        updateCandidateLayerOffsets();
       });
 
       bringCandidateLayersToFront();
@@ -737,11 +796,11 @@ function candidateDisplayLon(item) {
 }
 
 function candidateMapLat(item) {
-  return item?.display_lat ?? candidateLat(item);
+  return candidateLat(item) ?? item?.display_lat;
 }
 
 function candidateMapLon(item) {
-  return item?.display_lon ?? candidateLon(item);
+  return candidateLon(item) ?? item?.display_lon;
 }
 
 function sortedCandidates(result) {
@@ -766,7 +825,7 @@ function renderCandidateList(result) {
   slice.forEach((item, idx) => {
     const rank = idx + 1;
     const cand = item || {};
-    const mapCoord = operatorMapCoord(cand, result);
+    const mapCoord = operatorMapCoord(cand);
     const lat = mapCoord?.lat ?? candidateMapLat(cand);
     const lon = mapCoord?.lon ?? candidateMapLon(cand);
     const card = document.createElement("div");
@@ -871,13 +930,20 @@ function renderLiveMap(result, { resetView = false } = {}) {
 
   const visibleCandidates = candidates.slice(0, topLimit);
   const features = visibleCandidates.flatMap((item, idx) => {
-    const coord = operatorMapCoord(item, result);
+    const coord = operatorMapCoord(item);
     if (!coord) return [];
     return [{
       type: "Feature",
       geometry: { type: "Point", coordinates: [coord.lon, coord.lat] },
       properties: { rank: idx + 1, index: idx, lat: coord.lat, lon: coord.lon }
     }];
+  });
+  activeCandidateCoords = [];
+  features.forEach((feature) => {
+    activeCandidateCoords[feature.properties.index] = {
+      lat: feature.properties.lat,
+      lon: feature.properties.lon
+    };
   });
 
   const ringRadius =
@@ -891,13 +957,11 @@ function renderLiveMap(result, { resetView = false } = {}) {
   } : null;
 
   liveMapReady.then(() => {
-    liveMap.getSource("candidates").setData({ type: "FeatureCollection", features });
-    renderHtmlCandidateMarkers(candidates, result);
+    liveMap.getSource("candidates").setData(emptyFeatureCollection);
+    renderHtmlCandidateMarkers(visibleCandidates);
+    updateCandidateLayerOffsets();
     liveMap.getSource("ring").setData({ type: "FeatureCollection", features: ringFeature ? [ringFeature] : [] });
-    liveMap.getSource("mean").setData({
-      type: "FeatureCollection",
-      features: [{ type: "Feature", geometry: { type: "Point", coordinates: [fusion.display_lon, fusion.display_lat] } }]
-    });
+    liveMap.getSource("mean").setData(emptyFeatureCollection);
     bringCandidateLayersToFront();
     if (resetView) {
       easeToCentered({
@@ -1240,8 +1304,6 @@ function setupToggles() {
 }
 
 function setupDiagnostics() {
-  const trigger = byId("diag-trigger");
-  const body = byId("diag-accordion");
   const copySumBtn = byId("copy-diag-all");
   const copyJsonBtn = byId("copy-json");
   const expandJsonBtn = byId("expand-json");
@@ -1251,8 +1313,6 @@ function setupDiagnostics() {
   const closeJsonBtn = byId("close-json-modal");
   const jsonBackdrop = byId("json-modal-backdrop");
   const copyModalBtn = byId("copy-json-modal");
-
-  if (trigger && body) trigger.addEventListener("click", () => body.classList.toggle("active"));
 
   const flashBtn = (btn, text = "COPIED") => {
     const old = btn.textContent;
@@ -1288,6 +1348,30 @@ function setupDiagnostics() {
   if (jsonBackdrop) jsonBackdrop.addEventListener("click", closeJson);
 }
 
+function setupCollapsiblePanel(triggerId, bodyId) {
+  const trigger = byId(triggerId);
+  const body = byId(bodyId);
+  if (!trigger || !body) return;
+
+  const icon = trigger.querySelector("span");
+  const syncIcon = () => {
+    if (icon) icon.textContent = body.classList.contains("active") ? "v" : ">";
+  };
+
+  trigger.addEventListener("click", () => {
+    body.classList.toggle("active");
+    syncIcon();
+  });
+  syncIcon();
+}
+
+function setupPanelAccordions() {
+  setupCollapsiblePanel("timeline-trigger", "timeline-accordion");
+  setupCollapsiblePanel("clues-trigger", "clues-accordion");
+  setupCollapsiblePanel("notes-trigger", "notes-accordion");
+  setupCollapsiblePanel("diag-trigger", "diag-accordion");
+}
+
 function init() {
   console.log("LOG: Operator UI Initializing");
   ensureLiveMap();
@@ -1297,6 +1381,7 @@ function init() {
   setupMapControls();
   setupKeyboardNav();
   setupDiagnostics();
+  setupPanelAccordions();
   setupToggles();
   setupOperatorActions();
   

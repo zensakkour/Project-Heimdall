@@ -11,7 +11,7 @@
       crossorigin=""
     />
     <link rel="stylesheet" href="../theme.css?v=7" />
-    <link rel="stylesheet" href="operator.css?v=29" />
+    <link rel="stylesheet" href="operator.css?v=30" />
 
 <style>
 .session-timeline { font-size: 11px; color: var(--text-secondary); max-height: 150px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
@@ -108,9 +108,10 @@
                 <button id="geolocate-image" class="primary-btn">Geolocate Image</button>
               </div>
 
-              <div class="profile-row" style="margin-top: 10px;">
-                <label style="color: var(--text-secondary); font-size: 11px; display: flex; align-items: center; gap: 4px;">
-                    <input type="checkbox" id="dev-mode-toggle" /> Dev Mode (Mock UI Test)
+              <div class="profile-row dev-mode-row">
+                <label class="inline-checkbox">
+                    <span>Dev Mode (Mock UI Test)</span>
+                    <input type="checkbox" id="dev-mode-toggle" />
                 </label>
               </div>
 
@@ -126,9 +127,13 @@
           </div>
 
           <!-- Session Timeline -->
-          <section class="panel-section timeline-section" style="margin-top: 12px; border-top: 1px solid var(--glass-border); padding-top: 12px;">
-              <div class="section-title" style="padding: 0 20px;">Session Timeline</div>
-              <div id="session-timeline" class="session-timeline" style="padding: 0 20px;"></div>
+          <section class="panel-section timeline-section collapsible-section">
+              <div id="timeline-trigger" class="panel-toggle">
+                Session Timeline <span>></span>
+              </div>
+              <div id="timeline-accordion" class="panel-collapse">
+                <div id="session-timeline" class="session-timeline"></div>
+              </div>
           </section>
         </aside>
 
@@ -161,20 +166,28 @@
         </section>
 
         <!-- Clues List -->
-        <section class="panel-section clues-section" style="margin-top: 12px;">
-            <div class="section-title">Extracted Intelligence</div>
-            <div id="clues-list" class="clues-list"></div>
+        <section class="panel-section clues-section collapsible-section">
+            <div id="clues-trigger" class="panel-toggle">
+              Extracted Intelligence <span>></span>
+            </div>
+            <div id="clues-accordion" class="panel-collapse">
+              <div id="clues-list" class="clues-list"></div>
+            </div>
         </section>
 
 
 
         <!-- Operator Notes -->
-        <section class="panel-section notes-section" style="margin-top: 12px; border-top: 1px solid var(--glass-border); padding-top: 12px;">
-             <div class="section-title">Operator Notes</div>
-             <textarea id="operator-note-input" rows="3" style="width: 100%; background: rgba(0,0,0,0.4); border: 1px solid var(--glass-border); color: #fff; padding: 8px; border-radius: 8px; font-size: 12px; resize: vertical;"></textarea>
-             <div style="display: flex; justify-content: space-between; margin-top: 8px; align-items: center;">
-                 <label style="color: var(--text-secondary); font-size: 11px; display: flex; align-items: center; gap: 4px;"><input type="checkbox" id="manual-pin-mode" /> Enable Manual Map Pin</label>
-                 <button id="btn-save-note" class="primary-btn" style="height: 28px; font-size: 11px; padding: 0 12px;">Save Note</button>
+        <section class="panel-section notes-section collapsible-section">
+             <div id="notes-trigger" class="panel-toggle">
+               Operator Notes <span>></span>
+             </div>
+             <div id="notes-accordion" class="panel-collapse">
+               <textarea id="operator-note-input" rows="3" style="width: 100%; background: rgba(0,0,0,0.4); border: 1px solid var(--glass-border); color: #fff; padding: 8px; border-radius: 8px; font-size: 12px; resize: vertical;"></textarea>
+               <div style="display: flex; justify-content: space-between; margin-top: 8px; align-items: center;">
+                   <label style="color: var(--text-secondary); font-size: 11px; display: flex; align-items: center; gap: 4px;"><input type="checkbox" id="manual-pin-mode" /> Enable Manual Map Pin</label>
+                   <button id="btn-save-note" class="primary-btn" style="height: 28px; font-size: 11px; padding: 0 12px;">Save Note</button>
+               </div>
              </div>
         </section>
 
@@ -182,7 +195,7 @@
         <!-- Diagnostics (Hidden/Collapsible) -->
         <footer class="panel-footer">
           <div id="diag-trigger" class="diag-toggle">
-            System Diagnostics <span>▾</span>
+            System Diagnostics <span>></span>
           </div>
           <div id="diag-accordion" class="diag-body">
              <div style="display: flex; justify-content: flex-end; margin-bottom: 12px;">
@@ -253,7 +266,7 @@
     </div>
 
     <script src="https://unpkg.com/maplibre-gl@5.0.0/dist/maplibre-gl.js" crossorigin=""></script>
-    <script type="module" src="operator.js?v=29"></script>
+    <script type="module" src="operator.js?v=30"></script>
 
         <button id="btn-confirm-cand" style="display:none;"></button>
         <button id="btn-reject-cand" style="display:none;"></button>
