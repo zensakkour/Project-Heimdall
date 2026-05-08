@@ -14,74 +14,51 @@ const globeZoom = 1.8;
 const minPitch = 0;
 const maxPitch = 70;
 const emptyFeatureCollection = { type: "FeatureCollection", features: [] };
-const mapStyle = {
-  version: 8,
-  glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
-  sources: {
-    basemap: {
-      type: "raster",
-      tiles: [
-        "https://a.tile.openstreetmap.org/{z}/{x}/{y}.png",
-        "https://b.tile.openstreetmap.org/{z}/{x}/{y}.png",
-        "https://c.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      ],
-      tileSize: 256,
-      attribution: "OpenStreetMap contributors"
-    },
-    openmaptiles: {
-      type: "vector",
-      tiles: ["https://demotiles.maplibre.org/tiles/{z}/{x}/{y}.pbf"],
-      maxzoom: 14,
-      attribution: "OpenMapTiles"
-    }
-  },
-  layers: [
-    {
-      id: "background",
-      type: "background",
-      paint: { "background-color": "#000000" }
-    },
-    {
-      id: "basemap",
-      type: "raster",
-      source: "basemap",
-      paint: {
-        "raster-opacity": 0.9,
-        "raster-saturation": -1,
-        "raster-contrast": 0.35,
-        "raster-brightness-min": 0,
-        "raster-brightness-max": 0.24
-      }
-    },
-    {
-      id: "building-extrusion",
-      type: "fill-extrusion",
-      source: "openmaptiles",
-      "source-layer": "building",
-      minzoom: 14,
-      paint: {
-        "fill-extrusion-color": "#242424",
-        "fill-extrusion-height": [
-          "interpolate",
-          ["linear"],
-          ["zoom"],
-          14,
-          0,
-          15,
-          ["coalesce", ["to-number", ["get", "render_height"]], ["to-number", ["get", "height"]], 10]
-        ],
-        "fill-extrusion-base": ["coalesce", ["to-number", ["get", "render_min_height"]], ["to-number", ["get", "min_height"]], 0],
-        "fill-extrusion-opacity": 0.72,
-        "fill-extrusion-vertical-gradient": true
-      }
-    }
-  ]
-};
+const mapStyleUrl = "https://tiles.openfreemap.org/styles/dark";
 
 /* --- Map Core --- */
 
 function getMapPadding() {
   return { left: 0, right: 0, top: 0, bottom: 0 };
+}
+
+function firstSymbolLayerId() {
+  const layers = liveMap?.getStyle()?.layers || [];
+  return layers.find((layer) => layer.type === "symbol")?.id;
+}
+
+function addBuildingExtrusions() {
+  if (!liveMap || liveMap.getLayer("heimdall-building-extrusion") || !liveMap.getSource("openmaptiles")) return;
+  liveMap.addLayer({
+    id: "heimdall-building-extrusion",
+    type: "fill-extrusion",
+    source: "openmaptiles",
+    "source-layer": "building",
+    minzoom: 13,
+    paint: {
+      "fill-extrusion-color": [
+        "interpolate",
+        ["linear"],
+        ["zoom"],
+        13,
+        "#161616",
+        16,
+        "#2b2b2b"
+      ],
+      "fill-extrusion-height": [
+        "interpolate",
+        ["linear"],
+        ["zoom"],
+        13,
+        0,
+        15,
+        ["coalesce", ["to-number", ["get", "render_height"]], ["to-number", ["get", "height"]], 12]
+      ],
+      "fill-extrusion-base": ["coalesce", ["to-number", ["get", "render_min_height"]], ["to-number", ["get", "min_height"]], 0],
+      "fill-extrusion-opacity": 0.82,
+      "fill-extrusion-vertical-gradient": true
+    }
+  }, firstSymbolLayerId());
 }
 
 function ensureLiveMap() {
@@ -97,7 +74,7 @@ function ensureLiveMap() {
   try {
     liveMap = new maplibregl.Map({
       container: el,
-      style: mapStyle,
+      style: mapStyleUrl,
       center: globeCenter,
       zoom: globeZoom,
       pitch: 0, 
@@ -142,6 +119,8 @@ function ensureLiveMap() {
       }
 
       liveMap.getCanvas().style.backgroundColor = "#000000";
+
+      addBuildingExtrusions();
 
       // Sources
       liveMap.addSource("candidates", { type: "geojson", data: emptyFeatureCollection });
@@ -392,8 +371,8 @@ function selectCandidate(index) {
     liveMap.flyTo({ 
       center: [lon, lat], 
       zoom: 18, 
-      pitch: liveMap.getPitch(),
-      bearing: liveMap.getBearing(),
+      pitch: Math.max(liveMap.getPitch(), 58),
+      bearing: liveMap.getBearing() || -25,
       padding: getMapPadding(),
       duration: 1200 
     });
@@ -582,7 +561,8 @@ function renderLiveMap(result) {
          liveMap.easeTo({
            center: [candidateLon(top), candidateLat(top)],
            zoom: 15,
-           pitch: liveMap.getPitch(),
+           pitch: Math.max(liveMap.getPitch(), 55),
+           bearing: liveMap.getBearing() || -25,
            padding: getMapPadding(),
            duration: 800
          });
@@ -791,12 +771,6 @@ ${msg}`);
 function setupMapControls() {
   byId("map-zoom-in").addEventListener("click", () => liveMap?.zoomIn());
   byId("map-zoom-out").addEventListener("click", () => liveMap?.zoomOut());
-  byId("map-compass-reset")?.addEventListener("click", () => {
-    liveMap?.easeTo({ bearing: 0, duration: 500 });
-  });
-  byId("map-style-reset")?.addEventListener("click", () => {
-    liveMap?.easeTo({ pitch: 55, bearing: -25, duration: 700 });
-  });
   const tiltHandle = byId("map-tilt-handle");
   const tiltLabel = byId("map-tilt-label");
 

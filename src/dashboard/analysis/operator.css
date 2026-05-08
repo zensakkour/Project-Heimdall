@@ -463,16 +463,6 @@ html, body {
   stroke-width: 2;
 }
 
-.map-controls .compass-needle-red {
-  fill: #ef4444;
-  stroke: #ef4444;
-}
-
-.map-controls .compass-needle-light {
-  fill: #e5e5e5;
-  stroke: #e5e5e5;
-}
-
 .map-controls button:hover {
   background: rgba(255, 255, 255, 0.05);
 }
