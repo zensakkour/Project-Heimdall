@@ -450,6 +450,29 @@ html, body {
   padding: 0 8px;
 }
 
+.map-controls svg {
+  height: 18px;
+  width: 18px;
+}
+
+.map-controls svg path {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.map-controls .compass-needle-red {
+  fill: #ef4444;
+  stroke: #ef4444;
+}
+
+.map-controls .compass-needle-light {
+  fill: #e5e5e5;
+  stroke: #e5e5e5;
+}
+
 .map-controls button:hover {
   background: rgba(255, 255, 255, 0.05);
 }
@@ -475,8 +498,8 @@ html, body {
 }
 
 .tilt-icon {
-  font-size: 15px;
-  line-height: 1;
+  height: 16px;
+  width: 16px;
 }
 
 .tilt-label {

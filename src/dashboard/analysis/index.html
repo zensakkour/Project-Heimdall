@@ -11,7 +11,7 @@
       crossorigin=""
     />
     <link rel="stylesheet" href="../theme.css?v=7" />
-    <link rel="stylesheet" href="operator.css?v=14" />
+    <link rel="stylesheet" href="operator.css?v=15" />
 
 <style>
 .session-timeline { font-size: 11px; color: var(--text-secondary); max-height: 150px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
@@ -33,16 +33,38 @@
 
       <!-- Map Controls (Bottom Left) -->
       <div id="map-controls" class="map-controls">
-        <button id="map-zoom-in" title="Zoom In">+</button>
-        <button id="map-zoom-out" title="Zoom Out">−</button>
+        <button id="map-compass-reset" title="Reset North" aria-label="Reset north">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path class="compass-needle-red" d="M12 3 19 19 12 15 5 19Z" />
+            <path class="compass-needle-light" d="M12 3 12 15 5 19Z" />
+          </svg>
+        </button>
+        <button id="map-zoom-in" title="Zoom In" aria-label="Zoom in">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+        </button>
+        <button id="map-zoom-out" title="Zoom Out" aria-label="Zoom out">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M5 12h14" />
+          </svg>
+        </button>
         <div class="control-sep"></div>
         <button id="map-tilt-handle" class="tilt-handle" title="Drag up/down to change angle" aria-label="Map angle">
-          <span class="tilt-icon">∠</span>
+          <svg class="tilt-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 16 12 8l8 8M7 19h10" />
+          </svg>
           <span id="map-tilt-label" class="tilt-label">0</span>
         </button>
         <div class="control-sep"></div>
         <button id="map-reset-paris" class="btn-text">Paris</button>
         <button id="map-reset-globe" class="btn-text">Globe</button>
+        <button id="map-style-reset" title="Map view" aria-label="Map view">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="m4 7 5-3 6 3 5-3v13l-5 3-6-3-5 3Z" />
+            <path d="M9 4v13M15 7v13" />
+          </svg>
+        </button>
       </div>
 
       <!-- Top Header Area -->
@@ -237,7 +259,7 @@
     </div>
 
     <script src="https://unpkg.com/maplibre-gl@5.0.0/dist/maplibre-gl.js" crossorigin=""></script>
-    <script type="module" src="operator.js?v=14"></script>
+    <script type="module" src="operator.js?v=15"></script>
 
         <button id="btn-confirm-cand" style="display:none;"></button>
         <button id="btn-reject-cand" style="display:none;"></button>

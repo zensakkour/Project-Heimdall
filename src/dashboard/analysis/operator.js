@@ -16,6 +16,7 @@ const maxPitch = 70;
 const emptyFeatureCollection = { type: "FeatureCollection", features: [] };
 const mapStyle = {
   version: 8,
+  glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
   sources: {
     basemap: {
       type: "raster",
@@ -26,6 +27,12 @@ const mapStyle = {
       ],
       tileSize: 256,
       attribution: "OpenStreetMap contributors"
+    },
+    openmaptiles: {
+      type: "vector",
+      tiles: ["https://demotiles.maplibre.org/tiles/{z}/{x}/{y}.pbf"],
+      maxzoom: 14,
+      attribution: "OpenMapTiles"
     }
   },
   layers: [
@@ -44,6 +51,28 @@ const mapStyle = {
         "raster-contrast": 0.35,
         "raster-brightness-min": 0,
         "raster-brightness-max": 0.24
+      }
+    },
+    {
+      id: "building-extrusion",
+      type: "fill-extrusion",
+      source: "openmaptiles",
+      "source-layer": "building",
+      minzoom: 14,
+      paint: {
+        "fill-extrusion-color": "#242424",
+        "fill-extrusion-height": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          14,
+          0,
+          15,
+          ["coalesce", ["to-number", ["get", "render_height"]], ["to-number", ["get", "height"]], 10]
+        ],
+        "fill-extrusion-base": ["coalesce", ["to-number", ["get", "render_min_height"]], ["to-number", ["get", "min_height"]], 0],
+        "fill-extrusion-opacity": 0.72,
+        "fill-extrusion-vertical-gradient": true
       }
     }
   ]
@@ -116,6 +145,7 @@ function ensureLiveMap() {
 
       // Sources
       liveMap.addSource("candidates", { type: "geojson", data: emptyFeatureCollection });
+      liveMap.addSource("candidate-stems", { type: "geojson", data: emptyFeatureCollection });
       liveMap.addSource("ring", { type: "geojson", data: emptyFeatureCollection });
       liveMap.addSource("mean", { type: "geojson", data: emptyFeatureCollection });
 
@@ -133,14 +163,55 @@ function ensureLiveMap() {
         paint: { "line-color": "#10b981", "line-width": 2, "line-dasharray": [2, 1], "line-opacity": 0.6 }
       });
       liveMap.addLayer({
+        id: "candidate-stem-layer",
+        type: "line",
+        source: "candidate-stems",
+        paint: {
+          "line-color": ["case", ["==", ["get", "index"], selectedIndex], "#eaeaea", ["==", ["get", "rank"], 1], "#7dd3a4", "#9a9a9a"],
+          "line-width": ["case", ["==", ["get", "index"], selectedIndex], 3, 2],
+          "line-opacity": 0.82
+        }
+      });
+      liveMap.addLayer({
+        id: "candidate-halo-layer",
+        type: "circle",
+        source: "candidates",
+        paint: {
+          "circle-color": ["case", ["==", ["get", "index"], selectedIndex], "#d7d7d7", ["==", ["get", "rank"], 1], "#10b981", "#bdbdbd"],
+          "circle-opacity": ["case", ["==", ["get", "index"], selectedIndex], 0.22, ["==", ["get", "rank"], 1], 0.16, 0.1],
+          "circle-radius": ["case", ["==", ["get", "index"], selectedIndex], 40, ["==", ["get", "rank"], 1], 34, 24],
+          "circle-stroke-color": "#ffffff",
+          "circle-stroke-opacity": ["case", ["==", ["get", "index"], selectedIndex], 0.18, 0.08],
+          "circle-stroke-width": 1
+        }
+      });
+      liveMap.addLayer({
         id: "candidate-layer",
         type: "circle",
         source: "candidates",
         paint: {
-          "circle-color": ["case", ["==", ["get", "index"], selectedIndex], "#ffffff", ["==", ["get", "rank"], 1], "#cfcfcf", "#8a8a8a"],
-          "circle-radius": ["case", ["==", ["get", "index"], selectedIndex], 13, ["==", ["get", "rank"], 1], 10, 6],
-          "circle-stroke-color": "#000",
-          "circle-stroke-width": ["case", ["==", ["get", "index"], selectedIndex], 3, 1.5]
+          "circle-color": ["case", ["==", ["get", "index"], selectedIndex], "#ffffff", ["==", ["get", "rank"], 1], "#10b981", "#5f6468"],
+          "circle-radius": ["case", ["==", ["get", "index"], selectedIndex], 17, ["==", ["get", "rank"], 1], 16, 12],
+          "circle-stroke-color": "#f4f4f4",
+          "circle-stroke-width": ["case", ["==", ["get", "index"], selectedIndex], 3, ["==", ["get", "rank"], 1], 2.5, 1.8],
+          "circle-opacity": 0.96
+        }
+      });
+      liveMap.addLayer({
+        id: "candidate-label-layer",
+        type: "symbol",
+        source: "candidates",
+        layout: {
+          "text-field": ["to-string", ["get", "rank"]],
+          "text-size": ["case", ["==", ["get", "index"], selectedIndex], 17, 14],
+          "text-font": ["Open Sans Bold"],
+          "text-allow-overlap": true,
+          "text-ignore-placement": true
+        },
+        paint: {
+          "text-color": ["case", ["==", ["get", "index"], selectedIndex], "#111111", "#ffffff"],
+          "text-halo-color": "rgba(0,0,0,0)",
+          "text-halo-width": 0
         }
       });
       liveMap.addLayer({
@@ -222,27 +293,79 @@ function setMetric(id, value) {
 
 function updateSelectedMarker(index) {
   if (!liveMap || !liveMap.getLayer?.("candidate-layer")) return;
+  liveMap.setPaintProperty("candidate-stem-layer", "line-color", [
+    "case",
+    ["==", ["get", "index"], index],
+    "#eaeaea",
+    ["==", ["get", "rank"], 1],
+    "#7dd3a4",
+    "#9a9a9a"
+  ]);
+  liveMap.setPaintProperty("candidate-stem-layer", "line-width", [
+    "case",
+    ["==", ["get", "index"], index],
+    3,
+    2
+  ]);
+  liveMap.setPaintProperty("candidate-halo-layer", "circle-color", [
+    "case",
+    ["==", ["get", "index"], index],
+    "#d7d7d7",
+    ["==", ["get", "rank"], 1],
+    "#10b981",
+    "#bdbdbd"
+  ]);
+  liveMap.setPaintProperty("candidate-halo-layer", "circle-opacity", [
+    "case",
+    ["==", ["get", "index"], index],
+    0.22,
+    ["==", ["get", "rank"], 1],
+    0.16,
+    0.1
+  ]);
+  liveMap.setPaintProperty("candidate-halo-layer", "circle-radius", [
+    "case",
+    ["==", ["get", "index"], index],
+    40,
+    ["==", ["get", "rank"], 1],
+    34,
+    24
+  ]);
   liveMap.setPaintProperty("candidate-layer", "circle-color", [
     "case",
     ["==", ["get", "index"], index],
     "#ffffff",
     ["==", ["get", "rank"], 1],
-    "#cfcfcf",
-    "#8a8a8a"
+    "#10b981",
+    "#5f6468"
   ]);
   liveMap.setPaintProperty("candidate-layer", "circle-radius", [
     "case",
     ["==", ["get", "index"], index],
-    13,
+    17,
     ["==", ["get", "rank"], 1],
-    10,
-    6
+    16,
+    12
   ]);
   liveMap.setPaintProperty("candidate-layer", "circle-stroke-width", [
     "case",
     ["==", ["get", "index"], index],
     3,
-    1.5
+    ["==", ["get", "rank"], 1],
+    2.5,
+    1.8
+  ]);
+  liveMap.setLayoutProperty("candidate-label-layer", "text-size", [
+    "case",
+    ["==", ["get", "index"], index],
+    17,
+    14
+  ]);
+  liveMap.setPaintProperty("candidate-label-layer", "text-color", [
+    "case",
+    ["==", ["get", "index"], index],
+    "#111111",
+    "#ffffff"
   ]);
 }
 
@@ -423,6 +546,16 @@ function renderLiveMap(result) {
     geometry: { type: "Point", coordinates: [candidateLon(item), candidateLat(item)] },
     properties: { rank: idx + 1, index: idx, lat: candidateLat(item), lon: candidateLon(item) }
   }));
+  const stemFeatures = candidates.slice(0, topLimit).map((item, idx) => {
+    const lat = candidateLat(item);
+    const lon = candidateLon(item);
+    const stemLat = lat - 0.00018;
+    return {
+      type: "Feature",
+      geometry: { type: "LineString", coordinates: [[lon, stemLat], [lon, lat]] },
+      properties: { rank: idx + 1, index: idx }
+    };
+  });
 
   const ringRadius =
     (fusion.radius_km ? fusion.radius_km * 1000 : null) ||
@@ -436,6 +569,7 @@ function renderLiveMap(result) {
 
   liveMapReady.then(() => {
     liveMap.getSource("candidates").setData({ type: "FeatureCollection", features });
+    liveMap.getSource("candidate-stems").setData({ type: "FeatureCollection", features: stemFeatures });
     liveMap.getSource("ring").setData({ type: "FeatureCollection", features: ringFeature ? [ringFeature] : [] });
     liveMap.getSource("mean").setData({
       type: "FeatureCollection",
@@ -657,6 +791,12 @@ ${msg}`);
 function setupMapControls() {
   byId("map-zoom-in").addEventListener("click", () => liveMap?.zoomIn());
   byId("map-zoom-out").addEventListener("click", () => liveMap?.zoomOut());
+  byId("map-compass-reset")?.addEventListener("click", () => {
+    liveMap?.easeTo({ bearing: 0, duration: 500 });
+  });
+  byId("map-style-reset")?.addEventListener("click", () => {
+    liveMap?.easeTo({ pitch: 55, bearing: -25, duration: 700 });
+  });
   const tiltHandle = byId("map-tilt-handle");
   const tiltLabel = byId("map-tilt-label");
 
