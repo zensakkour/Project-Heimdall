@@ -108,6 +108,28 @@ function addBuildingExtrusions() {
   }, firstSymbolLayerId());
 }
 
+function moveLayerToTop(layerId) {
+  if (!liveMap?.getLayer(layerId)) return;
+  try {
+    liveMap.moveLayer(layerId);
+  } catch {
+    // Ignore layer-order races during style/data refreshes.
+  }
+}
+
+function bringCandidateLayersToFront() {
+  [
+    "ring-fill",
+    "ring-layer",
+    "mean-layer",
+    "candidate-halo-layer",
+    "candidate-stem-layer",
+    "candidate-layer",
+    "candidate-label-layer",
+    "candidate-hit-layer"
+  ].forEach(moveLayerToTop);
+}
+
 function ensureLiveMap() {
   if (liveMap) return liveMapReady;
   const el = byId("live-map");
@@ -172,7 +194,6 @@ function ensureLiveMap() {
 
       // Sources
       liveMap.addSource("candidates", { type: "geojson", data: emptyFeatureCollection });
-      liveMap.addSource("candidate-stems", { type: "geojson", data: emptyFeatureCollection });
       liveMap.addSource("ring", { type: "geojson", data: emptyFeatureCollection });
       liveMap.addSource("mean", { type: "geojson", data: emptyFeatureCollection });
 
@@ -191,12 +212,14 @@ function ensureLiveMap() {
       });
       liveMap.addLayer({
         id: "candidate-stem-layer",
-        type: "line",
-        source: "candidate-stems",
+        type: "circle",
+        source: "candidates",
         paint: {
-          "line-color": ["case", ["==", ["get", "index"], selectedIndex], "#eaeaea", ["==", ["get", "rank"], 1], "#7dd3a4", "#9a9a9a"],
-          "line-width": ["case", ["==", ["get", "index"], selectedIndex], 3, 2],
-          "line-opacity": 0.82
+          "circle-color": ["case", ["==", ["get", "index"], selectedIndex], "#eaeaea", ["==", ["get", "rank"], 1], "#7dd3a4", "#9a9a9a"],
+          "circle-radius": ["case", ["==", ["get", "index"], selectedIndex], 6, 5],
+          "circle-translate": [0, 20],
+          "circle-translate-anchor": "viewport",
+          "circle-opacity": 0.88
         }
       });
       liveMap.addLayer({
@@ -284,6 +307,8 @@ function ensureLiveMap() {
       liveMap.on("mouseleave", "candidate-layer", clearPointer);
       liveMap.on("mouseleave", "candidate-hit-layer", clearPointer);
 
+      bringCandidateLayersToFront();
+
       window.addEventListener("resize", () => {
         liveMap.setPadding(getMapPadding());
         liveMap.resize();
@@ -320,7 +345,7 @@ function setMetric(id, value) {
 
 function updateSelectedMarker(index) {
   if (!liveMap || !liveMap.getLayer?.("candidate-layer")) return;
-  liveMap.setPaintProperty("candidate-stem-layer", "line-color", [
+  liveMap.setPaintProperty("candidate-stem-layer", "circle-color", [
     "case",
     ["==", ["get", "index"], index],
     "#eaeaea",
@@ -328,11 +353,11 @@ function updateSelectedMarker(index) {
     "#7dd3a4",
     "#9a9a9a"
   ]);
-  liveMap.setPaintProperty("candidate-stem-layer", "line-width", [
+  liveMap.setPaintProperty("candidate-stem-layer", "circle-radius", [
     "case",
     ["==", ["get", "index"], index],
-    3,
-    2
+    6,
+    5
   ]);
   liveMap.setPaintProperty("candidate-halo-layer", "circle-color", [
     "case",
@@ -573,16 +598,6 @@ function renderLiveMap(result) {
     geometry: { type: "Point", coordinates: [candidateLon(item), candidateLat(item)] },
     properties: { rank: idx + 1, index: idx, lat: candidateLat(item), lon: candidateLon(item) }
   }));
-  const stemFeatures = candidates.slice(0, topLimit).map((item, idx) => {
-    const lat = candidateLat(item);
-    const lon = candidateLon(item);
-    const stemLat = lat - 0.00018;
-    return {
-      type: "Feature",
-      geometry: { type: "LineString", coordinates: [[lon, stemLat], [lon, lat]] },
-      properties: { rank: idx + 1, index: idx }
-    };
-  });
 
   const ringRadius =
     (fusion.radius_km ? fusion.radius_km * 1000 : null) ||
@@ -596,12 +611,12 @@ function renderLiveMap(result) {
 
   liveMapReady.then(() => {
     liveMap.getSource("candidates").setData({ type: "FeatureCollection", features });
-    liveMap.getSource("candidate-stems").setData({ type: "FeatureCollection", features: stemFeatures });
     liveMap.getSource("ring").setData({ type: "FeatureCollection", features: ringFeature ? [ringFeature] : [] });
     liveMap.getSource("mean").setData({
       type: "FeatureCollection",
       features: [{ type: "Feature", geometry: { type: "Point", coordinates: [fusion.display_lon, fusion.display_lat] } }]
     });
+    bringCandidateLayersToFront();
 
     if (candidates.length > 0) {
       const top = candidates[0];
