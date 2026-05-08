@@ -768,6 +768,85 @@ html, body {
   display: inline;
 }
 
+.geo-pin {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  height: 68px;
+  justify-content: flex-end;
+  padding: 0;
+  position: relative;
+  transform: translateY(2px);
+  width: 68px;
+}
+
+.geo-pin-halo {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  bottom: 9px;
+  box-shadow: 0 0 22px rgba(255, 255, 255, 0.1);
+  height: 58px;
+  position: absolute;
+  width: 58px;
+}
+
+.geo-pin.top .geo-pin-halo {
+  background: rgba(16, 185, 129, 0.22);
+  border-color: rgba(16, 185, 129, 0.42);
+  box-shadow: 0 0 30px rgba(16, 185, 129, 0.2);
+}
+
+.geo-pin-head {
+  align-items: center;
+  background: #5f6468;
+  border: 2px solid #f4f4f4;
+  border-radius: 999px;
+  color: #fff;
+  display: flex;
+  font-size: 14px;
+  font-weight: 800;
+  height: 32px;
+  justify-content: center;
+  position: relative;
+  width: 32px;
+  z-index: 2;
+}
+
+.geo-pin.top .geo-pin-head {
+  background: #10b981;
+}
+
+.geo-pin.selected .geo-pin-head {
+  background: #f4f4f4;
+  border-color: #fff;
+  color: #111;
+  height: 38px;
+  width: 38px;
+}
+
+.geo-pin-stem {
+  background: #eaeaea;
+  border-radius: 999px;
+  height: 20px;
+  margin-top: -1px;
+  position: relative;
+  width: 3px;
+  z-index: 1;
+}
+
+.geo-pin.top .geo-pin-stem {
+  background: #7dd3a4;
+}
+
+.geo-pin.selected .geo-pin-stem {
+  background: #fff;
+  width: 4px;
+}
+
 .diag-toggle {
   padding: 12px 20px;
   font-size: 11px;

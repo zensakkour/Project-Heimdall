@@ -7,6 +7,7 @@ let liveMapReady = null;
 let topLimit = 3;
 let lastResult = null;
 let selectedIndex = -1;
+let candidateMarkers = [];
 
 const parisCenter = [2.3522, 48.8566];
 const globeCenter = [10, 20];
@@ -128,6 +129,45 @@ function bringCandidateLayersToFront() {
     "candidate-label-layer",
     "candidate-hit-layer"
   ].forEach(moveLayerToTop);
+}
+
+function clearCandidateMarkers() {
+  candidateMarkers.forEach((marker) => marker.remove());
+  candidateMarkers = [];
+}
+
+function updateHtmlMarkerSelection(index) {
+  candidateMarkers.forEach((marker, idx) => {
+    const el = marker.getElement();
+    el.classList.toggle("selected", idx === index);
+    el.classList.toggle("top", idx === 0);
+  });
+}
+
+function renderHtmlCandidateMarkers(candidates) {
+  if (!liveMap) return;
+  clearCandidateMarkers();
+  candidates.slice(0, topLimit).forEach((item, idx) => {
+    const lat = candidateLat(item);
+    const lon = candidateLon(item);
+    if (!Number.isFinite(Number(lat)) || !Number.isFinite(Number(lon))) return;
+
+    const el = document.createElement("button");
+    el.type = "button";
+    el.className = `geo-pin${idx === 0 ? " top" : ""}${idx === selectedIndex ? " selected" : ""}`;
+    el.dataset.index = String(idx);
+    el.setAttribute("aria-label", `Select geo candidate ${idx + 1}`);
+    el.innerHTML = `<span class="geo-pin-halo"></span><span class="geo-pin-head">${idx + 1}</span><span class="geo-pin-stem"></span>`;
+    el.addEventListener("click", (event) => {
+      event.stopPropagation();
+      selectCandidate(idx);
+    });
+
+    const marker = new maplibregl.Marker({ element: el, anchor: "bottom" })
+      .setLngLat([Number(lon), Number(lat)])
+      .addTo(liveMap);
+    candidateMarkers.push(marker);
+  });
 }
 
 function ensureLiveMap() {
@@ -434,6 +474,7 @@ function selectCandidate(index) {
   cards.forEach(c => c.classList.remove("active"));
   card.classList.add("active");
   updateSelectedMarker(index);
+  updateHtmlMarkerSelection(index);
   card.scrollIntoView({ behavior: "smooth", block: "nearest" });
   
   const lat = parseFloat(card.dataset.lat);
@@ -611,6 +652,7 @@ function renderLiveMap(result) {
 
   liveMapReady.then(() => {
     liveMap.getSource("candidates").setData({ type: "FeatureCollection", features });
+    renderHtmlCandidateMarkers(candidates);
     liveMap.getSource("ring").setData({ type: "FeatureCollection", features: ringFeature ? [ringFeature] : [] });
     liveMap.getSource("mean").setData({
       type: "FeatureCollection",
@@ -687,6 +729,7 @@ function clearAnalysisResults() {
   }
   const rawJson = byId("raw-json");
   if (rawJson) rawJson.textContent = "{}";
+  clearCandidateMarkers();
   lastResult = null;
 }
 
