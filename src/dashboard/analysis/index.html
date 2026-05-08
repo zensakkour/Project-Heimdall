@@ -11,7 +11,7 @@
       crossorigin=""
     />
     <link rel="stylesheet" href="../theme.css?v=7" />
-    <link rel="stylesheet" href="operator.css?v=16" />
+    <link rel="stylesheet" href="operator.css?v=17" />
 
 <style>
 .session-timeline { font-size: 11px; color: var(--text-secondary); max-height: 150px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
@@ -44,7 +44,7 @@
           </svg>
         </button>
         <div class="control-sep"></div>
-        <button id="map-tilt-handle" class="tilt-handle" title="Drag up/down to change angle" aria-label="Map angle">
+        <button id="map-tilt-handle" class="tilt-handle" title="Drag up/down for pitch, left/right for rotation" aria-label="Map angle and rotation">
           <svg class="tilt-icon" viewBox="0 0 24 24" aria-hidden="true">
             <path d="M4 16 12 8l8 8M7 19h10" />
           </svg>
@@ -247,7 +247,7 @@
     </div>
 
     <script src="https://unpkg.com/maplibre-gl@5.0.0/dist/maplibre-gl.js" crossorigin=""></script>
-    <script type="module" src="operator.js?v=16"></script>
+    <script type="module" src="operator.js?v=17"></script>
 
         <button id="btn-confirm-cand" style="display:none;"></button>
         <button id="btn-reject-cand" style="display:none;"></button>

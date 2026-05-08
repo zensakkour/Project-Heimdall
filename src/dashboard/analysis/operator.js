@@ -41,9 +41,9 @@ function addBuildingExtrusions() {
         ["linear"],
         ["zoom"],
         13,
-        "#161616",
+        "#363636",
         16,
-        "#2b2b2b"
+        "#5a5a5a"
       ],
       "fill-extrusion-height": [
         "interpolate",
@@ -55,7 +55,7 @@ function addBuildingExtrusions() {
         ["coalesce", ["to-number", ["get", "render_height"]], ["to-number", ["get", "height"]], 12]
       ],
       "fill-extrusion-base": ["coalesce", ["to-number", ["get", "render_min_height"]], ["to-number", ["get", "min_height"]], 0],
-      "fill-extrusion-opacity": 0.82,
+      "fill-extrusion-opacity": 0.94,
       "fill-extrusion-vertical-gradient": true
     }
   }, firstSymbolLayerId());
@@ -776,13 +776,16 @@ function setupMapControls() {
 
   const updateTiltLabel = () => {
     if (!tiltLabel || !liveMap) return;
-    tiltLabel.textContent = String(Math.round(liveMap.getPitch()));
+    const pitch = Math.round(liveMap.getPitch());
+    const bearing = Math.round(liveMap.getBearing());
+    tiltLabel.textContent = `${pitch}/${bearing}`;
   };
 
-  const setPitch = (pitch, duration = 180) => {
+  const setViewAngle = ({ pitch = liveMap?.getPitch() || 0, bearing = liveMap?.getBearing() || 0 }, duration = 180) => {
     if (!liveMap) return;
     liveMap.easeTo({
       pitch: Math.max(minPitch, Math.min(maxPitch, pitch)),
+      bearing,
       duration
     });
     window.setTimeout(updateTiltLabel, duration + 20);
@@ -791,29 +794,39 @@ function setupMapControls() {
   if (tiltHandle) {
     let dragging = false;
     let suppressClick = false;
+    let startX = 0;
     let startY = 0;
     let startPitch = 0;
+    let startBearing = 0;
 
     tiltHandle.addEventListener("click", () => {
       if (suppressClick) {
         suppressClick = false;
         return;
       }
-      setPitch(liveMap?.getPitch() ? 0 : 45, 280);
+      if (liveMap?.getPitch() || Math.round(liveMap?.getBearing() || 0) !== 0) {
+        setViewAngle({ pitch: 0, bearing: 0 }, 280);
+      } else {
+        setViewAngle({ pitch: 45, bearing: -25 }, 280);
+      }
     });
     tiltHandle.addEventListener("pointerdown", (e) => {
       if (!liveMap) return;
       dragging = false;
+      startX = e.clientX;
       startY = e.clientY;
       startPitch = liveMap.getPitch();
+      startBearing = liveMap.getBearing();
       tiltHandle.setPointerCapture(e.pointerId);
       tiltHandle.classList.add("dragging");
     });
     tiltHandle.addEventListener("pointermove", (e) => {
       if (!tiltHandle.hasPointerCapture(e.pointerId) || !liveMap) return;
+      const deltaX = e.clientX - startX;
       const deltaY = startY - e.clientY;
-      if (Math.abs(deltaY) > 2) dragging = true;
+      if (Math.abs(deltaY) > 2 || Math.abs(deltaX) > 2) dragging = true;
       liveMap.setPitch(Math.max(minPitch, Math.min(maxPitch, startPitch + deltaY * 0.45)));
+      liveMap.setBearing(startBearing + deltaX * 0.55);
       updateTiltLabel();
     });
     const endDrag = (e) => {

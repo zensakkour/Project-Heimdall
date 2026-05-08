@@ -476,7 +476,7 @@ html, body {
 
 .map-controls .tilt-handle {
   gap: 4px;
-  min-width: 46px;
+  min-width: 60px;
   padding: 0 9px;
   touch-action: none;
   user-select: none;
@@ -484,7 +484,7 @@ html, body {
 
 .map-controls .tilt-handle.dragging {
   background: rgba(255, 255, 255, 0.12);
-  cursor: ns-resize;
+  cursor: move;
 }
 
 .tilt-icon {
@@ -496,7 +496,7 @@ html, body {
   color: var(--text-secondary);
   font-family: monospace;
   font-size: 10px;
-  min-width: 14px;
+  min-width: 30px;
   text-align: right;
 }
 
