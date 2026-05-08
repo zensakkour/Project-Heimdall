@@ -168,8 +168,8 @@ function renderHtmlCandidateMarkers(candidates) {
 }
 
 function numericCandidateCoord(item) {
-  const lat = Number(candidateLat(item));
-  const lon = Number(candidateLon(item));
+  const lat = Number(candidateMapLat(item));
+  const lon = Number(candidateMapLon(item));
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
   if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
   return { lat, lon };
@@ -661,6 +661,14 @@ function candidateDisplayLon(item) {
   return item?.display_lon ?? candidateLon(item);
 }
 
+function candidateMapLat(item) {
+  return item?.display_lat ?? candidateLat(item);
+}
+
+function candidateMapLon(item) {
+  return item?.display_lon ?? candidateLon(item);
+}
+
 function sortedCandidates(result) {
   const candidates = Array.isArray(result?.candidates) ? result.candidates : [];
   return [...candidates].sort((a, b) => candidateWeight(b) - candidateWeight(a));
@@ -683,8 +691,8 @@ function renderCandidateList(result) {
   slice.forEach((item, idx) => {
     const rank = idx + 1;
     const cand = item || {};
-    const lat = candidateLat(cand);
-    const lon = candidateLon(cand);
+    const lat = candidateMapLat(cand);
+    const lon = candidateMapLon(cand);
     const displayLat = candidateDisplayLat(cand);
     const displayLon = candidateDisplayLon(cand);
     const card = document.createElement("div");
@@ -694,7 +702,7 @@ function renderCandidateList(result) {
     card.dataset.index = idx;
     
     const coordString = `${Number(displayLat).toFixed(6)}, ${Number(displayLon).toFixed(6)}`;
-    const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
+    const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${displayLat},${displayLon}`;
     
     // Check source
     const sourceId = cand.match_id || cand.source || "N/A";
