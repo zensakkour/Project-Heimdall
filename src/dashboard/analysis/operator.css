@@ -736,6 +736,7 @@ html, body {
   background: rgba(8, 8, 8, 0.92);
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 10px;
+  box-sizing: border-box;
   color: #eaeaea;
   display: flex;
   flex-direction: column;
@@ -758,22 +759,22 @@ html, body {
   background: transparent;
   border: 1px solid transparent;
   border-radius: 8px;
+  box-sizing: border-box;
   color: var(--text-primary);
   display: flex;
   flex-direction: column;
   gap: 4px;
   font-size: 12px;
+  flex: 0 0 auto;
   line-height: 1.35;
-  min-height: 0;
-  padding: 9px 10px;
+  min-height: 48px;
+  padding: 8px 10px;
   text-align: left;
   width: 100%;
 }
 
-button.intel-row {
+.intel-row[role="button"] {
   cursor: pointer;
-  font: inherit;
-  line-height: 1.35;
 }
 
 .intel-row.active {
@@ -789,8 +790,19 @@ button.intel-row {
 .intel-row strong,
 .intel-row span {
   display: block;
-  overflow-wrap: anywhere;
-  white-space: normal;
+  line-height: 1.25;
+  min-height: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.intel-row strong {
+  font-size: 13px;
+}
+
+.intel-row span {
+  font-size: 11px;
 }
 
 .lightbox-filename {

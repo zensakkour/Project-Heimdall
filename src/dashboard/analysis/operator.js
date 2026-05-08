@@ -173,6 +173,21 @@ function numericCandidateCoord(item) {
   return { lat, lon };
 }
 
+function displayOffsetCoord(coord, idx, groupedCounts) {
+  const key = `${coord.lat.toFixed(5)},${coord.lon.toFixed(5)}`;
+  const count = groupedCounts.get(key) || 0;
+  if (count <= 1) return coord;
+
+  const angle = (idx / count) * Math.PI * 2 - Math.PI / 2;
+  const radiusMeters = Math.min(45, 14 + count * 3);
+  const metersPerLat = 111320;
+  const metersPerLon = Math.max(1, 111320 * Math.cos((coord.lat * Math.PI) / 180));
+  return {
+    lat: coord.lat + (Math.sin(angle) * radiusMeters) / metersPerLat,
+    lon: coord.lon + (Math.cos(angle) * radiusMeters) / metersPerLon
+  };
+}
+
 function ensureLiveMap() {
   if (liveMap) return liveMapReady;
   const el = byId("live-map");
@@ -649,12 +664,25 @@ function renderLiveMap(result) {
   
   if (!fusion || candidates.length === 0) return;
 
-  const features = candidates.slice(0, topLimit).flatMap((item, idx) => {
+  const visibleCandidates = candidates.slice(0, topLimit);
+  const rawCoords = visibleCandidates.map((item) => numericCandidateCoord(item));
+  const groupedCounts = rawCoords.reduce((counts, coord) => {
+    if (!coord) return counts;
+    const key = `${coord.lat.toFixed(5)},${coord.lon.toFixed(5)}`;
+    counts.set(key, (counts.get(key) || 0) + 1);
+    return counts;
+  }, new Map());
+  const groupSeen = new Map();
+  const features = visibleCandidates.flatMap((item, idx) => {
     const coord = numericCandidateCoord(item);
     if (!coord) return [];
+    const key = `${coord.lat.toFixed(5)},${coord.lon.toFixed(5)}`;
+    const groupIdx = groupSeen.get(key) || 0;
+    groupSeen.set(key, groupIdx + 1);
+    const displayCoord = displayOffsetCoord(coord, groupIdx, groupedCounts);
     return [{
       type: "Feature",
-      geometry: { type: "Point", coordinates: [coord.lon, coord.lat] },
+      geometry: { type: "Point", coordinates: [displayCoord.lon, displayCoord.lat] },
       properties: { rank: idx + 1, index: idx, lat: coord.lat, lon: coord.lon }
     }];
   });
@@ -678,20 +706,6 @@ function renderLiveMap(result) {
       features: [{ type: "Feature", geometry: { type: "Point", coordinates: [fusion.display_lon, fusion.display_lat] } }]
     });
     bringCandidateLayersToFront();
-
-    if (candidates.length > 0) {
-      const top = candidates[0];
-      if (candidateLat(top) !== undefined && candidateLon(top) !== undefined) {
-         liveMap.easeTo({
-           center: [candidateLon(top), candidateLat(top)],
-           zoom: 15,
-           pitch: Math.max(liveMap.getPitch(), 55),
-           bearing: liveMap.getBearing() || -25,
-           padding: getMapPadding(),
-           duration: 800
-         });
-      }
-    }
   });
 }
 
@@ -1147,9 +1161,9 @@ function detectionPoints(det) {
 
 function formatDetectionDetail(det) {
   const score = Number.isFinite(Number(det?.confidence)) ? `${Math.round(Number(det.confidence) * 100)}%` : "-";
-  const heading = Number.isFinite(Number(det?.heading_deg)) ? `heading ${Number(det.heading_deg).toFixed(1)} deg` : null;
-  const shadow = Number.isFinite(Number(det?.shadow_azimuth_deg)) ? `shadow ${Number(det.shadow_azimuth_deg).toFixed(1)} deg` : null;
-  return [score, heading, shadow].filter(Boolean).join(" | ");
+  const heading = Number.isFinite(Number(det?.heading_deg)) ? `head ${Number(det.heading_deg).toFixed(0)}°` : null;
+  const shadow = Number.isFinite(Number(det?.shadow_azimuth_deg)) ? `shadow ${Number(det.shadow_azimuth_deg).toFixed(0)}°` : null;
+  return [score, heading, shadow].filter(Boolean).join(" · ");
 }
 
 function renderLightboxIntel() {
@@ -1195,11 +1209,18 @@ function renderLightboxIntel() {
   intel.appendChild(title);
 
   const addIntelRow = (name, detail, idx = null) => {
-    const row = document.createElement(idx === null ? "div" : "button");
+    const row = document.createElement("div");
     row.className = `intel-row${idx === selectedLightboxDetectionIndex ? " active" : ""}`;
     if (idx !== null) {
-      row.type = "button";
+      row.tabIndex = 0;
+      row.setAttribute("role", "button");
       row.addEventListener("click", () => {
+        selectedLightboxDetectionIndex = idx;
+        renderLightboxIntel();
+      });
+      row.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
         selectedLightboxDetectionIndex = idx;
         renderLightboxIntel();
       });
