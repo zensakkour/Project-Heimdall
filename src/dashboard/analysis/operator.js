@@ -508,11 +508,19 @@ function candidateWeight(item) {
 }
 
 function candidateLat(item) {
-  return item?.display_lat ?? item?.lat ?? item?.candidate?.latitude;
+  return item?.lat ?? item?.candidate?.latitude ?? item?.display_lat;
 }
 
 function candidateLon(item) {
-  return item?.display_lon ?? item?.lon ?? item?.candidate?.longitude;
+  return item?.lon ?? item?.candidate?.longitude ?? item?.display_lon;
+}
+
+function candidateDisplayLat(item) {
+  return item?.display_lat ?? candidateLat(item);
+}
+
+function candidateDisplayLon(item) {
+  return item?.display_lon ?? candidateLon(item);
 }
 
 function sortedCandidates(result) {
@@ -539,13 +547,15 @@ function renderCandidateList(result) {
     const cand = item || {};
     const lat = candidateLat(cand);
     const lon = candidateLon(cand);
+    const displayLat = candidateDisplayLat(cand);
+    const displayLon = candidateDisplayLon(cand);
     const card = document.createElement("div");
     card.className = "candidate-card";
     card.dataset.lat = lat;
     card.dataset.lon = lon;
     card.dataset.index = idx;
     
-    const coordString = `${Number(lat).toFixed(6)}, ${Number(lon).toFixed(6)}`;
+    const coordString = `${Number(displayLat).toFixed(6)}, ${Number(displayLon).toFixed(6)}`;
     const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
     
     // Check source
