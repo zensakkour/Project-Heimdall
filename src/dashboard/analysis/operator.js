@@ -162,30 +162,15 @@ function updatePinScale() {
 }
 
 function renderHtmlCandidateMarkers(candidates) {
-  if (!liveMap) return;
   clearCandidateMarkers();
-  candidates.slice(0, topLimit).forEach((item, idx) => {
-    const lat = candidateLat(item);
-    const lon = candidateLon(item);
-    if (!Number.isFinite(Number(lat)) || !Number.isFinite(Number(lon))) return;
+}
 
-    const el = document.createElement("button");
-    el.type = "button";
-    el.className = `geo-pin${idx === 0 ? " top" : ""}${idx === selectedIndex ? " selected" : ""}`;
-    el.dataset.index = String(idx);
-    el.setAttribute("aria-label", `Select geo candidate ${idx + 1}`);
-    el.innerHTML = `<span class="geo-pin-visual"><span class="geo-pin-halo"></span><span class="geo-pin-head">${idx + 1}</span><span class="geo-pin-stem"></span></span>`;
-    el.addEventListener("click", (event) => {
-      event.stopPropagation();
-      selectCandidate(idx);
-    });
-
-    const marker = new maplibregl.Marker({ element: el, anchor: "bottom" })
-      .setLngLat([Number(lon), Number(lat)])
-      .addTo(liveMap);
-    candidateMarkers.push(marker);
-  });
-  updatePinScale();
+function numericCandidateCoord(item) {
+  const lat = Number(candidateLat(item));
+  const lon = Number(candidateLon(item));
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+  return { lat, lon };
 }
 
 function ensureLiveMap() {
@@ -274,10 +259,8 @@ function ensureLiveMap() {
         source: "candidates",
         paint: {
           "circle-color": ["case", ["==", ["get", "index"], selectedIndex], "#eaeaea", ["==", ["get", "rank"], 1], "#7dd3a4", "#9a9a9a"],
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 1, 0, 10.9, 0, 11, ["case", ["==", ["get", "index"], selectedIndex], 6, 5]],
-          "circle-translate": [0, 20],
-          "circle-translate-anchor": "viewport",
-          "circle-opacity": ["interpolate", ["linear"], ["zoom"], 10.6, 0, 11, 0.88]
+          "circle-radius": 0,
+          "circle-opacity": 0
         }
       });
       liveMap.addLayer({
@@ -286,8 +269,8 @@ function ensureLiveMap() {
         source: "candidates",
         paint: {
           "circle-color": ["case", ["==", ["get", "index"], selectedIndex], "#d7d7d7", ["==", ["get", "rank"], 1], "#10b981", "#bdbdbd"],
-          "circle-opacity": ["interpolate", ["linear"], ["zoom"], 1.5, ["case", ["==", ["get", "index"], selectedIndex], 0.34, ["==", ["get", "rank"], 1], 0.28, 0.18], 10.5, ["case", ["==", ["get", "index"], selectedIndex], 0.26, ["==", ["get", "rank"], 1], 0.2, 0.12], 11, 0],
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 1.5, ["case", ["==", ["get", "index"], selectedIndex], 13, ["==", ["get", "rank"], 1], 12, 10], 5, ["case", ["==", ["get", "index"], selectedIndex], 16, ["==", ["get", "rank"], 1], 15, 12], 10.9, ["case", ["==", ["get", "index"], selectedIndex], 24, ["==", ["get", "rank"], 1], 21, 17], 11, 0],
+          "circle-opacity": ["case", ["==", ["get", "index"], selectedIndex], 0.28, ["==", ["get", "rank"], 1], 0.22, 0.14],
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 1.5, ["case", ["==", ["get", "index"], selectedIndex], 10, ["==", ["get", "rank"], 1], 9, 8], 5, ["case", ["==", ["get", "index"], selectedIndex], 13, ["==", ["get", "rank"], 1], 12, 10], 14, ["case", ["==", ["get", "index"], selectedIndex], 22, ["==", ["get", "rank"], 1], 20, 16]],
           "circle-stroke-color": "#ffffff",
           "circle-stroke-opacity": ["case", ["==", ["get", "index"], selectedIndex], 0.18, 0.08],
           "circle-stroke-width": 1
@@ -299,10 +282,10 @@ function ensureLiveMap() {
         source: "candidates",
         paint: {
           "circle-color": ["case", ["==", ["get", "index"], selectedIndex], "#ffffff", ["==", ["get", "rank"], 1], "#10b981", "#5f6468"],
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 1.5, ["case", ["==", ["get", "index"], selectedIndex], 6, ["==", ["get", "rank"], 1], 5.5, 5], 5, ["case", ["==", ["get", "index"], selectedIndex], 8, ["==", ["get", "rank"], 1], 7, 6], 10.9, ["case", ["==", ["get", "index"], selectedIndex], 13, ["==", ["get", "rank"], 1], 12, 10], 11, 0],
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 1.5, ["case", ["==", ["get", "index"], selectedIndex], 5.5, ["==", ["get", "rank"], 1], 5, 4.5], 5, ["case", ["==", ["get", "index"], selectedIndex], 7.5, ["==", ["get", "rank"], 1], 7, 6], 14, ["case", ["==", ["get", "index"], selectedIndex], 16, ["==", ["get", "rank"], 1], 15, 12]],
           "circle-stroke-color": "#f4f4f4",
           "circle-stroke-width": ["case", ["==", ["get", "index"], selectedIndex], 3, ["==", ["get", "rank"], 1], 2.5, 1.8],
-          "circle-opacity": ["interpolate", ["linear"], ["zoom"], 10.8, 0.96, 11, 0]
+          "circle-opacity": 0.96
         }
       });
       liveMap.addLayer({
@@ -320,7 +303,7 @@ function ensureLiveMap() {
           "text-color": ["case", ["==", ["get", "index"], selectedIndex], "#111111", "#ffffff"],
           "text-halo-color": "rgba(0,0,0,0)",
           "text-halo-width": 0,
-          "text-opacity": ["interpolate", ["linear"], ["zoom"], 3, 0, 5, 1, 10.8, 1, 11, 0]
+          "text-opacity": ["interpolate", ["linear"], ["zoom"], 2.5, 0, 4, 1]
         }
       });
       liveMap.addLayer({
@@ -413,17 +396,8 @@ function updateSelectedMarker(index) {
     "#7dd3a4",
     "#9a9a9a"
   ]);
-  liveMap.setPaintProperty("candidate-stem-layer", "circle-radius", [
-    "interpolate",
-    ["linear"],
-    ["zoom"],
-    1,
-    0,
-    10.9,
-    0,
-    11,
-    ["case", ["==", ["get", "index"], index], 6, 5]
-  ]);
+  liveMap.setPaintProperty("candidate-stem-layer", "circle-radius", 0);
+  liveMap.setPaintProperty("candidate-stem-layer", "circle-opacity", 0);
   liveMap.setPaintProperty("candidate-halo-layer", "circle-color", [
     "case",
     ["==", ["get", "index"], index],
@@ -433,28 +407,23 @@ function updateSelectedMarker(index) {
     "#bdbdbd"
   ]);
   liveMap.setPaintProperty("candidate-halo-layer", "circle-opacity", [
-    "interpolate",
-    ["linear"],
-    ["zoom"],
-    1.5,
-    ["case", ["==", ["get", "index"], index], 0.34, ["==", ["get", "rank"], 1], 0.28, 0.18],
-    10.5,
-    ["case", ["==", ["get", "index"], index], 0.26, ["==", ["get", "rank"], 1], 0.2, 0.12],
-    11,
-    0
+    "case",
+    ["==", ["get", "index"], index],
+    0.28,
+    ["==", ["get", "rank"], 1],
+    0.22,
+    0.14
   ]);
   liveMap.setPaintProperty("candidate-halo-layer", "circle-radius", [
     "interpolate",
     ["linear"],
     ["zoom"],
     1.5,
-    ["case", ["==", ["get", "index"], index], 13, ["==", ["get", "rank"], 1], 12, 10],
+    ["case", ["==", ["get", "index"], index], 10, ["==", ["get", "rank"], 1], 9, 8],
     5,
-    ["case", ["==", ["get", "index"], index], 16, ["==", ["get", "rank"], 1], 15, 12],
-    10.9,
-    ["case", ["==", ["get", "index"], index], 24, ["==", ["get", "rank"], 1], 21, 17],
-    11,
-    0
+    ["case", ["==", ["get", "index"], index], 13, ["==", ["get", "rank"], 1], 12, 10],
+    14,
+    ["case", ["==", ["get", "index"], index], 22, ["==", ["get", "rank"], 1], 20, 16]
   ]);
   liveMap.setPaintProperty("candidate-layer", "circle-color", [
     "case",
@@ -469,13 +438,11 @@ function updateSelectedMarker(index) {
     ["linear"],
     ["zoom"],
     1.5,
-    ["case", ["==", ["get", "index"], index], 6, ["==", ["get", "rank"], 1], 5.5, 5],
+    ["case", ["==", ["get", "index"], index], 5.5, ["==", ["get", "rank"], 1], 5, 4.5],
     5,
-    ["case", ["==", ["get", "index"], index], 8, ["==", ["get", "rank"], 1], 7, 6],
-    10.9,
-    ["case", ["==", ["get", "index"], index], 13, ["==", ["get", "rank"], 1], 12, 10],
-    11,
-    0
+    ["case", ["==", ["get", "index"], index], 7.5, ["==", ["get", "rank"], 1], 7, 6],
+    14,
+    ["case", ["==", ["get", "index"], index], 16, ["==", ["get", "rank"], 1], 15, 12]
   ]);
   liveMap.setPaintProperty("candidate-layer", "circle-stroke-width", [
     "case",
@@ -672,11 +639,15 @@ function renderLiveMap(result) {
   
   if (!fusion || candidates.length === 0) return;
 
-  const features = candidates.slice(0, topLimit).map((item, idx) => ({
-    type: "Feature",
-    geometry: { type: "Point", coordinates: [candidateLon(item), candidateLat(item)] },
-    properties: { rank: idx + 1, index: idx, lat: candidateLat(item), lon: candidateLon(item) }
-  }));
+  const features = candidates.slice(0, topLimit).flatMap((item, idx) => {
+    const coord = numericCandidateCoord(item);
+    if (!coord) return [];
+    return [{
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [coord.lon, coord.lat] },
+      properties: { rank: idx + 1, index: idx, lat: coord.lat, lon: coord.lon }
+    }];
+  });
 
   const ringRadius =
     (fusion.radius_km ? fusion.radius_km * 1000 : null) ||
