@@ -8,16 +8,51 @@ let topLimit = 3;
 let lastResult = null;
 let selectedIndex = -1;
 
-const initialCenter = [2.3522, 48.8566]; // Paris
-const initialZoom = 11;
+const parisCenter = [2.3522, 48.8566];
+const globeCenter = [10, 20];
+const globeZoom = 1.8;
+const minPitch = 0;
+const maxPitch = 70;
 const emptyFeatureCollection = { type: "FeatureCollection", features: [] };
+const mapStyle = {
+  version: 8,
+  sources: {
+    basemap: {
+      type: "raster",
+      tiles: [
+        "https://a.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        "https://b.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        "https://c.tile.openstreetmap.org/{z}/{x}/{y}.png"
+      ],
+      tileSize: 256,
+      attribution: "OpenStreetMap contributors"
+    }
+  },
+  layers: [
+    {
+      id: "background",
+      type: "background",
+      paint: { "background-color": "#000000" }
+    },
+    {
+      id: "basemap",
+      type: "raster",
+      source: "basemap",
+      paint: {
+        "raster-opacity": 0.9,
+        "raster-saturation": -1,
+        "raster-contrast": 0.35,
+        "raster-brightness-min": 0,
+        "raster-brightness-max": 0.24
+      }
+    }
+  ]
+};
 
 /* --- Map Core --- */
 
 function getMapPadding() {
-  const panel = document.querySelector(".analysis-panel");
-  const panelWidth = panel ? panel.offsetWidth : 420;
-  return { left: 0, right: panelWidth + 40, top: 0, bottom: 0 };
+  return { left: 0, right: 0, top: 0, bottom: 0 };
 }
 
 function ensureLiveMap() {
@@ -28,18 +63,18 @@ function ensureLiveMap() {
     return Promise.reject("No map container");
   }
 
-  const styleUrl = "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json";
   const padding = getMapPadding();
 
   try {
     liveMap = new maplibregl.Map({
       container: el,
-      style: styleUrl,
-      center: initialCenter,
-      zoom: initialZoom,
+      style: mapStyle,
+      center: globeCenter,
+      zoom: globeZoom,
       pitch: 0, 
       bearing: 0,
       padding: padding,
+      projection: { type: "globe" },
       attributionControl: false,
       antialias: true
     });
@@ -62,24 +97,22 @@ function ensureLiveMap() {
         console.warn("LOG: Globe fallback:", e);
       }
 
-      // Neutralize Background Layer
       const style = liveMap.getStyle();
       const bgLayer = style.layers.find(l => l.type === "background");
       if (bgLayer) {
-        liveMap.setPaintProperty(bgLayer.id, "background-color", "#0B0B0B");
+        liveMap.setPaintProperty(bgLayer.id, "background-color", "#000000");
       }
 
-      // Neutralize Atmosphere / Fog
       if (typeof liveMap.setFog === "function") {
         liveMap.setFog({
-          color: "#0B0B0B",
-          "high-color": "#0B0B0B",
-          "space-color": "#0B0B0B",
+          color: "#000000",
+          "high-color": "#000000",
+          "space-color": "#000000",
           "horizon-blend": 0.02
         });
       }
 
-      liveMap.getCanvas().style.backgroundColor = "#0B0B0B";
+      liveMap.getCanvas().style.backgroundColor = "#000000";
 
       // Sources
       liveMap.addSource("candidates", { type: "geojson", data: emptyFeatureCollection });
@@ -104,10 +137,21 @@ function ensureLiveMap() {
         type: "circle",
         source: "candidates",
         paint: {
-          "circle-color": ["case", ["==", ["get", "rank"], 1], "#10b981", "#EAEAEA"],
-          "circle-radius": ["case", ["==", ["get", "rank"], 1], 10, 6],
+          "circle-color": ["case", ["==", ["get", "index"], selectedIndex], "#ffffff", ["==", ["get", "rank"], 1], "#cfcfcf", "#8a8a8a"],
+          "circle-radius": ["case", ["==", ["get", "index"], selectedIndex], 13, ["==", ["get", "rank"], 1], 10, 6],
           "circle-stroke-color": "#000",
-          "circle-stroke-width": 1.5
+          "circle-stroke-width": ["case", ["==", ["get", "index"], selectedIndex], 3, 1.5]
+        }
+      });
+      liveMap.addLayer({
+        id: "candidate-hit-layer",
+        type: "circle",
+        source: "candidates",
+        paint: {
+          "circle-color": "#ffffff",
+          "circle-opacity": 0.01,
+          "circle-radius": 22,
+          "circle-stroke-opacity": 0
         }
       });
       liveMap.addLayer({
@@ -118,22 +162,29 @@ function ensureLiveMap() {
       });
 
       // Map Interaction: Click Marker to Select Card
-      liveMap.on("click", "candidate-layer", (e) => {
+      const handleCandidateMarkerClick = (e) => {
         if (e.features.length > 0) {
-          const index = e.features[0].properties.index;
-          if (index !== undefined) {
+          const index = Number(e.features[0].properties.index);
+          if (Number.isFinite(index)) {
             console.log(`LOG: Map marker clicked (Index ${index})`);
             selectCandidate(index);
           }
         }
-      });
+      };
 
-      liveMap.on("mouseenter", "candidate-layer", () => {
+      liveMap.on("click", "candidate-layer", handleCandidateMarkerClick);
+      liveMap.on("click", "candidate-hit-layer", handleCandidateMarkerClick);
+
+      const showPointer = () => {
         liveMap.getCanvas().style.cursor = "pointer";
-      });
-      liveMap.on("mouseleave", "candidate-layer", () => {
+      };
+      const clearPointer = () => {
         liveMap.getCanvas().style.cursor = "";
-      });
+      };
+      liveMap.on("mouseenter", "candidate-layer", showPointer);
+      liveMap.on("mouseenter", "candidate-hit-layer", showPointer);
+      liveMap.on("mouseleave", "candidate-layer", clearPointer);
+      liveMap.on("mouseleave", "candidate-hit-layer", clearPointer);
 
       window.addEventListener("resize", () => {
         liveMap.setPadding(getMapPadding());
@@ -169,6 +220,32 @@ function setMetric(id, value) {
   if (el) el.textContent = value;
 }
 
+function updateSelectedMarker(index) {
+  if (!liveMap || !liveMap.getLayer?.("candidate-layer")) return;
+  liveMap.setPaintProperty("candidate-layer", "circle-color", [
+    "case",
+    ["==", ["get", "index"], index],
+    "#ffffff",
+    ["==", ["get", "rank"], 1],
+    "#cfcfcf",
+    "#8a8a8a"
+  ]);
+  liveMap.setPaintProperty("candidate-layer", "circle-radius", [
+    "case",
+    ["==", ["get", "index"], index],
+    13,
+    ["==", ["get", "rank"], 1],
+    10,
+    6
+  ]);
+  liveMap.setPaintProperty("candidate-layer", "circle-stroke-width", [
+    "case",
+    ["==", ["get", "index"], index],
+    3,
+    1.5
+  ]);
+}
+
 function selectCandidate(index) {
   const cards = document.querySelectorAll(".candidate-card");
   if (!cards.length) return;
@@ -181,6 +258,7 @@ function selectCandidate(index) {
   
   cards.forEach(c => c.classList.remove("active"));
   card.classList.add("active");
+  updateSelectedMarker(index);
   card.scrollIntoView({ behavior: "smooth", block: "nearest" });
   
   const lat = parseFloat(card.dataset.lat);
@@ -191,12 +269,34 @@ function selectCandidate(index) {
     liveMap.flyTo({ 
       center: [lon, lat], 
       zoom: 18, 
-      pitch: 0,
-      bearing: 0,
+      pitch: liveMap.getPitch(),
+      bearing: liveMap.getBearing(),
       padding: getMapPadding(),
       duration: 1200 
     });
   }
+}
+
+function recordCandidateAction(action, index = selectedIndex) {
+  if (index < 0) return Promise.resolve(null);
+  return postForm("/api/operator/confirm", JSON.stringify({ rank: index + 1, action }));
+}
+
+function candidateWeight(item) {
+  return item?.posterior_weight ?? item?.posterior ?? item?.score ?? 0;
+}
+
+function candidateLat(item) {
+  return item?.display_lat ?? item?.lat ?? item?.candidate?.latitude;
+}
+
+function candidateLon(item) {
+  return item?.display_lon ?? item?.lon ?? item?.candidate?.longitude;
+}
+
+function sortedCandidates(result) {
+  const candidates = Array.isArray(result?.candidates) ? result.candidates : [];
+  return [...candidates].sort((a, b) => candidateWeight(b) - candidateWeight(a));
 }
 
 function renderCandidateList(result) {
@@ -204,22 +304,20 @@ function renderCandidateList(result) {
   if (!container) return;
   container.replaceChildren();
 
-  const fusion = result?.fused_estimate;
-  const candidates = Array.isArray(result?.candidates) ? result.candidates : [];
+  const candidates = sortedCandidates(result);
 
   if (candidates.length === 0) {
     container.innerHTML = '<div class="empty-state">No candidates found.</div>';
     return;
   }
 
-  const sorted = [...candidates].sort((a, b) => (b.posterior_weight ?? 0) - (a.posterior_weight ?? 0));
-  const slice = sorted.slice(0, topLimit);
+  const slice = candidates.slice(0, topLimit);
 
   slice.forEach((item, idx) => {
     const rank = idx + 1;
     const cand = item || {};
-    const lat = cand.display_lat;
-    const lon = cand.display_lon;
+    const lat = candidateLat(cand);
+    const lon = candidateLon(cand);
     const card = document.createElement("div");
     card.className = "candidate-card";
     card.dataset.lat = lat;
@@ -230,23 +328,27 @@ function renderCandidateList(result) {
     const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
     
     // Check source
-    const isExif = cand.match_id === "exif:gps";
-    const sourceLabel = isExif ? "IMAGE METADATA (EXIF)" : `MATCH ID: ${cand.match_id || "N/A"}`;
+    const sourceId = cand.match_id || cand.source || "N/A";
+    const isExif = sourceId === "exif:gps";
+    const sourceLabel = isExif ? "IMAGE METADATA (EXIF)" : `MATCH ID: ${sourceId}`;
 
     card.innerHTML = `
       <div class="card-top">
         <span class="card-rank">#${rank}</span>
-        <span class="card-score">${((item.posterior_weight ?? 0) * 100).toFixed(1)}%</span>
+        <span class="card-score">${(candidateWeight(item) * 100).toFixed(1)}%</span>
       </div>
       <div class="card-address">Target Point ${rank}</div>
-      <div class="card-sub">Paris, France • ${sourceLabel}</div>
+      <div class="card-sub-wrap">
+        <div class="card-sub" title="Click to copy source">Paris, France - ${sourceLabel}</div>
+        <button class="source-more" type="button" hidden>Show more</button>
+      </div>
       <div class="card-coords-row">
         <div class="card-coords">${coordString}</div>
         <button class="btn-icon-small copy-coords" title="Copy Coordinates">COPY</button>
       </div>
       <div style="display: flex; gap: 8px; margin-top: 8px;" class="card-actions-wrapper">
-       <button class="btn-card-action" onclick="document.getElementById('btn-confirm-cand').click();">CONFIRM</button>
-       <button class="btn-card-action" onclick="document.getElementById('btn-reject-cand').click();">REJECT</button>
+       <button class="btn-card-action candidate-action" data-action="confirm" type="button">CONFIRM</button>
+       <button class="btn-card-action candidate-action" data-action="reject" type="button">REJECT</button>
       </div>
       <button class="btn-card-action open-maps">Open in Google Maps</button>
       <span class="copied-hint">Copied</span>
@@ -261,9 +363,44 @@ function renderCandidateList(result) {
       });
     });
 
+    const sourceText = `Paris, France - ${sourceLabel}`;
+    const subEl = card.querySelector(".card-sub");
+    const sourceMore = card.querySelector(".source-more");
+    if (subEl && sourceMore) {
+      requestAnimationFrame(() => {
+        const isOverflowing = subEl.scrollHeight > subEl.clientHeight + 1;
+        sourceMore.hidden = !isOverflowing;
+      });
+      sourceMore.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const expanded = subEl.classList.toggle("expanded");
+        sourceMore.textContent = expanded ? "Show less" : "Show more";
+      });
+      subEl.addEventListener("click", (e) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(sourceText).then(() => {
+          const hint = card.querySelector(".copied-hint");
+          hint.textContent = "Source copied";
+          hint.classList.add("visible");
+          setTimeout(() => {
+            hint.classList.remove("visible");
+            hint.textContent = "Copied";
+          }, 2000);
+        });
+      });
+    }
+
     card.querySelector(".open-maps").addEventListener("click", (e) => {
       e.stopPropagation();
       window.open(mapsUrl, "_blank");
+    });
+
+    card.querySelectorAll(".candidate-action").forEach((button) => {
+      button.addEventListener("click", (e) => {
+        e.stopPropagation();
+        selectCandidate(idx);
+        recordCandidateAction(button.dataset.action || "confirm", idx);
+      });
     });
 
     card.addEventListener("click", () => selectCandidate(idx));
@@ -277,17 +414,21 @@ function renderCandidateList(result) {
 function renderLiveMap(result) {
   ensureLiveMap();
   const fusion = result?.fused_estimate;
-  const candidates = Array.isArray(result?.candidates) ? result.candidates : [];
+  const candidates = sortedCandidates(result);
   
   if (!fusion || candidates.length === 0) return;
 
   const features = candidates.slice(0, topLimit).map((item, idx) => ({
     type: "Feature",
-    geometry: { type: "Point", coordinates: [item.display_lon, item.display_lat] },
-    properties: { rank: idx + 1, index: idx, lat: item.display_lat, lon: item.display_lon }
+    geometry: { type: "Point", coordinates: [candidateLon(item), candidateLat(item)] },
+    properties: { rank: idx + 1, index: idx, lat: candidateLat(item), lon: candidateLon(item) }
   }));
 
-  const ringRadius = fusion.uncertainty_radius_m || (fusion.ellipse?.major_axis_m ? fusion.ellipse.major_axis_m * 0.6 : null) || result.result?.geo?.uncertainty_m;
+  const ringRadius =
+    (fusion.radius_km ? fusion.radius_km * 1000 : null) ||
+    fusion.uncertainty_radius_m ||
+    (fusion.ellipse?.major_axis_m ? fusion.ellipse.major_axis_m * 0.6 : null) ||
+    result?.result?.geo?.uncertainty_m;
   const ringFeature = (fusion.display_lat && fusion.display_lon && ringRadius) ? {
     type: "Feature",
     geometry: { type: "Polygon", coordinates: [circlePolygon(fusion.display_lat, fusion.display_lon, ringRadius)] }
@@ -303,11 +444,11 @@ function renderLiveMap(result) {
 
     if (candidates.length > 0) {
       const top = candidates[0];
-      if (top.display_lat !== undefined && top.display_lon !== undefined) {
+      if (candidateLat(top) !== undefined && candidateLon(top) !== undefined) {
          liveMap.easeTo({
-           center: [top.display_lon, top.display_lat],
+           center: [candidateLon(top), candidateLat(top)],
            zoom: 15,
-           pitch: 0,
+           pitch: liveMap.getPitch(),
            padding: getMapPadding(),
            duration: 800
          });
@@ -319,22 +460,27 @@ function renderLiveMap(result) {
 function renderSummary(result) {
   console.log("LOG: Rendering Summary", result);
   const res = result || {};
-  const fusion = result.fused_estimate || {};
-  const geo = result.fused_estimate || {};
+  const fusion = res.fused_estimate || {};
+  const geo = res.fused_estimate || {};
 
   // Diagnostics
-  setMetric("diag-backend", result.source?.filename || "-");
-  setMetric("diag-worker", result.runtime?.worker_mode || "-");
+  setMetric("diag-backend", res.source?.filename || "-");
+  setMetric("diag-worker", res.runtime?.worker_mode || "-");
   setMetric("diag-tier", geo.tier || "-");
   
   // Radius: prefer non-zero fusion radius, fallback to geo uncertainty
   let radius = "-";
   if (fusion.radius_km !== undefined && fusion.radius_km > 0) {
-    radius = `${(fusion.radius_km * 1000).toFixed(1)}
+    radius = `${(fusion.radius_km * 1000).toFixed(1)}m`;
+  } else if (fusion.uncertainty_radius_m !== undefined && fusion.uncertainty_radius_m > 0) {
+    radius = `${fusion.uncertainty_radius_m.toFixed(1)}m`;
+  } else if (geo.uncertainty_m !== undefined) {
+    radius = `${geo.uncertainty_m}m`;
+  }
   setMetric("diag-radius", radius);
   
   // Model Status: Check safe_demo or backend name
-  const isDemo = false;
+  const isDemo = Boolean(res.safe_demo);
   const modelStatus = isDemo ? "DEMO FALLBACK" : "REAL MODEL";
   const modelStatusEl = byId("diag-model-status");
   if (modelStatusEl) {
@@ -511,12 +657,75 @@ ${msg}`);
 function setupMapControls() {
   byId("map-zoom-in").addEventListener("click", () => liveMap?.zoomIn());
   byId("map-zoom-out").addEventListener("click", () => liveMap?.zoomOut());
+  const tiltHandle = byId("map-tilt-handle");
+  const tiltLabel = byId("map-tilt-label");
+
+  const updateTiltLabel = () => {
+    if (!tiltLabel || !liveMap) return;
+    tiltLabel.textContent = String(Math.round(liveMap.getPitch()));
+  };
+
+  const setPitch = (pitch, duration = 180) => {
+    if (!liveMap) return;
+    liveMap.easeTo({
+      pitch: Math.max(minPitch, Math.min(maxPitch, pitch)),
+      duration
+    });
+    window.setTimeout(updateTiltLabel, duration + 20);
+  };
+
+  if (tiltHandle) {
+    let dragging = false;
+    let suppressClick = false;
+    let startY = 0;
+    let startPitch = 0;
+
+    tiltHandle.addEventListener("click", () => {
+      if (suppressClick) {
+        suppressClick = false;
+        return;
+      }
+      setPitch(liveMap?.getPitch() ? 0 : 45, 280);
+    });
+    tiltHandle.addEventListener("pointerdown", (e) => {
+      if (!liveMap) return;
+      dragging = false;
+      startY = e.clientY;
+      startPitch = liveMap.getPitch();
+      tiltHandle.setPointerCapture(e.pointerId);
+      tiltHandle.classList.add("dragging");
+    });
+    tiltHandle.addEventListener("pointermove", (e) => {
+      if (!tiltHandle.hasPointerCapture(e.pointerId) || !liveMap) return;
+      const deltaY = startY - e.clientY;
+      if (Math.abs(deltaY) > 2) dragging = true;
+      liveMap.setPitch(Math.max(minPitch, Math.min(maxPitch, startPitch + deltaY * 0.45)));
+      updateTiltLabel();
+    });
+    const endDrag = (e) => {
+      if (tiltHandle.hasPointerCapture(e.pointerId)) {
+        tiltHandle.releasePointerCapture(e.pointerId);
+      }
+      tiltHandle.classList.remove("dragging");
+      if (dragging) {
+        suppressClick = true;
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+    tiltHandle.addEventListener("pointerup", endDrag);
+    tiltHandle.addEventListener("pointercancel", endDrag);
+  }
+
+  liveMapReady?.then(updateTiltLabel);
   
   byId("map-reset-paris").addEventListener("click", () => {
-    liveMap?.easeTo({ center: initialCenter, zoom: 11, pitch: 0, bearing: 0, padding: getMapPadding(), duration: 1400 });
+    liveMap?.easeTo({ center: parisCenter, zoom: 11, pitch: 0, bearing: 0, padding: getMapPadding(), duration: 1400 });
+    window.setTimeout(updateTiltLabel, 1420);
   });
   byId("map-reset-globe").addEventListener("click", () => {
-    liveMap?.easeTo({ center: [10, 20], zoom: 1.8, pitch: 0, bearing: 0, padding: getMapPadding(), duration: 1800 });
+    liveMap?.easeTo({ center: globeCenter, zoom: globeZoom, pitch: 0, bearing: 0, padding: getMapPadding(), duration: 1800 });
+    window.setTimeout(updateTiltLabel, 1820);
   });
 }
 
@@ -614,6 +823,7 @@ function init() {
   setupKeyboardNav();
   setupDiagnostics();
   setupToggles();
+  setupOperatorActions();
   
   const profileSelect = byId("profile-select");
   if (profileSelect) {
@@ -670,16 +880,12 @@ function setupOperatorActions() {
 
     if (confirmBtn) {
         confirmBtn.addEventListener("click", () => {
-             if (selectedIndex >= 0) {
-                 postForm("/api/operator/confirm", JSON.stringify({rank: selectedIndex + 1, action: "confirm"}));
-             }
+             recordCandidateAction("confirm");
         });
     }
     if (rejectBtn) {
         rejectBtn.addEventListener("click", () => {
-             if (selectedIndex >= 0) {
-                 postForm("/api/operator/confirm", JSON.stringify({rank: selectedIndex + 1, action: "reject"}));
-             }
+             recordCandidateAction("reject");
         });
     }
     if (saveNoteBtn && noteInput) {
@@ -719,10 +925,3 @@ function setupOperatorActions() {
         });
     }
 }
-
-// override init to call setupOperatorActions
-const oldInit = init;
-init = function() {
-   oldInit();
-   setupOperatorActions();
-};

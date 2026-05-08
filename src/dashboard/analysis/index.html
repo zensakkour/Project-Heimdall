@@ -11,7 +11,7 @@
       crossorigin=""
     />
     <link rel="stylesheet" href="../theme.css?v=7" />
-    <link rel="stylesheet" href="operator.css?v=8" />
+    <link rel="stylesheet" href="operator.css?v=14" />
 
 <style>
 .session-timeline { font-size: 11px; color: var(--text-secondary); max-height: 150px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
@@ -35,6 +35,11 @@
       <div id="map-controls" class="map-controls">
         <button id="map-zoom-in" title="Zoom In">+</button>
         <button id="map-zoom-out" title="Zoom Out">−</button>
+        <div class="control-sep"></div>
+        <button id="map-tilt-handle" class="tilt-handle" title="Drag up/down to change angle" aria-label="Map angle">
+          <span class="tilt-icon">∠</span>
+          <span id="map-tilt-label" class="tilt-label">0</span>
+        </button>
         <div class="control-sep"></div>
         <button id="map-reset-paris" class="btn-text">Paris</button>
         <button id="map-reset-globe" class="btn-text">Globe</button>
@@ -232,7 +237,7 @@
     </div>
 
     <script src="https://unpkg.com/maplibre-gl@5.0.0/dist/maplibre-gl.js" crossorigin=""></script>
-    <script type="module" src="operator.js?v=8"></script>
+    <script type="module" src="operator.js?v=14"></script>
 
         <button id="btn-confirm-cand" style="display:none;"></button>
         <button id="btn-reject-cand" style="display:none;"></button>

@@ -338,7 +338,7 @@ html, body {
 .candidate-card.active {
   background: rgba(255, 255, 255, 0.05);
   border-color: var(--text-primary);
-  box-shadow: none;
+  box-shadow: inset 3px 0 0 var(--text-primary), 0 0 0 1px rgba(255, 255, 255, 0.16);
 }
 
 .card-top {
@@ -369,17 +369,58 @@ html, body {
   color: var(--text-primary);
 }
 
-.card-sub {
-  font-size: 11px;
-  color: var(--text-secondary);
+.card-sub-wrap {
   margin-top: 4px;
+  min-width: 0;
+}
+
+.card-sub {
+  color: var(--text-secondary);
+  cursor: copy;
+  display: -webkit-box;
+  font-size: 11px;
+  line-height: 1.35;
+  max-width: 100%;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.card-sub.expanded {
+  display: block;
+  max-height: 180px;
+  overflow: auto;
+  -webkit-line-clamp: unset;
+}
+
+.source-more {
+  background: transparent;
+  border: 0;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin-top: 4px;
+  padding: 0;
+  text-transform: uppercase;
+}
+
+.source-more:hover {
+  color: #fff;
+  text-decoration: underline;
 }
 
 /* --- Map Controls (Bottom Left) --- */
 .map-controls {
-
+  grid-area: map;
+  align-self: end;
+  justify-self: start;
   bottom: 24px;
-
+  margin: 0 0 24px 24px;
+  position: relative;
   z-index: 10;
   display: flex;
   flex-direction: row; /* Horizontal layout */
@@ -418,6 +459,32 @@ html, body {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+
+.map-controls .tilt-handle {
+  gap: 4px;
+  min-width: 46px;
+  padding: 0 9px;
+  touch-action: none;
+  user-select: none;
+}
+
+.map-controls .tilt-handle.dragging {
+  background: rgba(255, 255, 255, 0.12);
+  cursor: ns-resize;
+}
+
+.tilt-icon {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.tilt-label {
+  color: var(--text-secondary);
+  font-family: monospace;
+  font-size: 10px;
+  min-width: 14px;
+  text-align: right;
 }
 
 .compass-btn {
@@ -541,7 +608,7 @@ html, body {
 }
 
 .copy-status {
-
+  position: absolute;
   bottom: -20px;
 
   font-size: 10px;
@@ -575,7 +642,7 @@ html, body {
 }
 
 .lightbox-backdrop {
-
+  position: absolute;
   inset: 0;
   background: rgba(0, 0, 0, 0.85);
   backdrop-filter: blur(12px);
@@ -607,7 +674,7 @@ html, body {
 }
 
 .lightbox-close {
-
+  position: absolute;
   top: -40px;
   right: -40px;
   background: transparent;
@@ -628,7 +695,7 @@ html, body {
 
 .candidate-card.active {
   opacity: 1;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.075);
   border-color: var(--text-primary);
 }
 
