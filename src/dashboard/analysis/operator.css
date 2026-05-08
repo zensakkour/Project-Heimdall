@@ -907,6 +907,15 @@ html, body {
   width: 68px;
 }
 
+.geo-pin.compact {
+  height: 34px;
+  justify-content: center;
+  transform: scale(var(--pin-scale, 1));
+  transform-origin: center center;
+  transition: transform 0.16s ease, opacity 0.16s ease;
+  width: 34px;
+}
+
 .geo-pin:hover,
 .geo-pin:focus,
 .geo-pin:focus-visible,
@@ -965,6 +974,21 @@ html, body {
   position: relative;
   width: 32px;
   z-index: 2;
+}
+
+.geo-pin.compact .geo-pin-head {
+  box-shadow: 0 0 0 9px rgba(255, 255, 255, 0.08), 0 0 22px rgba(255, 255, 255, 0.1);
+  height: 28px;
+  width: 28px;
+}
+
+.geo-pin.compact.top .geo-pin-head {
+  box-shadow: 0 0 0 10px rgba(16, 185, 129, 0.18), 0 0 24px rgba(16, 185, 129, 0.18);
+}
+
+.geo-pin.compact.selected .geo-pin-head {
+  height: 32px;
+  width: 32px;
 }
 
 .geo-pin.top .geo-pin-head {

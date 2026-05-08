@@ -151,20 +151,45 @@ function updateHtmlMarkerSelection(index) {
 function updatePinScale() {
   if (!liveMap) return;
   const zoom = liveMap.getZoom();
-  const htmlPinVisible = zoom >= htmlPinMinZoom;
-  const t = Math.max(0, Math.min(1, (zoom - htmlPinMinZoom) / 4));
+  const t = Math.max(0, Math.min(1, (zoom - 2) / 12));
   const eased = t * t * (3 - 2 * t);
-  const scale = 0.55 + eased * 0.45;
+  const scale = 0.72 + eased * 0.42;
   candidateMarkers.forEach((marker) => {
     const el = marker.getElement();
     el.style.setProperty("--pin-scale", scale.toFixed(2));
-    el.classList.toggle("pin-hidden", !htmlPinVisible);
-    el.classList.toggle("pin-dot", false);
+    el.classList.remove("pin-hidden", "pin-dot");
   });
 }
 
 function renderHtmlCandidateMarkers(candidates) {
   clearCandidateMarkers();
+  if (!liveMap) return;
+
+  candidates.slice(0, topLimit).forEach((item, idx) => {
+    const coord = numericCandidateCoord(item);
+    if (!coord) return;
+
+    const el = document.createElement("button");
+    el.type = "button";
+    el.className = `geo-pin compact${idx === 0 ? " top" : ""}${idx === selectedIndex ? " selected" : ""}`;
+    el.dataset.index = String(idx);
+    el.setAttribute("aria-label", `Select geo candidate ${idx + 1}`);
+    el.innerHTML = `<span class="geo-pin-head">${idx + 1}</span>`;
+    el.addEventListener("click", (event) => {
+      event.stopPropagation();
+      selectCandidate(idx);
+    });
+
+    const marker = new maplibregl.Marker({
+      element: el,
+      anchor: "center",
+      offset: candidateScreenOffset(idx)
+    })
+      .setLngLat([coord.lon, coord.lat])
+      .addTo(liveMap);
+    candidateMarkers.push(marker);
+  });
+  updatePinScale();
 }
 
 function numericCandidateCoord(item) {
