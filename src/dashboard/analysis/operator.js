@@ -171,7 +171,7 @@ function renderHtmlCandidateMarkers(candidates) {
     el.className = `geo-pin${idx === 0 ? " top" : ""}${idx === selectedIndex ? " selected" : ""}`;
     el.dataset.index = String(idx);
     el.setAttribute("aria-label", `Select geo candidate ${idx + 1}`);
-    el.innerHTML = `<span class="geo-pin-halo"></span><span class="geo-pin-head">${idx + 1}</span><span class="geo-pin-stem"></span>`;
+    el.innerHTML = `<span class="geo-pin-visual"><span class="geo-pin-halo"></span><span class="geo-pin-head">${idx + 1}</span><span class="geo-pin-stem"></span></span>`;
     el.addEventListener("click", (event) => {
       event.stopPropagation();
       selectCandidate(idx);

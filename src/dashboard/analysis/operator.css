@@ -681,15 +681,18 @@ html, body {
 }
 
 .lightbox-content img {
-  max-width: 100%;
+  max-width: calc(94vw - 332px);
   max-height: 80vh;
+  object-fit: contain;
   border-radius: 12px;
   box-shadow: 0 30px 90px rgba(0, 0, 0, 0.8);
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .lightbox-image-wrap {
-  flex: 1 1 auto;
+  align-items: flex-start;
+  display: inline-flex;
+  flex: 0 1 auto;
   max-height: 80vh;
   max-width: 100%;
   min-width: 0;
@@ -704,8 +707,8 @@ html, body {
   inset: 0;
   pointer-events: none;
   position: absolute;
-  width: 100%;
-  height: 100%;
+  height: calc(100% - 2px);
+  width: calc(100% - 2px);
 }
 
 .det-obb {
@@ -878,9 +881,6 @@ button.intel-row {
   justify-content: flex-end;
   padding: 0;
   position: relative;
-  transform: translateY(2px) scale(var(--pin-scale, 1));
-  transform-origin: bottom center;
-  transition: transform 0.16s ease, opacity 0.16s ease;
   width: 68px;
 }
 
@@ -891,6 +891,19 @@ button.intel-row {
   background: transparent;
   box-shadow: none;
   outline: none;
+}
+
+.geo-pin-visual {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  height: 68px;
+  justify-content: flex-end;
+  position: relative;
+  transform: translateY(2px) scale(var(--pin-scale, 1));
+  transform-origin: bottom center;
+  transition: transform 0.16s ease, opacity 0.16s ease;
+  width: 68px;
 }
 
 .geo-pin-halo {
@@ -977,6 +990,14 @@ button.intel-row {
 @media (max-width: 900px) {
   .lightbox-body {
     flex-direction: column;
+  }
+
+  .lightbox-image-wrap {
+    max-width: 100%;
+  }
+
+  .lightbox-content img {
+    max-width: 100%;
   }
 
   .lightbox-intel {
