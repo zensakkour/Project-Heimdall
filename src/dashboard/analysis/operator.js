@@ -144,6 +144,15 @@ function updateHtmlMarkerSelection(index) {
   });
 }
 
+function updatePinScale() {
+  if (!liveMap) return;
+  const zoom = liveMap.getZoom();
+  const scale = Math.max(0.32, Math.min(0.82, 0.32 + (zoom - 2) * 0.07));
+  candidateMarkers.forEach((marker) => {
+    marker.getElement().style.setProperty("--pin-scale", scale.toFixed(2));
+  });
+}
+
 function renderHtmlCandidateMarkers(candidates) {
   if (!liveMap) return;
   clearCandidateMarkers();
@@ -168,6 +177,7 @@ function renderHtmlCandidateMarkers(candidates) {
       .addTo(liveMap);
     candidateMarkers.push(marker);
   });
+  updatePinScale();
 }
 
 function ensureLiveMap() {
@@ -346,6 +356,7 @@ function ensureLiveMap() {
       liveMap.on("mouseenter", "candidate-hit-layer", showPointer);
       liveMap.on("mouseleave", "candidate-layer", clearPointer);
       liveMap.on("mouseleave", "candidate-hit-layer", clearPointer);
+      liveMap.on("zoom", updatePinScale);
 
       bringCandidateLayersToFront();
 
@@ -713,6 +724,7 @@ function renderSummary(result) {
   renderLiveMap(result);
   renderTimeline(result);
   renderClues(result);
+  renderLightboxIntel();
 }
 
 function showAnalysisAlert(message) {
@@ -761,6 +773,7 @@ function setupFilePicker() {
       reader.onload = (e) => {
         thumb.src = e.target.result;
         lightboxImg.src = e.target.result;
+        lightboxImg.onload = renderLightboxIntel;
         lightboxName.textContent = file.name;
         ingestBlock.style.display = "none";
         previewBlock.style.display = "flex";
@@ -800,7 +813,10 @@ function setupLightbox() {
   const backdrop = byId("lightbox-backdrop");
 
   const close = () => modal.classList.remove("active");
-  expandBtn.addEventListener("click", () => modal.classList.add("active"));
+  expandBtn.addEventListener("click", () => {
+    modal.classList.add("active");
+    renderLightboxIntel();
+  });
   closeBtn.addEventListener("click", close);
   backdrop.addEventListener("click", close);
   window.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
@@ -1102,6 +1118,88 @@ function renderClues(session) {
       div.innerHTML = `<strong>${clue.name}</strong> <span>(${(clue.score*100).toFixed(0)}%)</span> - ${clue.description}`;
       cluesEl.appendChild(div);
   });
+}
+
+function getImageDetections() {
+  const direct = Array.isArray(lastResult?.detections) ? lastResult.detections : [];
+  const nested = Array.isArray(lastResult?.result?.detections) ? lastResult.result.detections : [];
+  return direct.length ? direct : nested;
+}
+
+function renderLightboxIntel() {
+  const img = byId("lightbox-img");
+  const overlay = byId("lightbox-overlay");
+  const intel = byId("lightbox-intel");
+  if (!img || !overlay || !intel) return;
+
+  const detections = getImageDetections();
+  const clues = Array.isArray(lastResult?.clues) ? lastResult.clues : [];
+  const width = img.naturalWidth || 1;
+  const height = img.naturalHeight || 1;
+
+  overlay.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  overlay.replaceChildren();
+
+  detections.forEach((det, idx) => {
+    const obb = Array.isArray(det?.obb) ? det.obb : [];
+    if (obb.length !== 4) return;
+    const points = obb
+      .map((pt) => [Number(pt?.[0]), Number(pt?.[1])])
+      .filter(([x, y]) => Number.isFinite(x) && Number.isFinite(y));
+    if (points.length !== 4) return;
+
+    const polygon = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+    polygon.setAttribute("points", points.map(([x, y]) => `${x},${y}`).join(" "));
+    polygon.setAttribute("class", "det-obb");
+    overlay.appendChild(polygon);
+
+    const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    const x = Math.min(...points.map(([px]) => px));
+    const y = Math.min(...points.map(([, py]) => py));
+    label.setAttribute("x", String(Math.max(8, x)));
+    label.setAttribute("y", String(Math.max(18, y - 8)));
+    label.setAttribute("class", "det-label");
+    label.textContent = `${idx + 1}. ${det.label || "object"} ${Math.round((det.confidence || 0) * 100)}%`;
+    overlay.appendChild(label);
+  });
+
+  intel.replaceChildren();
+  const title = document.createElement("div");
+  title.className = "intel-title";
+  title.textContent = "Detected Objects";
+  intel.appendChild(title);
+
+  const addIntelRow = (name, detail) => {
+    const row = document.createElement("div");
+    row.className = "intel-row";
+    const strong = document.createElement("strong");
+    strong.textContent = name;
+    const span = document.createElement("span");
+    span.textContent = detail;
+    row.append(strong, span);
+    intel.appendChild(row);
+  };
+
+  detections.forEach((det, idx) => {
+    const score = Number.isFinite(Number(det?.confidence)) ? `${Math.round(Number(det.confidence) * 100)}%` : "-";
+    const heading = Number.isFinite(Number(det?.heading_deg)) ? ` | heading ${Number(det.heading_deg).toFixed(1)} deg` : "";
+    const shadow = Number.isFinite(Number(det?.shadow_azimuth_deg)) ? ` | shadow ${Number(det.shadow_azimuth_deg).toFixed(1)} deg` : "";
+    addIntelRow(`${idx + 1}. ${det?.label || "object"}`, `${score}${heading}${shadow}`);
+  });
+
+  if (!detections.length && clues.length) {
+    clues.forEach((clue, idx) => {
+      const score = Number.isFinite(Number(clue?.score)) ? `${Math.round(Number(clue.score) * 100)}%` : "-";
+      addIntelRow(`${idx + 1}. ${clue?.name || "clue"}`, `${score} | ${clue?.description || ""}`);
+    });
+  }
+
+  if (!detections.length && !clues.length) {
+    const empty = document.createElement("div");
+    empty.className = "intel-empty";
+    empty.textContent = "No object detections available for this image.";
+    intel.appendChild(empty);
+  }
 }
 
 function setupOperatorActions() {

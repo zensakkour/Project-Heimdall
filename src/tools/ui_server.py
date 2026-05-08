@@ -2283,6 +2283,16 @@ async def operator_analyze(
         _OPERATOR_SESSION["clues"] = [
             {"name": "mock clue", "score": 1.0, "description": "Dev mode clue", "reliability": "strong"}
         ]
+        _OPERATOR_SESSION["detections"] = [
+            {
+                "label": "mock clue",
+                "confidence": 1.0,
+                "obb": [[240, 180], [560, 180], [560, 380], [240, 380]],
+                "heading_deg": None,
+                "shadow_azimuth_deg": None,
+                "shadow_length_ratio": None,
+            }
+        ]
         _OPERATOR_SESSION["status"] = "completed"
         _add_timeline_event("Analysis complete (DEV MODE)", "success")
         return JSONResponse(_OPERATOR_SESSION)
@@ -2323,6 +2333,17 @@ async def operator_analyze(
                      "reliability": "medium" if d.confidence > 0.5 else "weak"
                  })
             _OPERATOR_SESSION["clues"] = clues
+            _OPERATOR_SESSION["detections"] = [
+                {
+                    "label": d.label,
+                    "confidence": d.confidence,
+                    "obb": d.obb,
+                    "heading_deg": d.heading_deg,
+                    "shadow_azimuth_deg": d.shadow_azimuth_deg,
+                    "shadow_length_ratio": d.shadow_length_ratio,
+                }
+                for d in detections
+            ]
 
             # Geo loc
             _add_timeline_event("Geo candidates generated", "info")
