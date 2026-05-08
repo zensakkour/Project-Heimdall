@@ -19,11 +19,44 @@ const htmlPinMinZoom = 11;
 const maxCandidateLayers = 10;
 const emptyFeatureCollection = { type: "FeatureCollection", features: [] };
 const mapStyleUrl = "https://tiles.openfreemap.org/styles/dark";
+const globePitchResetZoom = 4;
 
 /* --- Map Core --- */
 
 function getMapPadding() {
   return { left: 0, right: 0, top: 0, bottom: 0 };
+}
+
+function centeredCameraOptions(options = {}) {
+  return {
+    ...options,
+    padding: getMapPadding(),
+    offset: [0, 0]
+  };
+}
+
+function easeToCentered(options) {
+  if (!liveMap) return;
+  liveMap.setPadding(getMapPadding());
+  liveMap.easeTo(centeredCameraOptions(options));
+}
+
+function flyToCentered(options) {
+  if (!liveMap) return;
+  liveMap.setPadding(getMapPadding());
+  liveMap.flyTo(centeredCameraOptions(options));
+}
+
+function zoomCentered(delta) {
+  if (!liveMap) return;
+  const currentZoom = liveMap.getZoom();
+  const targetZoom = Math.max(liveMap.getMinZoom(), Math.min(liveMap.getMaxZoom(), currentZoom + delta));
+  easeToCentered({
+    center: liveMap.getCenter(),
+    zoom: targetZoom,
+    pitch: targetZoom <= globePitchResetZoom ? 0 : liveMap.getPitch(),
+    duration: 280
+  });
 }
 
 function firstSymbolLayerId() {
@@ -161,12 +194,25 @@ function updatePinScale() {
   });
 }
 
-function renderHtmlCandidateMarkers(candidates) {
+function fusedMapCoord(result) {
+  const fusion = result?.fused_estimate || {};
+  const lat = Number(fusion.display_lat ?? fusion.lat);
+  const lon = Number(fusion.display_lon ?? fusion.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+  return { lat, lon };
+}
+
+function operatorMapCoord(item, result) {
+  return fusedMapCoord(result) || numericCandidateCoord(item);
+}
+
+function renderHtmlCandidateMarkers(candidates, result) {
   clearCandidateMarkers();
   if (!liveMap) return;
 
   candidates.slice(0, topLimit).forEach((item, idx) => {
-    const coord = numericCandidateCoord(item);
+    const coord = operatorMapCoord(item, result);
     if (!coord) return;
 
     const el = document.createElement("button");
@@ -499,6 +545,11 @@ function ensureLiveMap() {
         liveMap.on("mouseleave", `candidate-rank-hit-${i}`, clearPointer);
       }
       liveMap.on("zoom", updatePinScale);
+      liveMap.on("zoomend", () => {
+        if (liveMap.getZoom() <= globePitchResetZoom && liveMap.getPitch() !== 0) {
+          easeToCentered({ center: liveMap.getCenter(), pitch: 0, duration: 180 });
+        }
+      });
 
       bringCandidateLayersToFront();
 
@@ -650,12 +701,11 @@ function selectCandidate(index) {
   
   if (liveMap) {
     console.log(`LOG: Inspecting candidate #${index + 1} at ${lat}, ${lon}`);
-    liveMap.flyTo({ 
+    flyToCentered({
       center: [lon, lat], 
       zoom: 18, 
-      pitch: Math.max(liveMap.getPitch(), 58),
-      bearing: liveMap.getBearing() || -25,
-      padding: getMapPadding(),
+      pitch: 0,
+      bearing: 0,
       duration: 1200 
     });
   }
@@ -716,18 +766,17 @@ function renderCandidateList(result) {
   slice.forEach((item, idx) => {
     const rank = idx + 1;
     const cand = item || {};
-    const lat = candidateMapLat(cand);
-    const lon = candidateMapLon(cand);
-    const displayLat = candidateDisplayLat(cand);
-    const displayLon = candidateDisplayLon(cand);
+    const mapCoord = operatorMapCoord(cand, result);
+    const lat = mapCoord?.lat ?? candidateMapLat(cand);
+    const lon = mapCoord?.lon ?? candidateMapLon(cand);
     const card = document.createElement("div");
     card.className = "candidate-card";
     card.dataset.lat = lat;
     card.dataset.lon = lon;
     card.dataset.index = idx;
     
-    const coordString = `${Number(displayLat).toFixed(6)}, ${Number(displayLon).toFixed(6)}`;
-    const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${displayLat},${displayLon}`;
+    const coordString = `${Number(lat).toFixed(6)}, ${Number(lon).toFixed(6)}`;
+    const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
     
     // Check source
     const sourceId = cand.match_id || cand.source || "N/A";
@@ -813,7 +862,7 @@ function renderCandidateList(result) {
   selectedIndex = -1;
 }
 
-function renderLiveMap(result) {
+function renderLiveMap(result, { resetView = false } = {}) {
   ensureLiveMap();
   const fusion = result?.fused_estimate;
   const candidates = sortedCandidates(result);
@@ -822,7 +871,7 @@ function renderLiveMap(result) {
 
   const visibleCandidates = candidates.slice(0, topLimit);
   const features = visibleCandidates.flatMap((item, idx) => {
-    const coord = numericCandidateCoord(item);
+    const coord = operatorMapCoord(item, result);
     if (!coord) return [];
     return [{
       type: "Feature",
@@ -843,13 +892,22 @@ function renderLiveMap(result) {
 
   liveMapReady.then(() => {
     liveMap.getSource("candidates").setData({ type: "FeatureCollection", features });
-    renderHtmlCandidateMarkers(candidates);
+    renderHtmlCandidateMarkers(candidates, result);
     liveMap.getSource("ring").setData({ type: "FeatureCollection", features: ringFeature ? [ringFeature] : [] });
     liveMap.getSource("mean").setData({
       type: "FeatureCollection",
       features: [{ type: "Feature", geometry: { type: "Point", coordinates: [fusion.display_lon, fusion.display_lat] } }]
     });
     bringCandidateLayersToFront();
+    if (resetView) {
+      easeToCentered({
+        center: globeCenter,
+        zoom: globeZoom,
+        pitch: 0,
+        bearing: 0,
+        duration: 600
+      });
+    }
   });
 }
 
@@ -887,7 +945,7 @@ function renderSummary(result) {
   byId("raw-json").textContent = JSON.stringify(result, null, 2);
 
   renderCandidateList(result);
-  renderLiveMap(result);
+  renderLiveMap(result, { resetView: true });
   renderTimeline(result);
   renderClues(result);
   selectedLightboxDetectionIndex = 0;
@@ -1059,8 +1117,8 @@ ${msg}`);
 }
 
 function setupMapControls() {
-  byId("map-zoom-in").addEventListener("click", () => liveMap?.zoomIn());
-  byId("map-zoom-out").addEventListener("click", () => liveMap?.zoomOut());
+  byId("map-zoom-in").addEventListener("click", () => zoomCentered(1));
+  byId("map-zoom-out").addEventListener("click", () => zoomCentered(-1));
   const tiltHandle = byId("map-tilt-handle");
   const tiltLabel = byId("map-tilt-label");
 
@@ -1073,7 +1131,7 @@ function setupMapControls() {
 
   const setViewAngle = ({ pitch = liveMap?.getPitch() || 0, bearing = liveMap?.getBearing() || 0 }, duration = 180) => {
     if (!liveMap) return;
-    liveMap.easeTo({
+    easeToCentered({
       pitch: Math.max(minPitch, Math.min(maxPitch, pitch)),
       bearing,
       duration
@@ -1137,11 +1195,11 @@ function setupMapControls() {
   liveMapReady?.then(updateTiltLabel);
   
   byId("map-reset-paris").addEventListener("click", () => {
-    liveMap?.easeTo({ center: parisCenter, zoom: 11, pitch: 0, bearing: 0, padding: getMapPadding(), duration: 1400 });
+    easeToCentered({ center: parisCenter, zoom: 11, pitch: 0, bearing: 0, duration: 1400 });
     window.setTimeout(updateTiltLabel, 1420);
   });
   byId("map-reset-globe").addEventListener("click", () => {
-    liveMap?.easeTo({ center: globeCenter, zoom: globeZoom, pitch: 0, bearing: 0, padding: getMapPadding(), duration: 1800 });
+    easeToCentered({ center: globeCenter, zoom: globeZoom, pitch: 0, bearing: 0, duration: 1800 });
     window.setTimeout(updateTiltLabel, 1820);
   });
 }
