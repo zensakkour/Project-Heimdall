@@ -27,6 +27,40 @@ function firstSymbolLayerId() {
   return layers.find((layer) => layer.type === "symbol")?.id;
 }
 
+function setPaintIfPossible(layerId, property, value) {
+  try {
+    liveMap.setPaintProperty(layerId, property, value);
+  } catch {
+    // Style variants may not support every paint property.
+  }
+}
+
+function tuneMapFor3DReadability() {
+  const layers = liveMap?.getStyle()?.layers || [];
+  layers.forEach((layer) => {
+    if (layer.source !== "openmaptiles") return;
+
+    if (layer.type === "symbol") {
+      setPaintIfPossible(layer.id, "text-opacity", 0.42);
+      setPaintIfPossible(layer.id, "icon-opacity", 0.34);
+      setPaintIfPossible(layer.id, "text-halo-color", "#000000");
+      setPaintIfPossible(layer.id, "text-halo-width", 1.2);
+    }
+
+    if (layer.type === "line") {
+      const id = layer.id.toLowerCase();
+      if (id.includes("road") || id.includes("transport") || id.includes("path") || id.includes("rail")) {
+        setPaintIfPossible(layer.id, "line-opacity", 0.34);
+        setPaintIfPossible(layer.id, "line-color", "#303030");
+      }
+    }
+
+    if (layer.type === "fill" && layer.id.toLowerCase().includes("building")) {
+      setPaintIfPossible(layer.id, "fill-opacity", 0.08);
+    }
+  });
+}
+
 function addBuildingExtrusions() {
   if (!liveMap || liveMap.getLayer("heimdall-building-extrusion") || !liveMap.getSource("openmaptiles")) return;
   liveMap.addLayer({
@@ -41,9 +75,9 @@ function addBuildingExtrusions() {
         ["linear"],
         ["zoom"],
         13,
-        "#363636",
+        "#3f3f3f",
         16,
-        "#5a5a5a"
+        "#707070"
       ],
       "fill-extrusion-height": [
         "interpolate",
@@ -55,7 +89,7 @@ function addBuildingExtrusions() {
         ["coalesce", ["to-number", ["get", "render_height"]], ["to-number", ["get", "height"]], 12]
       ],
       "fill-extrusion-base": ["coalesce", ["to-number", ["get", "render_min_height"]], ["to-number", ["get", "min_height"]], 0],
-      "fill-extrusion-opacity": 0.94,
+      "fill-extrusion-opacity": 1,
       "fill-extrusion-vertical-gradient": true
     }
   }, firstSymbolLayerId());
@@ -120,6 +154,7 @@ function ensureLiveMap() {
 
       liveMap.getCanvas().style.backgroundColor = "#000000";
 
+      tuneMapFor3DReadability();
       addBuildingExtrusions();
 
       // Sources
