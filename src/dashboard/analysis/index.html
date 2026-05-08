@@ -11,7 +11,7 @@
       crossorigin=""
     />
     <link rel="stylesheet" href="../theme.css?v=7" />
-    <link rel="stylesheet" href="operator.css?v=19" />
+    <link rel="stylesheet" href="operator.css?v=20" />
 
 <style>
 .session-timeline { font-size: 11px; color: var(--text-secondary); max-height: 150px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
@@ -215,9 +215,11 @@
     <div id="lightbox" class="lightbox">
       <div class="lightbox-backdrop" id="lightbox-backdrop"></div>
       <div class="lightbox-content">
-        <div class="lightbox-image-wrap">
-          <img id="lightbox-img" src="" alt="Large Preview" />
-          <svg id="lightbox-overlay" class="lightbox-overlay" aria-hidden="true"></svg>
+        <div class="lightbox-body">
+          <div class="lightbox-image-wrap">
+            <img id="lightbox-img" src="" alt="Large Preview" />
+            <svg id="lightbox-overlay" class="lightbox-overlay" aria-hidden="true"></svg>
+          </div>
           <div id="lightbox-intel" class="lightbox-intel"></div>
         </div>
         <div id="lightbox-filename" class="lightbox-filename"></div>
@@ -251,7 +253,7 @@
     </div>
 
     <script src="https://unpkg.com/maplibre-gl@5.0.0/dist/maplibre-gl.js" crossorigin=""></script>
-    <script type="module" src="operator.js?v=19"></script>
+    <script type="module" src="operator.js?v=20"></script>
 
         <button id="btn-confirm-cand" style="display:none;"></button>
         <button id="btn-reject-cand" style="display:none;"></button>

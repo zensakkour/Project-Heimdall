@@ -8,6 +8,7 @@ let topLimit = 3;
 let lastResult = null;
 let selectedIndex = -1;
 let candidateMarkers = [];
+let selectedLightboxDetectionIndex = 0;
 
 const parisCenter = [2.3522, 48.8566];
 const globeCenter = [10, 20];
@@ -147,9 +148,13 @@ function updateHtmlMarkerSelection(index) {
 function updatePinScale() {
   if (!liveMap) return;
   const zoom = liveMap.getZoom();
-  const scale = Math.max(0.04, Math.min(0.9, 0.04 + Math.pow(Math.max(0, zoom - 2.5), 1.45) * 0.075));
+  const t = Math.max(0, Math.min(1, (zoom - 7) / 7));
+  const eased = t * t * (3 - 2 * t);
+  const scale = 0.08 + eased * 0.92;
   candidateMarkers.forEach((marker) => {
-    marker.getElement().style.setProperty("--pin-scale", scale.toFixed(2));
+    const el = marker.getElement();
+    el.style.setProperty("--pin-scale", scale.toFixed(2));
+    el.classList.toggle("pin-dot", scale < 0.22);
   });
 }
 
@@ -724,6 +729,7 @@ function renderSummary(result) {
   renderLiveMap(result);
   renderTimeline(result);
   renderClues(result);
+  selectedLightboxDetectionIndex = 0;
   renderLightboxIntel();
 }
 
@@ -773,6 +779,7 @@ function setupFilePicker() {
       reader.onload = (e) => {
         thumb.src = e.target.result;
         lightboxImg.src = e.target.result;
+        selectedLightboxDetectionIndex = 0;
         lightboxImg.onload = renderLightboxIntel;
         lightboxName.textContent = file.name;
         ingestBlock.style.display = "none";
@@ -1126,6 +1133,22 @@ function getImageDetections() {
   return direct.length ? direct : nested;
 }
 
+function detectionPoints(det) {
+  const obb = Array.isArray(det?.obb) ? det.obb : [];
+  if (obb.length !== 4) return [];
+  const points = obb
+    .map((pt) => [Number(pt?.[0]), Number(pt?.[1])])
+    .filter(([x, y]) => Number.isFinite(x) && Number.isFinite(y));
+  return points.length === 4 ? points : [];
+}
+
+function formatDetectionDetail(det) {
+  const score = Number.isFinite(Number(det?.confidence)) ? `${Math.round(Number(det.confidence) * 100)}%` : "-";
+  const heading = Number.isFinite(Number(det?.heading_deg)) ? `heading ${Number(det.heading_deg).toFixed(1)} deg` : null;
+  const shadow = Number.isFinite(Number(det?.shadow_azimuth_deg)) ? `shadow ${Number(det.shadow_azimuth_deg).toFixed(1)} deg` : null;
+  return [score, heading, shadow].filter(Boolean).join(" | ");
+}
+
 function renderLightboxIntel() {
   const img = byId("lightbox-img");
   const overlay = byId("lightbox-overlay");
@@ -1140,38 +1163,44 @@ function renderLightboxIntel() {
   overlay.setAttribute("viewBox", `0 0 ${width} ${height}`);
   overlay.replaceChildren();
 
-  detections.forEach((det, idx) => {
-    const obb = Array.isArray(det?.obb) ? det.obb : [];
-    if (obb.length !== 4) return;
-    const points = obb
-      .map((pt) => [Number(pt?.[0]), Number(pt?.[1])])
-      .filter(([x, y]) => Number.isFinite(x) && Number.isFinite(y));
-    if (points.length !== 4) return;
+  if (detections.length && selectedLightboxDetectionIndex >= detections.length) {
+    selectedLightboxDetectionIndex = 0;
+  }
 
+  const activeDetection = detections[selectedLightboxDetectionIndex];
+  const activePoints = detectionPoints(activeDetection);
+  if (activePoints.length) {
     const polygon = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
-    polygon.setAttribute("points", points.map(([x, y]) => `${x},${y}`).join(" "));
-    polygon.setAttribute("class", "det-obb");
+    polygon.setAttribute("points", activePoints.map(([x, y]) => `${x},${y}`).join(" "));
+    polygon.setAttribute("class", "det-obb active");
     overlay.appendChild(polygon);
 
     const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
-    const x = Math.min(...points.map(([px]) => px));
-    const y = Math.min(...points.map(([, py]) => py));
+    const x = Math.min(...activePoints.map(([px]) => px));
+    const y = Math.min(...activePoints.map(([, py]) => py));
     label.setAttribute("x", String(Math.max(8, x)));
     label.setAttribute("y", String(Math.max(18, y - 8)));
     label.setAttribute("class", "det-label");
-    label.textContent = `${idx + 1}. ${det.label || "object"} ${Math.round((det.confidence || 0) * 100)}%`;
+    label.textContent = `${selectedLightboxDetectionIndex + 1}. ${activeDetection?.label || "object"}`;
     overlay.appendChild(label);
-  });
+  }
 
   intel.replaceChildren();
   const title = document.createElement("div");
   title.className = "intel-title";
-  title.textContent = "Detected Objects";
+  title.textContent = detections.length ? `Detected Objects (${detections.length})` : "Detected Objects";
   intel.appendChild(title);
 
-  const addIntelRow = (name, detail) => {
-    const row = document.createElement("div");
-    row.className = "intel-row";
+  const addIntelRow = (name, detail, idx = null) => {
+    const row = document.createElement(idx === null ? "div" : "button");
+    row.className = `intel-row${idx === selectedLightboxDetectionIndex ? " active" : ""}`;
+    if (idx !== null) {
+      row.type = "button";
+      row.addEventListener("click", () => {
+        selectedLightboxDetectionIndex = idx;
+        renderLightboxIntel();
+      });
+    }
     const strong = document.createElement("strong");
     strong.textContent = name;
     const span = document.createElement("span");
@@ -1181,10 +1210,7 @@ function renderLightboxIntel() {
   };
 
   detections.forEach((det, idx) => {
-    const score = Number.isFinite(Number(det?.confidence)) ? `${Math.round(Number(det.confidence) * 100)}%` : "-";
-    const heading = Number.isFinite(Number(det?.heading_deg)) ? ` | heading ${Number(det.heading_deg).toFixed(1)} deg` : "";
-    const shadow = Number.isFinite(Number(det?.shadow_azimuth_deg)) ? ` | shadow ${Number(det.shadow_azimuth_deg).toFixed(1)} deg` : "";
-    addIntelRow(`${idx + 1}. ${det?.label || "object"}`, `${score}${heading}${shadow}`);
+    addIntelRow(`${idx + 1}. ${det?.label || "object"}`, formatDetectionDetail(det), idx);
   });
 
   if (!detections.length && clues.length) {
