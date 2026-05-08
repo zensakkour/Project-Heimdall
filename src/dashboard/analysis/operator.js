@@ -147,7 +147,7 @@ function updateHtmlMarkerSelection(index) {
 function updatePinScale() {
   if (!liveMap) return;
   const zoom = liveMap.getZoom();
-  const scale = Math.max(0.12, Math.min(0.9, 0.12 + Math.max(0, zoom - 1.5) * 0.09));
+  const scale = Math.max(0.04, Math.min(0.9, 0.04 + Math.pow(Math.max(0, zoom - 2.5), 1.45) * 0.075));
   candidateMarkers.forEach((marker) => {
     marker.getElement().style.setProperty("--pin-scale", scale.toFixed(2));
   });
