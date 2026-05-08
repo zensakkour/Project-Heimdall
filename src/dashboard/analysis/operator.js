@@ -16,6 +16,7 @@ const globeZoom = 1.8;
 const minPitch = 0;
 const maxPitch = 70;
 const htmlPinMinZoom = 11;
+const maxCandidateLayers = 10;
 const emptyFeatureCollection = { type: "FeatureCollection", features: [] };
 const mapStyleUrl = "https://tiles.openfreemap.org/styles/dark";
 
@@ -129,7 +130,8 @@ function bringCandidateLayersToFront() {
     "candidate-stem-layer",
     "candidate-layer",
     "candidate-label-layer",
-    "candidate-hit-layer"
+    "candidate-hit-layer",
+    ...candidateRankLayerIds()
   ].forEach(moveLayerToTop);
 }
 
@@ -173,19 +175,116 @@ function numericCandidateCoord(item) {
   return { lat, lon };
 }
 
-function displayOffsetCoord(coord, idx, groupedCounts) {
-  const key = `${coord.lat.toFixed(5)},${coord.lon.toFixed(5)}`;
-  const count = groupedCounts.get(key) || 0;
-  if (count <= 1) return coord;
+function candidateScreenOffset(index) {
+  const offsets = [
+    [0, -20],
+    [22, 0],
+    [-22, 0],
+    [0, 22],
+    [18, -18],
+    [-18, -18],
+    [18, 18],
+    [-18, 18],
+    [34, -6],
+    [-34, 6]
+  ];
+  return offsets[index] || [0, 0];
+}
 
-  const angle = (idx / count) * Math.PI * 2 - Math.PI / 2;
-  const radiusMeters = Math.min(45, 14 + count * 3);
-  const metersPerLat = 111320;
-  const metersPerLon = Math.max(1, 111320 * Math.cos((coord.lat * Math.PI) / 180));
+function candidateRankLayerIds() {
+  const ids = [];
+  for (let i = 0; i < maxCandidateLayers; i += 1) {
+    ids.push(`candidate-rank-halo-${i}`, `candidate-rank-dot-${i}`, `candidate-rank-label-${i}`, `candidate-rank-hit-${i}`);
+  }
+  return ids;
+}
+
+function rankLayerStyle(index, selected = selectedIndex) {
+  const isSelected = index === selected;
+  const isTop = index === 0;
   return {
-    lat: coord.lat + (Math.sin(angle) * radiusMeters) / metersPerLat,
-    lon: coord.lon + (Math.cos(angle) * radiusMeters) / metersPerLon
+    dotColor: isSelected ? "#ffffff" : isTop ? "#10b981" : "#5f6468",
+    dotText: isSelected ? "#111111" : "#ffffff",
+    haloColor: isSelected ? "#d7d7d7" : isTop ? "#10b981" : "#bdbdbd",
+    dotRadius: isSelected ? 9 : isTop ? 8 : 7,
+    haloRadius: isSelected ? 18 : isTop ? 16 : 14,
+    strokeWidth: isSelected ? 3 : isTop ? 2.5 : 1.8,
+    haloOpacity: isSelected ? 0.28 : isTop ? 0.22 : 0.14
   };
+}
+
+function addCandidateRankLayers() {
+  for (let i = 0; i < maxCandidateLayers; i += 1) {
+    const offset = candidateScreenOffset(i);
+    const style = rankLayerStyle(i);
+    const filter = ["==", ["get", "index"], i];
+
+    liveMap.addLayer({
+      id: `candidate-rank-halo-${i}`,
+      type: "circle",
+      source: "candidates",
+      filter,
+      paint: {
+        "circle-color": style.haloColor,
+        "circle-opacity": style.haloOpacity,
+        "circle-radius": ["interpolate", ["linear"], ["zoom"], 1.5, style.haloRadius, 14, style.haloRadius + 8],
+        "circle-stroke-color": "#ffffff",
+        "circle-stroke-opacity": 0.1,
+        "circle-stroke-width": 1,
+        "circle-translate": offset,
+        "circle-translate-anchor": "viewport"
+      }
+    });
+    liveMap.addLayer({
+      id: `candidate-rank-dot-${i}`,
+      type: "circle",
+      source: "candidates",
+      filter,
+      paint: {
+        "circle-color": style.dotColor,
+        "circle-opacity": 0.96,
+        "circle-radius": ["interpolate", ["linear"], ["zoom"], 1.5, style.dotRadius, 14, style.dotRadius + 7],
+        "circle-stroke-color": "#f4f4f4",
+        "circle-stroke-width": style.strokeWidth,
+        "circle-translate": offset,
+        "circle-translate-anchor": "viewport"
+      }
+    });
+    liveMap.addLayer({
+      id: `candidate-rank-label-${i}`,
+      type: "symbol",
+      source: "candidates",
+      filter,
+      layout: {
+        "text-field": ["to-string", ["get", "rank"]],
+        "text-size": i === selectedIndex ? 15 : 13,
+        "text-font": ["Open Sans Bold"],
+        "text-allow-overlap": true,
+        "text-ignore-placement": true
+      },
+      paint: {
+        "text-color": style.dotText,
+        "text-halo-color": "rgba(0,0,0,0)",
+        "text-halo-width": 0,
+        "text-opacity": ["interpolate", ["linear"], ["zoom"], 2.5, 0, 4, 1],
+        "text-translate": offset,
+        "text-translate-anchor": "viewport"
+      }
+    });
+    liveMap.addLayer({
+      id: `candidate-rank-hit-${i}`,
+      type: "circle",
+      source: "candidates",
+      filter,
+      paint: {
+        "circle-color": "#ffffff",
+        "circle-opacity": 0.01,
+        "circle-radius": 24,
+        "circle-translate": offset,
+        "circle-translate-anchor": "viewport"
+      }
+    });
+  }
 }
 
 function ensureLiveMap() {
@@ -284,8 +383,8 @@ function ensureLiveMap() {
         source: "candidates",
         paint: {
           "circle-color": ["case", ["==", ["get", "index"], selectedIndex], "#d7d7d7", ["==", ["get", "rank"], 1], "#10b981", "#bdbdbd"],
-          "circle-opacity": ["case", ["==", ["get", "index"], selectedIndex], 0.28, ["==", ["get", "rank"], 1], 0.22, 0.14],
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 1.5, ["case", ["==", ["get", "index"], selectedIndex], 10, ["==", ["get", "rank"], 1], 9, 8], 5, ["case", ["==", ["get", "index"], selectedIndex], 13, ["==", ["get", "rank"], 1], 12, 10], 14, ["case", ["==", ["get", "index"], selectedIndex], 22, ["==", ["get", "rank"], 1], 20, 16]],
+          "circle-opacity": 0,
+          "circle-radius": 0,
           "circle-stroke-color": "#ffffff",
           "circle-stroke-opacity": ["case", ["==", ["get", "index"], selectedIndex], 0.18, 0.08],
           "circle-stroke-width": 1
@@ -297,10 +396,10 @@ function ensureLiveMap() {
         source: "candidates",
         paint: {
           "circle-color": ["case", ["==", ["get", "index"], selectedIndex], "#ffffff", ["==", ["get", "rank"], 1], "#10b981", "#5f6468"],
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 1.5, ["case", ["==", ["get", "index"], selectedIndex], 5.5, ["==", ["get", "rank"], 1], 5, 4.5], 5, ["case", ["==", ["get", "index"], selectedIndex], 7.5, ["==", ["get", "rank"], 1], 7, 6], 14, ["case", ["==", ["get", "index"], selectedIndex], 16, ["==", ["get", "rank"], 1], 15, 12]],
+          "circle-radius": 0,
           "circle-stroke-color": "#f4f4f4",
           "circle-stroke-width": ["case", ["==", ["get", "index"], selectedIndex], 3, ["==", ["get", "rank"], 1], 2.5, 1.8],
-          "circle-opacity": 0.96
+          "circle-opacity": 0
         }
       });
       liveMap.addLayer({
@@ -318,7 +417,7 @@ function ensureLiveMap() {
           "text-color": ["case", ["==", ["get", "index"], selectedIndex], "#111111", "#ffffff"],
           "text-halo-color": "rgba(0,0,0,0)",
           "text-halo-width": 0,
-          "text-opacity": ["interpolate", ["linear"], ["zoom"], 2.5, 0, 4, 1]
+          "text-opacity": 0
         }
       });
       liveMap.addLayer({
@@ -328,10 +427,11 @@ function ensureLiveMap() {
         paint: {
           "circle-color": "#ffffff",
           "circle-opacity": 0.01,
-          "circle-radius": 22,
+          "circle-radius": 0,
           "circle-stroke-opacity": 0
         }
       });
+      addCandidateRankLayers();
       liveMap.addLayer({
         id: "mean-layer",
         type: "circle",
@@ -352,6 +452,10 @@ function ensureLiveMap() {
 
       liveMap.on("click", "candidate-layer", handleCandidateMarkerClick);
       liveMap.on("click", "candidate-hit-layer", handleCandidateMarkerClick);
+      for (let i = 0; i < maxCandidateLayers; i += 1) {
+        liveMap.on("click", `candidate-rank-dot-${i}`, handleCandidateMarkerClick);
+        liveMap.on("click", `candidate-rank-hit-${i}`, handleCandidateMarkerClick);
+      }
 
       const showPointer = () => {
         liveMap.getCanvas().style.cursor = "pointer";
@@ -363,6 +467,12 @@ function ensureLiveMap() {
       liveMap.on("mouseenter", "candidate-hit-layer", showPointer);
       liveMap.on("mouseleave", "candidate-layer", clearPointer);
       liveMap.on("mouseleave", "candidate-hit-layer", clearPointer);
+      for (let i = 0; i < maxCandidateLayers; i += 1) {
+        liveMap.on("mouseenter", `candidate-rank-dot-${i}`, showPointer);
+        liveMap.on("mouseenter", `candidate-rank-hit-${i}`, showPointer);
+        liveMap.on("mouseleave", `candidate-rank-dot-${i}`, clearPointer);
+        liveMap.on("mouseleave", `candidate-rank-hit-${i}`, clearPointer);
+      }
       liveMap.on("zoom", updatePinScale);
 
       bringCandidateLayersToFront();
@@ -479,6 +589,19 @@ function updateSelectedMarker(index) {
     "#111111",
     "#ffffff"
   ]);
+
+  for (let i = 0; i < maxCandidateLayers; i += 1) {
+    if (!liveMap.getLayer(`candidate-rank-dot-${i}`)) continue;
+    const style = rankLayerStyle(i, index);
+    liveMap.setPaintProperty(`candidate-rank-halo-${i}`, "circle-color", style.haloColor);
+    liveMap.setPaintProperty(`candidate-rank-halo-${i}`, "circle-opacity", style.haloOpacity);
+    liveMap.setPaintProperty(`candidate-rank-halo-${i}`, "circle-radius", ["interpolate", ["linear"], ["zoom"], 1.5, style.haloRadius, 14, style.haloRadius + 8]);
+    liveMap.setPaintProperty(`candidate-rank-dot-${i}`, "circle-color", style.dotColor);
+    liveMap.setPaintProperty(`candidate-rank-dot-${i}`, "circle-radius", ["interpolate", ["linear"], ["zoom"], 1.5, style.dotRadius, 14, style.dotRadius + 7]);
+    liveMap.setPaintProperty(`candidate-rank-dot-${i}`, "circle-stroke-width", style.strokeWidth);
+    liveMap.setLayoutProperty(`candidate-rank-label-${i}`, "text-size", i === index ? 15 : 13);
+    liveMap.setPaintProperty(`candidate-rank-label-${i}`, "text-color", style.dotText);
+  }
 }
 
 function selectCandidate(index) {
@@ -665,24 +788,12 @@ function renderLiveMap(result) {
   if (!fusion || candidates.length === 0) return;
 
   const visibleCandidates = candidates.slice(0, topLimit);
-  const rawCoords = visibleCandidates.map((item) => numericCandidateCoord(item));
-  const groupedCounts = rawCoords.reduce((counts, coord) => {
-    if (!coord) return counts;
-    const key = `${coord.lat.toFixed(5)},${coord.lon.toFixed(5)}`;
-    counts.set(key, (counts.get(key) || 0) + 1);
-    return counts;
-  }, new Map());
-  const groupSeen = new Map();
   const features = visibleCandidates.flatMap((item, idx) => {
     const coord = numericCandidateCoord(item);
     if (!coord) return [];
-    const key = `${coord.lat.toFixed(5)},${coord.lon.toFixed(5)}`;
-    const groupIdx = groupSeen.get(key) || 0;
-    groupSeen.set(key, groupIdx + 1);
-    const displayCoord = displayOffsetCoord(coord, groupIdx, groupedCounts);
     return [{
       type: "Feature",
-      geometry: { type: "Point", coordinates: [displayCoord.lon, displayCoord.lat] },
+      geometry: { type: "Point", coordinates: [coord.lon, coord.lat] },
       properties: { rank: idx + 1, index: idx, lat: coord.lat, lon: coord.lon }
     }];
   });
@@ -1161,9 +1272,9 @@ function detectionPoints(det) {
 
 function formatDetectionDetail(det) {
   const score = Number.isFinite(Number(det?.confidence)) ? `${Math.round(Number(det.confidence) * 100)}%` : "-";
-  const heading = Number.isFinite(Number(det?.heading_deg)) ? `head ${Number(det.heading_deg).toFixed(0)}°` : null;
-  const shadow = Number.isFinite(Number(det?.shadow_azimuth_deg)) ? `shadow ${Number(det.shadow_azimuth_deg).toFixed(0)}°` : null;
-  return [score, heading, shadow].filter(Boolean).join(" · ");
+  const heading = Number.isFinite(Number(det?.heading_deg)) ? `head ${Number(det.heading_deg).toFixed(0)} deg` : null;
+  const shadow = Number.isFinite(Number(det?.shadow_azimuth_deg)) ? `shadow ${Number(det.shadow_azimuth_deg).toFixed(0)} deg` : null;
+  return [score, heading, shadow].filter(Boolean).join(" | ");
 }
 
 function renderLightboxIntel() {
