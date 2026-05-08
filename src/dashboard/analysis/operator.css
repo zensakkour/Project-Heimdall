@@ -855,6 +855,15 @@ html, body {
   width: 68px;
 }
 
+.geo-pin:hover,
+.geo-pin:focus,
+.geo-pin:focus-visible,
+.geo-pin:active {
+  background: transparent;
+  box-shadow: none;
+  outline: none;
+}
+
 .geo-pin-halo {
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.14);
