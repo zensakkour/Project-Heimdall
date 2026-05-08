@@ -15,6 +15,7 @@ const globeCenter = [10, 20];
 const globeZoom = 1.8;
 const minPitch = 0;
 const maxPitch = 70;
+const htmlPinMinZoom = 11;
 const emptyFeatureCollection = { type: "FeatureCollection", features: [] };
 const mapStyleUrl = "https://tiles.openfreemap.org/styles/dark";
 
@@ -148,13 +149,15 @@ function updateHtmlMarkerSelection(index) {
 function updatePinScale() {
   if (!liveMap) return;
   const zoom = liveMap.getZoom();
-  const t = Math.max(0, Math.min(1, (zoom - 7) / 7));
+  const htmlPinVisible = zoom >= htmlPinMinZoom;
+  const t = Math.max(0, Math.min(1, (zoom - htmlPinMinZoom) / 4));
   const eased = t * t * (3 - 2 * t);
-  const scale = 0.08 + eased * 0.92;
+  const scale = 0.55 + eased * 0.45;
   candidateMarkers.forEach((marker) => {
     const el = marker.getElement();
     el.style.setProperty("--pin-scale", scale.toFixed(2));
-    el.classList.toggle("pin-dot", scale < 0.22);
+    el.classList.toggle("pin-hidden", !htmlPinVisible);
+    el.classList.toggle("pin-dot", false);
   });
 }
 
@@ -271,10 +274,10 @@ function ensureLiveMap() {
         source: "candidates",
         paint: {
           "circle-color": ["case", ["==", ["get", "index"], selectedIndex], "#eaeaea", ["==", ["get", "rank"], 1], "#7dd3a4", "#9a9a9a"],
-          "circle-radius": ["case", ["==", ["get", "index"], selectedIndex], 6, 5],
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 1, 0, 10.9, 0, 11, ["case", ["==", ["get", "index"], selectedIndex], 6, 5]],
           "circle-translate": [0, 20],
           "circle-translate-anchor": "viewport",
-          "circle-opacity": 0.88
+          "circle-opacity": ["interpolate", ["linear"], ["zoom"], 10.6, 0, 11, 0.88]
         }
       });
       liveMap.addLayer({
@@ -283,8 +286,8 @@ function ensureLiveMap() {
         source: "candidates",
         paint: {
           "circle-color": ["case", ["==", ["get", "index"], selectedIndex], "#d7d7d7", ["==", ["get", "rank"], 1], "#10b981", "#bdbdbd"],
-          "circle-opacity": ["case", ["==", ["get", "index"], selectedIndex], 0.22, ["==", ["get", "rank"], 1], 0.16, 0.1],
-          "circle-radius": ["case", ["==", ["get", "index"], selectedIndex], 40, ["==", ["get", "rank"], 1], 34, 24],
+          "circle-opacity": ["interpolate", ["linear"], ["zoom"], 1.5, ["case", ["==", ["get", "index"], selectedIndex], 0.34, ["==", ["get", "rank"], 1], 0.28, 0.18], 10.5, ["case", ["==", ["get", "index"], selectedIndex], 0.26, ["==", ["get", "rank"], 1], 0.2, 0.12], 11, 0],
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 1.5, ["case", ["==", ["get", "index"], selectedIndex], 13, ["==", ["get", "rank"], 1], 12, 10], 5, ["case", ["==", ["get", "index"], selectedIndex], 16, ["==", ["get", "rank"], 1], 15, 12], 10.9, ["case", ["==", ["get", "index"], selectedIndex], 24, ["==", ["get", "rank"], 1], 21, 17], 11, 0],
           "circle-stroke-color": "#ffffff",
           "circle-stroke-opacity": ["case", ["==", ["get", "index"], selectedIndex], 0.18, 0.08],
           "circle-stroke-width": 1
@@ -296,10 +299,10 @@ function ensureLiveMap() {
         source: "candidates",
         paint: {
           "circle-color": ["case", ["==", ["get", "index"], selectedIndex], "#ffffff", ["==", ["get", "rank"], 1], "#10b981", "#5f6468"],
-          "circle-radius": ["case", ["==", ["get", "index"], selectedIndex], 17, ["==", ["get", "rank"], 1], 16, 12],
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 1.5, ["case", ["==", ["get", "index"], selectedIndex], 6, ["==", ["get", "rank"], 1], 5.5, 5], 5, ["case", ["==", ["get", "index"], selectedIndex], 8, ["==", ["get", "rank"], 1], 7, 6], 10.9, ["case", ["==", ["get", "index"], selectedIndex], 13, ["==", ["get", "rank"], 1], 12, 10], 11, 0],
           "circle-stroke-color": "#f4f4f4",
           "circle-stroke-width": ["case", ["==", ["get", "index"], selectedIndex], 3, ["==", ["get", "rank"], 1], 2.5, 1.8],
-          "circle-opacity": 0.96
+          "circle-opacity": ["interpolate", ["linear"], ["zoom"], 10.8, 0.96, 11, 0]
         }
       });
       liveMap.addLayer({
@@ -316,7 +319,8 @@ function ensureLiveMap() {
         paint: {
           "text-color": ["case", ["==", ["get", "index"], selectedIndex], "#111111", "#ffffff"],
           "text-halo-color": "rgba(0,0,0,0)",
-          "text-halo-width": 0
+          "text-halo-width": 0,
+          "text-opacity": ["interpolate", ["linear"], ["zoom"], 3, 0, 5, 1, 10.8, 1, 11, 0]
         }
       });
       liveMap.addLayer({
@@ -410,10 +414,15 @@ function updateSelectedMarker(index) {
     "#9a9a9a"
   ]);
   liveMap.setPaintProperty("candidate-stem-layer", "circle-radius", [
-    "case",
-    ["==", ["get", "index"], index],
-    6,
-    5
+    "interpolate",
+    ["linear"],
+    ["zoom"],
+    1,
+    0,
+    10.9,
+    0,
+    11,
+    ["case", ["==", ["get", "index"], index], 6, 5]
   ]);
   liveMap.setPaintProperty("candidate-halo-layer", "circle-color", [
     "case",
@@ -424,20 +433,28 @@ function updateSelectedMarker(index) {
     "#bdbdbd"
   ]);
   liveMap.setPaintProperty("candidate-halo-layer", "circle-opacity", [
-    "case",
-    ["==", ["get", "index"], index],
-    0.22,
-    ["==", ["get", "rank"], 1],
-    0.16,
-    0.1
+    "interpolate",
+    ["linear"],
+    ["zoom"],
+    1.5,
+    ["case", ["==", ["get", "index"], index], 0.34, ["==", ["get", "rank"], 1], 0.28, 0.18],
+    10.5,
+    ["case", ["==", ["get", "index"], index], 0.26, ["==", ["get", "rank"], 1], 0.2, 0.12],
+    11,
+    0
   ]);
   liveMap.setPaintProperty("candidate-halo-layer", "circle-radius", [
-    "case",
-    ["==", ["get", "index"], index],
-    40,
-    ["==", ["get", "rank"], 1],
-    34,
-    24
+    "interpolate",
+    ["linear"],
+    ["zoom"],
+    1.5,
+    ["case", ["==", ["get", "index"], index], 13, ["==", ["get", "rank"], 1], 12, 10],
+    5,
+    ["case", ["==", ["get", "index"], index], 16, ["==", ["get", "rank"], 1], 15, 12],
+    10.9,
+    ["case", ["==", ["get", "index"], index], 24, ["==", ["get", "rank"], 1], 21, 17],
+    11,
+    0
   ]);
   liveMap.setPaintProperty("candidate-layer", "circle-color", [
     "case",
@@ -448,12 +465,17 @@ function updateSelectedMarker(index) {
     "#5f6468"
   ]);
   liveMap.setPaintProperty("candidate-layer", "circle-radius", [
-    "case",
-    ["==", ["get", "index"], index],
-    17,
-    ["==", ["get", "rank"], 1],
-    16,
-    12
+    "interpolate",
+    ["linear"],
+    ["zoom"],
+    1.5,
+    ["case", ["==", ["get", "index"], index], 6, ["==", ["get", "rank"], 1], 5.5, 5],
+    5,
+    ["case", ["==", ["get", "index"], index], 8, ["==", ["get", "rank"], 1], 7, 6],
+    10.9,
+    ["case", ["==", ["get", "index"], index], 13, ["==", ["get", "rank"], 1], 12, 10],
+    11,
+    0
   ]);
   liveMap.setPaintProperty("candidate-layer", "circle-stroke-width", [
     "case",

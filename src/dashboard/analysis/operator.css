@@ -893,6 +893,11 @@ button.intel-row {
   outline: none;
 }
 
+.geo-pin.pin-hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
 .geo-pin-visual {
   align-items: center;
   display: flex;
