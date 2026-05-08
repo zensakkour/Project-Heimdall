@@ -41,17 +41,30 @@ function tuneMapFor3DReadability() {
     if (layer.source !== "openmaptiles") return;
 
     if (layer.type === "symbol") {
-      setPaintIfPossible(layer.id, "text-opacity", 0.42);
-      setPaintIfPossible(layer.id, "icon-opacity", 0.34);
+      setPaintIfPossible(layer.id, "text-opacity", 0.78);
+      setPaintIfPossible(layer.id, "text-color", "#a8a8a8");
+      setPaintIfPossible(layer.id, "icon-opacity", 0.58);
       setPaintIfPossible(layer.id, "text-halo-color", "#000000");
-      setPaintIfPossible(layer.id, "text-halo-width", 1.2);
+      setPaintIfPossible(layer.id, "text-halo-width", 1.6);
     }
 
     if (layer.type === "line") {
       const id = layer.id.toLowerCase();
       if (id.includes("road") || id.includes("transport") || id.includes("path") || id.includes("rail")) {
-        setPaintIfPossible(layer.id, "line-opacity", 0.34);
-        setPaintIfPossible(layer.id, "line-color", "#303030");
+        setPaintIfPossible(layer.id, "line-opacity", 0.52);
+        setPaintIfPossible(layer.id, "line-color", "#424242");
+      }
+    }
+
+    if (layer.type === "fill") {
+      const id = layer.id.toLowerCase();
+      if (id.includes("land") || id.includes("park") || id.includes("place")) {
+        setPaintIfPossible(layer.id, "fill-color", "#151515");
+        setPaintIfPossible(layer.id, "fill-opacity", 0.95);
+      }
+      if (id.includes("water")) {
+        setPaintIfPossible(layer.id, "fill-color", "#1f1f1f");
+        setPaintIfPossible(layer.id, "fill-opacity", 1);
       }
     }
 
