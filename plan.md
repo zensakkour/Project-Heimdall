@@ -1,31 +1,26 @@
-# Branch Plan: `feat/analysis-ui-v2`
+# Branch Plan: `feat/operator-dashboard`
 
 ## Purpose
 
-Modernize and enhance the Analysis Dashboard UI. This branch focuses on improving the visualization of geolocation results, RF-DETR detections, and overall user experience for analyzing model performance.
+Implement Heimdall Operator Mode: a polished single-operator visual intelligence dashboard for one image/video task at a time. Do not build multi-user case management or surveillance workflows. Focus on one operator, one uploaded source, one analysis session, with strong privacy and safety guardrails.
 
 ## Objectives
 
-1.  **UI Refresh**: Update `index.html` and `styles.css` for a more modern, responsive layout.
-2.  **Performance Visualization**: Improve how geolocation candidates and ground truth are displayed in the dashboard.
-3.  **Interactive Analysis**: Add features to filter and drill down into specific detection/geolocation cases.
-4.  **Backend Integration**: Ensure `dev_ui.py` and `dev_app.py` support any new frontend requirements.
+1.  **Backend Operator Endpoints**: Implement session management, map pins, notes, confirmation endpoints, and robust error bubbling (no silent fails).
+2.  **UI Layout**: Restructure the operator mode into a serious visual investigation console with three panels: left (source/ingest), center (map), right (intelligence/results).
+3.  **Timeline & Evidence**: Display extracted clues explicitly and visualize the chronological progress of the backend pipeline on a timeline.
+4.  **Dev Mode**: Provide a frontend-facing toggle to mock analysis output for rapid UI styling testing.
 
 ## Current State
 
--   Dashboard exists in `src/dashboard/`.
--   Uses `app.js`, `index.html`, `styles.css`.
--   Basic functionality for viewing analysis results is present but needs polish and features.
+-   Added `ui_server.py` Operator API endpoints (`/api/operator/*`).
+-   Configured session timeline and error capturing during the pipeline run.
+-   Refined `operator.js`, `index.html`, and `operator.css` for a panel-based layout and interactive timeline/clues.
 
 ## Next Steps
 
-1.  Audit current `src/dashboard/` implementation.
-2.  Identify specific UI/UX bottlenecks.
-3.  Implement layout improvements.
-4.  Enhance data visualization components in `app.js`.
+1. Submit changes for review and merge.
 
 ## Decision Criteria
 
--   Keep changes if they improve the clarity of model analysis.
--   Ensure compatibility with existing data schemas (e.g., `batch_result.schema.json`).
--   Verify that the dev server (`dev_ui.py`) remains functional.
+-   Keep if tests pass and operator workflow supports end-to-end ingest to export loop.
