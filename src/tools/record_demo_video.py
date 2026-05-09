@@ -102,7 +102,7 @@ def main() -> None:
             if args.with_analyze and sample_image.exists():
                 page.set_input_files("#image-file", str(sample_image))
                 page.wait_for_timeout(300)
-                page.click("#analyze-image")
+                page.click("#geolocate-image")
                 page.wait_for_timeout(3000)
 
             map_box = page.locator("#live-map").bounding_box()
@@ -140,7 +140,7 @@ def main() -> None:
             page.wait_for_timeout(450)
             page.click("#map-zoom-out")
             page.wait_for_timeout(450)
-            page.click("#map-zoom-reset")
+            page.click("#map-reset-globe")
             page.wait_for_timeout(1200)
 
             # Capture the updated desktop screenshot from the same clean state.
