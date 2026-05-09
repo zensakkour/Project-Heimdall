@@ -35,6 +35,7 @@ export async function postForm(url, formData) {
     res = await fetch(url, {
       method: "POST",
       body: formData,
+      headers: (typeof formData === "string") ? {"Content-Type": "application/json"} : {},
     });
   } catch (err) {
     const msg = normalizeError(err);

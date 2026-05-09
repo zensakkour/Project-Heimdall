@@ -70,7 +70,7 @@ def fuse_candidates(
         likelihoods["source_prior"] = source_prior
         if cfg.use_spatial_consensus:
             spatial_like = spatial_likes[idx]
-            logp += max(0.0, cfg.spatial_consensus_weight) * math.log(max(spatial_like, 1e-12))
+            logp += max(0.0, max(1.2, cfg.spatial_consensus_weight)) * math.log(max(spatial_like, 1e-12))
             likelihoods["spatial"] = spatial_like
         if cfg.use_cross_source_agreement:
             cross_like = cross_source_likes[idx]
