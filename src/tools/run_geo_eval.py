@@ -4,6 +4,7 @@ Evaluate geo localization accuracy against a metadata CSV (path, latitude, longi
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import math
 import random
@@ -12,6 +13,7 @@ from typing import TYPE_CHECKING, Optional
 
 from src.core.geo import GeoCLIPProvider, GeoLocator, GeoRetrievalProvider, MultiCandidateProvider
 from src.core.logic.config import HeimdallConfig, has_retrieval_index, load_config
+from src.core.logic.image_meta import parse_capture_time
 
 if TYPE_CHECKING:
     from src.core.logic.pipeline import HeimdallPipeline
@@ -23,7 +25,9 @@ def build_pipeline(cfg: Optional[HeimdallConfig]) -> "HeimdallPipeline":
 
     if cfg is None:
         return HeimdallPipeline()
-    detector = create_detector(cfg.detector)
+    detector_tuple = create_detector(cfg.detector)
+    detector = detector_tuple[0] if detector_tuple is not None else None
+    detector_backend = detector_tuple[1] if detector_tuple is not None else None
     geolocator = GeoLocator(
         cfg.geolocator.model_path,
         use_sidecar=cfg.geolocator.use_sidecar,
@@ -111,6 +115,7 @@ def build_pipeline(cfg: Optional[HeimdallConfig]) -> "HeimdallPipeline":
         fusion_config=cfg.fusion,
         score_config=cfg.score,
         verification_config=cfg.verification,
+        detector_backend=detector_backend,
     )
 
 
@@ -225,6 +230,179 @@ def resolve_image_path(images_dir: Path, rel_path: str) -> Path:
     return direct
 
 
+def normalize_metadata_records(df) -> list[dict]:
+    path_col = _first_existing_column(df, ("path", "street_path", "image_path", "query_path"))
+    lat_col = _first_existing_column(df, ("latitude", "lat"))
+    lon_col = _first_existing_column(df, ("longitude", "lon", "lng"))
+    missing = [
+        name
+        for name, col in (("path", path_col), ("latitude", lat_col), ("longitude", lon_col))
+        if col is None
+    ]
+    if missing:
+        raise ValueError(
+            "metadata must include path/latitude/longitude columns "
+            "(accepted aliases: path|street_path|image_path|query_path, latitude|lat, longitude|lon|lng)"
+        )
+
+    records = []
+    for raw in df.to_dict("records"):
+        item = dict(raw)
+        item["path"] = raw[path_col]
+        item["latitude"] = raw[lat_col]
+        item["longitude"] = raw[lon_col]
+        records.append(item)
+    return records
+
+
+def _read_csv_records(path: Path) -> list[dict]:
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        return list(csv.DictReader(handle))
+
+
+def _normalize_rel_path(value: object) -> str:
+    text = str(value or "").strip().replace("\\", "/")
+    while text.startswith("./"):
+        text = text[2:]
+    return text.lower()
+
+
+def _metadata_lookup_keys(item: dict) -> set[str]:
+    keys: set[str] = set()
+    for key in ("image_id", "street_id", "query_id", "id"):
+        value = str(item.get(key) or "").strip()
+        if value:
+            keys.add(f"id:{value}")
+    for key in ("path", "street_path", "image_path", "query_path"):
+        rel = _normalize_rel_path(item.get(key))
+        if rel:
+            keys.add(f"path:{rel}")
+            keys.add(f"name:{Path(rel).name.lower()}")
+    return keys
+
+
+def _load_auxiliary_metadata(path: Path) -> list[dict]:
+    try:
+        import pandas as pd  # type: ignore
+    except Exception:
+        return _read_csv_records(path)
+    return list(pd.read_csv(path).to_dict("records"))
+
+
+def _auto_query_metadata_paths(metadata_path: Path, images_dir: Optional[Path]) -> list[Path]:
+    candidates: list[Path] = []
+    if images_dir is not None:
+        candidates.extend([images_dir / "metadata.csv", images_dir.parent / "metadata.csv"])
+    candidates.extend(
+        [
+            metadata_path.with_name("test_query_metadata.csv"),
+            metadata_path.with_name("val_query_metadata.csv"),
+            metadata_path.with_name("train_query_metadata.csv"),
+            metadata_path.with_name("query_metadata.csv"),
+        ]
+    )
+
+    seen: set[Path] = set()
+    existing: list[Path] = []
+    for candidate in candidates:
+        resolved = candidate.resolve()
+        if resolved in seen or not candidate.exists() or resolved == metadata_path.resolve():
+            continue
+        seen.add(resolved)
+        existing.append(candidate)
+    return existing
+
+
+def enrich_records_from_query_metadata(records: list[dict], query_metadata_paths: list[Path]) -> int:
+    if not records or not query_metadata_paths:
+        return 0
+
+    lookup: dict[str, dict] = {}
+    for path in query_metadata_paths:
+        for aux in _load_auxiliary_metadata(path):
+            aux_item = dict(aux)
+            for key in _metadata_lookup_keys(aux_item):
+                lookup.setdefault(key, aux_item)
+
+    enrich_keys = (
+        "captured_at",
+        "capture_time",
+        "datetime",
+        "datetimetz",
+        "DateTimeOriginal",
+        "DateTime",
+        "camera_type",
+        "source",
+        "sequence",
+    )
+    enriched = 0
+    for item in records:
+        match = None
+        for key in _metadata_lookup_keys(item):
+            match = lookup.get(key)
+            if match is not None:
+                break
+        if match is None:
+            continue
+        changed = False
+        for key in enrich_keys:
+            if item.get(key) in (None, "") and match.get(key) not in (None, ""):
+                item[key] = match[key]
+                changed = True
+        if changed:
+            item["_query_metadata_enriched"] = True
+            enriched += 1
+    return enriched
+
+
+def load_metadata_records(
+    metadata_path: Path,
+    query_metadata_path: Optional[Path] = None,
+    images_dir: Optional[Path] = None,
+) -> list[dict]:
+    try:
+        import pandas as pd  # type: ignore
+    except Exception:
+        records = normalize_metadata_records(_CsvFrame(_read_csv_records(metadata_path)))
+    else:
+        records = normalize_metadata_records(pd.read_csv(metadata_path))
+
+    query_paths = [query_metadata_path] if query_metadata_path else _auto_query_metadata_paths(metadata_path, images_dir)
+    enrich_records_from_query_metadata(records, [path for path in query_paths if path is not None])
+    return records
+
+
+class _CsvFrame:
+    def __init__(self, records: list[dict]) -> None:
+        self._records = records
+        self.columns = list(records[0].keys()) if records else []
+
+    def to_dict(self, orient: str):
+        if orient != "records":
+            raise ValueError("only records orient is supported")
+        return list(self._records)
+
+
+def capture_time_from_record(item: dict):
+    for key in ("captured_at", "capture_time", "datetime", "datetimetz", "DateTimeOriginal", "DateTime"):
+        parsed = parse_capture_time(item.get(key))
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _first_existing_column(df, candidates: tuple[str, ...]) -> Optional[str]:
+    columns = {str(col): str(col) for col in df.columns}
+    lowered = {str(col).lower(): str(col) for col in df.columns}
+    for candidate in candidates:
+        if candidate in columns:
+            return columns[candidate]
+        found = lowered.get(candidate.lower())
+        if found is not None:
+            return found
+    return None
+
+
 def normalize_scope(raw_scope: Optional[str]) -> str:
     if not raw_scope:
         return ""
@@ -263,8 +441,8 @@ def load_profile_scope(config_path: str) -> str:
 
 
 def infer_dataset_scope(images_dir: Path, metadata_path: Path) -> str:
-    blob = f"{images_dir.as_posix().lower()} {metadata_path.as_posix().lower()}"
-    if "spacenet_paris" in blob or "/paris/" in blob or "_paris" in blob:
+    blob = f"{str(images_dir).lower()} {str(metadata_path).lower()}".replace("\\", "/")
+    if "spacenet_paris" in blob or "/paris/" in blob or "_paris" in blob or "paris_" in blob:
         return "PARIS"
     if "open_geo" in blob or "/us/" in blob or "_us" in blob:
         return "US"
@@ -295,11 +473,14 @@ def validate_scope_alignment(
 
 
 def main(argv: Optional[list[str]] = None) -> None:
-    import pandas as pd
-
     parser = argparse.ArgumentParser(description="Geo evaluation against metadata CSV.")
     parser.add_argument("--images-dir", required=True, help="Directory containing images.")
     parser.add_argument("--metadata", required=True, help="CSV with path, latitude, longitude.")
+    parser.add_argument(
+        "--query-metadata",
+        default="",
+        help="Optional image metadata CSV used to fill missing capture timestamps for pair rows.",
+    )
     parser.add_argument("--output", default="src/dashboard/data/geo_eval.json", help="Output JSON file.")
     parser.add_argument("--progress", default="", help="Optional progress JSON path.")
     parser.add_argument("--retrieval-only", action="store_true", help="Use retrieval-only scoring.")
@@ -317,6 +498,8 @@ def main(argv: Optional[list[str]] = None) -> None:
     profile_scope = load_profile_scope(args.config) if args.config else ""
     metadata_path = Path(args.metadata)
     images_dir = Path(args.images_dir)
+    query_metadata_path = Path(args.query_metadata) if args.query_metadata else None
+    query_metadata_paths = [query_metadata_path] if query_metadata_path else _auto_query_metadata_paths(metadata_path, images_dir)
     dataset_scope = infer_dataset_scope(images_dir, metadata_path)
     scope_warning = validate_scope_alignment(
         profile_scope,
@@ -332,11 +515,8 @@ def main(argv: Optional[list[str]] = None) -> None:
     else:
         retrieval_provider = build_retrieval_provider(cfg)
 
-    df = pd.read_csv(metadata_path)
-    if not {"path", "latitude", "longitude"}.issubset(df.columns):
-        raise ValueError("metadata must include columns: path, latitude, longitude")
-
-    records = df[["path", "latitude", "longitude"]].to_dict("records")
+    records = load_metadata_records(metadata_path, query_metadata_path=query_metadata_path, images_dir=images_dir)
+    enriched_records = sum(1 for item in records if item.get("_query_metadata_enriched"))
     random.Random(args.seed).shuffle(records)
     if args.limit and args.limit > 0:
         records = records[: args.limit]
@@ -369,11 +549,26 @@ def main(argv: Optional[list[str]] = None) -> None:
             if pipeline is None:
                 pred = None
             else:
-                result = pipeline.run(str(image_path))
+                result = pipeline.run(str(image_path), capture_time=capture_time_from_record(item))
                 pred = predict_latlon(result)
+                provider = getattr(pipeline, "candidate_provider", None)
+                provider_error = getattr(provider, "last_error", None)
         if pred is None:
             null_pred += 1
             distances.append(None)
+            if len(diagnostics) < max(0, args.diag_samples):
+                diagnostics.append(
+                    {
+                        "image": str(image_path),
+                        "gt_lat": float(item["latitude"]),
+                        "gt_lon": float(item["longitude"]),
+                        "pred_lat": None,
+                        "pred_lon": None,
+                        "dist_km": None,
+                        "retrieval_score": top_score,
+                        "provider_error": provider_error or "null_prediction",
+                    }
+                )
             continue
         gt_lat = float(item["latitude"])
         gt_lon = float(item["longitude"])
@@ -425,6 +620,8 @@ def main(argv: Optional[list[str]] = None) -> None:
         "retrieval_only": bool(args.retrieval_only),
         "images_dir": str(images_dir),
         "metadata": str(metadata_path),
+        "query_metadata_paths": [str(path) for path in query_metadata_paths if path is not None],
+        "query_metadata_enriched": enriched_records,
         "index_path": cfg.geolocator.retrieval_index_path if cfg else None,
         "index_paths": list(cfg.geolocator.retrieval_index_paths) if cfg else None,
         "index_weights": list(cfg.geolocator.retrieval_index_weights) if cfg else None,
