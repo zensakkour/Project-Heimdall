@@ -11,6 +11,9 @@
   --text-secondary: #a0a0a0;
   --accent: #d0d0d0;
   --radius: 16px;
+  --panel-inset: 24px;
+  --form-text-inset: 18px;
+  --control-gap: 12px;
 }
 
 html, body {
@@ -54,7 +57,7 @@ html, body {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 8px 16px 8px 20px;
+  padding: 8px 16px 8px 0;
   background: var(--glass-bg);
   backdrop-filter: blur(12px);
   border: none;
@@ -78,7 +81,7 @@ html, body {
 
 /* --- Right Analysis Panel (Layer 2) --- */
 .panel-section {
-  padding: 20px;
+  padding: var(--panel-inset);
   border-bottom: 1px solid var(--glass-border);
 }
 
@@ -225,11 +228,13 @@ html, body {
 }
 
 .profile-row {
-  display: flex;
-  gap: 10px;
+  display: grid;
+  gap: var(--control-gap);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
 
 .dev-mode-row {
+  align-items: center;
   margin-top: 10px;
 }
 
@@ -237,17 +242,22 @@ html, body {
   align-items: center;
   color: var(--text-secondary);
   cursor: pointer;
-  display: inline-flex;
+  display: flex;
   flex-direction: row;
   font-size: 11px;
   gap: 8px;
+  grid-column: 1 / -1;
+  justify-content: flex-start;
   line-height: 1.2;
+  padding-left: var(--form-text-inset);
+  width: 100%;
 }
 
 .inline-checkbox input[type="checkbox"] {
   flex: 0 0 auto;
+  justify-self: end;
   height: 14px;
-  margin: 0;
+  margin: 0 0 0 auto;
   min-height: 0;
   padding: 0;
   width: 14px;
@@ -260,7 +270,10 @@ html, body {
   border: none;
   color: var(--text-primary);
   border-radius: 10px;
-  padding: 0 10px;
+  overflow: hidden;
+  padding: 0 40px 0 var(--form-text-inset);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .primary-btn {
@@ -271,6 +284,8 @@ html, body {
   padding: 0 16px;
   border-radius: 10px;
   cursor: pointer;
+  min-width: 0;
+  white-space: nowrap;
   transition: background 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -446,8 +461,8 @@ html, body {
   grid-area: map;
   align-self: end;
   justify-self: start;
-  bottom: 24px;
-  margin: 0 0 24px 24px;
+  bottom: 0;
+  margin: 0 0 12px 12px;
   position: relative;
   z-index: 10;
   display: flex;
@@ -1014,6 +1029,22 @@ html, body {
   box-shadow: 0 0 0 10px rgba(16, 185, 129, 0.18), 0 0 24px rgba(16, 185, 129, 0.18);
 }
 
+.geo-pin.cluster .geo-pin-head {
+  background: #f4f4f4;
+  border-color: #10b981;
+  color: #111;
+  height: 34px;
+  width: 34px;
+}
+
+.geo-pin.cluster .geo-pin-head::after {
+  border: 1px solid rgba(16, 185, 129, 0.34);
+  border-radius: 999px;
+  content: "";
+  inset: -8px;
+  position: absolute;
+}
+
 .geo-pin.compact.selected .geo-pin-head {
   height: 32px;
   width: 32px;
@@ -1098,7 +1129,7 @@ html, body {
   height: 72px;
   justify-content: space-between;
   letter-spacing: 0.12em;
-  padding: 0 28px;
+  padding: 0 var(--panel-inset) 0 calc(var(--panel-inset) + var(--form-text-inset));
   text-transform: uppercase;
   width: 100%;
 }
@@ -1119,7 +1150,7 @@ html, body {
 
 .diag-body {
   display: none;
-  padding: 0 28px 20px;
+  padding: 0 var(--panel-inset) 20px calc(var(--panel-inset) + var(--form-text-inset));
 }
 
 .diag-body.active {
@@ -1177,7 +1208,7 @@ html, body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0 20px;
+  padding: 0 20px 0 var(--panel-inset);
   border-bottom: 1px solid var(--glass-border);
   background: var(--glass-bg);
   z-index: 10;

@@ -8,7 +8,7 @@ let topLimit = 3;
 let lastResult = null;
 let selectedIndex = -1;
 let candidateMarkers = [];
-let activeCandidateCoords = [];
+let activeCandidateItems = [];
 let selectedLightboxDetectionIndex = 0;
 
 const parisCenter = [2.3522, 48.8566];
@@ -21,8 +21,7 @@ const maxCandidateLayers = 10;
 const emptyFeatureCollection = { type: "FeatureCollection", features: [] };
 const mapStyleUrl = "https://tiles.openfreemap.org/styles/dark";
 const globePitchResetZoom = 4;
-const candidateOffsetStartZoom = 9;
-const candidateOffsetFullZoom = 13;
+const candidateClusterRadiusPx = 42;
 
 /* --- Map Core --- */
 
@@ -177,10 +176,11 @@ function clearCandidateMarkers() {
 }
 
 function updateHtmlMarkerSelection(index) {
-  candidateMarkers.forEach((marker, idx) => {
+  candidateMarkers.forEach((marker) => {
     const el = marker.getElement();
-    el.classList.toggle("selected", idx === index);
-    el.classList.toggle("top", idx === 0);
+    const indices = markerCandidateIndices(el);
+    el.classList.toggle("selected", indices.includes(index));
+    el.classList.toggle("top", indices.includes(0));
   });
 }
 
@@ -197,67 +197,6 @@ function updatePinScale() {
   });
 }
 
-function candidateOffsetScale() {
-  if (!liveMap) return 0;
-  const zoom = liveMap.getZoom();
-  if (zoom <= candidateOffsetStartZoom) return 0;
-  if (zoom >= candidateOffsetFullZoom) return 1;
-  return (zoom - candidateOffsetStartZoom) / (candidateOffsetFullZoom - candidateOffsetStartZoom);
-}
-
-function candidateDisplayOffset(index) {
-  if (!candidateNeedsDisplayOffset(index)) return [0, 0];
-  const offsets = [
-    [0, 0],
-    [26, 0],
-    [-26, 0],
-    [0, 26],
-    [0, -26],
-    [20, 20],
-    [-20, 20],
-    [20, -20],
-    [-20, -20],
-    [38, 0]
-  ];
-  const [x, y] = offsets[index] || [0, 0];
-  const scale = candidateOffsetScale();
-  return [Math.round(x * scale), Math.round(y * scale)];
-}
-
-function candidateNeedsDisplayOffset(index) {
-  if (!liveMap || candidateOffsetScale() === 0 || index <= 0) return false;
-  const coord = activeCandidateCoords[index];
-  if (!coord) return false;
-
-  const point = liveMap.project([coord.lon, coord.lat]);
-  return activeCandidateCoords.some((other, otherIndex) => {
-    if (!other || otherIndex === index) return false;
-    const otherPoint = liveMap.project([other.lon, other.lat]);
-    const dx = point.x - otherPoint.x;
-    const dy = point.y - otherPoint.y;
-    return Math.hypot(dx, dy) < 36;
-  });
-}
-
-function setCandidateLayerOffset(layerId, property, offset) {
-  if (!liveMap?.getLayer(layerId)) return;
-  liveMap.setPaintProperty(layerId, property, offset);
-}
-
-function updateCandidateLayerOffsets() {
-  if (!liveMap) return;
-  for (let i = 0; i < maxCandidateLayers; i += 1) {
-    const offset = candidateDisplayOffset(i);
-    if (candidateMarkers[i]?.setOffset) {
-      candidateMarkers[i].setOffset(offset);
-    }
-    setCandidateLayerOffset(`candidate-rank-halo-${i}`, "circle-translate", offset);
-    setCandidateLayerOffset(`candidate-rank-dot-${i}`, "circle-translate", offset);
-    setCandidateLayerOffset(`candidate-rank-label-${i}`, "text-translate", offset);
-    setCandidateLayerOffset(`candidate-rank-hit-${i}`, "circle-translate", offset);
-  }
-}
-
 function fusedMapCoord(result) {
   const fusion = result?.fused_estimate || {};
   const lat = Number(fusion.display_lat ?? fusion.lat);
@@ -272,35 +211,123 @@ function operatorMapCoord(item) {
 }
 
 function renderHtmlCandidateMarkers(candidates) {
+  activeCandidateItems = buildCandidateMarkerItems(candidates);
+  refreshCandidateMarkers();
+}
+
+function buildCandidateMarkerItems(candidates) {
+  return candidates.slice(0, topLimit).flatMap((item, idx) => {
+    const coord = operatorMapCoord(item);
+    if (!coord) return [];
+    return [{ item, index: idx, coord }];
+  });
+}
+
+function refreshCandidateMarkers() {
   clearCandidateMarkers();
   if (!liveMap) return;
 
-  candidates.slice(0, topLimit).forEach((item, idx) => {
-    const coord = operatorMapCoord(item);
-    if (!coord) return;
+  clusterCandidateItems(activeCandidateItems).forEach((cluster) => {
+    const isCluster = cluster.items.length > 1;
+    const topItem = cluster.items[0];
+    const topIndex = topItem.index;
 
     const el = document.createElement("button");
     el.type = "button";
-    el.className = `geo-pin compact${idx === 0 ? " top" : ""}${idx === selectedIndex ? " selected" : ""}`;
-    el.dataset.index = String(idx);
-    el.setAttribute("aria-label", `Select geo candidate ${idx + 1}`);
-    el.innerHTML = `<span class="geo-pin-head">${idx + 1}</span>`;
+    el.className = `geo-pin compact${isCluster ? " cluster" : ""}${cluster.items.some(({ index }) => index === 0) ? " top" : ""}${cluster.items.some(({ index }) => index === selectedIndex) ? " selected" : ""}`;
+    el.dataset.indices = cluster.items.map(({ index }) => index).join(",");
+    el.setAttribute(
+      "aria-label",
+      isCluster ? `Zoom to ${cluster.items.length} grouped geo candidates` : `Select geo candidate ${topIndex + 1}`
+    );
+    el.innerHTML = `<span class="geo-pin-head">${isCluster ? cluster.items.length : topIndex + 1}</span>`;
     el.addEventListener("click", (event) => {
       event.stopPropagation();
-      selectCandidate(idx);
+      if (isCluster) {
+        if (liveMap.getZoom() >= 16) {
+          selectCandidate(topIndex);
+        } else {
+          easeToCentered({
+            center: [cluster.coord.lon, cluster.coord.lat],
+            zoom: Math.min(liveMap.getZoom() + 2.2, 16),
+            pitch: 0,
+            bearing: 0,
+            duration: 650
+          });
+        }
+      } else {
+        selectCandidate(topIndex);
+      }
     });
 
     const marker = new maplibregl.Marker({
       element: el,
       anchor: "center",
-      offset: candidateDisplayOffset(idx)
+      offset: [0, 0]
     })
-      .setLngLat([coord.lon, coord.lat])
+      .setLngLat([cluster.coord.lon, cluster.coord.lat])
       .addTo(liveMap);
-    candidateMarkers[idx] = marker;
+    candidateMarkers.push(marker);
   });
 
   updatePinScale();
+}
+
+function clusterCandidateItems(items) {
+  if (!liveMap) return [];
+  const clusters = [];
+
+  items.forEach((item) => {
+    const point = liveMap.project([item.coord.lon, item.coord.lat]);
+    let target = null;
+    let targetDistance = Infinity;
+
+    clusters.forEach((cluster) => {
+      const distance = Math.hypot(point.x - cluster.point.x, point.y - cluster.point.y);
+      if (distance < candidateClusterRadiusPx && distance < targetDistance) {
+        target = cluster;
+        targetDistance = distance;
+      }
+    });
+
+    if (!target) {
+      clusters.push({
+        items: [item],
+        point,
+        coord: { ...item.coord }
+      });
+      return;
+    }
+
+    target.items.push(item);
+    target.point = averageClusterPoint(target.items);
+    target.coord = averageClusterCoord(target.items);
+  });
+
+  return clusters;
+}
+
+function averageClusterPoint(items) {
+  const sum = items.reduce((acc, item) => {
+    const point = liveMap.project([item.coord.lon, item.coord.lat]);
+    return { x: acc.x + point.x, y: acc.y + point.y };
+  }, { x: 0, y: 0 });
+  return { x: sum.x / items.length, y: sum.y / items.length };
+}
+
+function averageClusterCoord(items) {
+  const sum = items.reduce((acc, item) => ({
+    lat: acc.lat + item.coord.lat,
+    lon: acc.lon + item.coord.lon
+  }), { lat: 0, lon: 0 });
+  return { lat: sum.lat / items.length, lon: sum.lon / items.length };
+}
+
+function markerCandidateIndices(el) {
+  return (el.dataset.indices || "")
+    .split(",")
+    .map((value) => Number(value))
+    .filter((value) => Number.isFinite(value));
 }
 
 function numericCandidateCoord(item) {
@@ -309,11 +336,6 @@ function numericCandidateCoord(item) {
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
   if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
   return { lat, lon };
-}
-
-function candidateScreenOffset() {
-  // Initial offset is zero; zoom-aware separation is applied by updateCandidateLayerOffsets().
-  return [0, 0];
 }
 
 function candidateRankLayerIds() {
@@ -340,7 +362,7 @@ function rankLayerStyle(index, selected = selectedIndex) {
 
 function addCandidateRankLayers() {
   for (let i = 0; i < maxCandidateLayers; i += 1) {
-    const offset = candidateScreenOffset();
+    const offset = [0, 0];
     const style = rankLayerStyle(i);
     const filter = ["==", ["get", "index"], i];
 
@@ -598,16 +620,13 @@ function ensureLiveMap() {
         liveMap.on("mouseleave", `candidate-rank-dot-${i}`, clearPointer);
         liveMap.on("mouseleave", `candidate-rank-hit-${i}`, clearPointer);
       }
-      liveMap.on("zoom", () => {
-        updatePinScale();
-        updateCandidateLayerOffsets();
-      });
-      liveMap.on("move", updateCandidateLayerOffsets);
+      liveMap.on("zoom", refreshCandidateMarkers);
+      liveMap.on("move", refreshCandidateMarkers);
       liveMap.on("zoomend", () => {
         if (liveMap.getZoom() <= globePitchResetZoom && liveMap.getPitch() !== 0) {
           easeToCentered({ center: liveMap.getCenter(), pitch: 0, duration: 180 });
         }
-        updateCandidateLayerOffsets();
+        refreshCandidateMarkers();
       });
 
       bringCandidateLayersToFront();
@@ -929,22 +948,6 @@ function renderLiveMap(result, { resetView = false } = {}) {
   if (!fusion || candidates.length === 0) return;
 
   const visibleCandidates = candidates.slice(0, topLimit);
-  const features = visibleCandidates.flatMap((item, idx) => {
-    const coord = operatorMapCoord(item);
-    if (!coord) return [];
-    return [{
-      type: "Feature",
-      geometry: { type: "Point", coordinates: [coord.lon, coord.lat] },
-      properties: { rank: idx + 1, index: idx, lat: coord.lat, lon: coord.lon }
-    }];
-  });
-  activeCandidateCoords = [];
-  features.forEach((feature) => {
-    activeCandidateCoords[feature.properties.index] = {
-      lat: feature.properties.lat,
-      lon: feature.properties.lon
-    };
-  });
 
   const ringRadius =
     (fusion.radius_km ? fusion.radius_km * 1000 : null) ||
@@ -959,7 +962,6 @@ function renderLiveMap(result, { resetView = false } = {}) {
   liveMapReady.then(() => {
     liveMap.getSource("candidates").setData(emptyFeatureCollection);
     renderHtmlCandidateMarkers(visibleCandidates);
-    updateCandidateLayerOffsets();
     liveMap.getSource("ring").setData({ type: "FeatureCollection", features: ringFeature ? [ringFeature] : [] });
     liveMap.getSource("mean").setData(emptyFeatureCollection);
     bringCandidateLayersToFront();
@@ -1031,6 +1033,7 @@ function clearAnalysisResults() {
   const rawJson = byId("raw-json");
   if (rawJson) rawJson.textContent = "{}";
   clearCandidateMarkers();
+  activeCandidateItems = [];
   lastResult = null;
 }
 
