@@ -7,17 +7,431 @@ let liveMapReady = null;
 let topLimit = 3;
 let lastResult = null;
 let selectedIndex = -1;
+let candidateMarkers = [];
+let activeCandidateItems = [];
+let selectedLightboxDetectionIndex = 0;
 
-const initialCenter = [2.3522, 48.8566]; // Paris
-const initialZoom = 11;
+const parisCenter = [2.3522, 48.8566];
+const globeCenter = [10, 20];
+const globeZoom = 1.8;
+const minPitch = 0;
+const maxPitch = 70;
+const htmlPinMinZoom = 11;
+const maxCandidateLayers = 10;
 const emptyFeatureCollection = { type: "FeatureCollection", features: [] };
+const mapStyleUrl = "https://tiles.openfreemap.org/styles/dark";
+const globePitchResetZoom = 4;
+const candidateClusterRadiusPx = 42;
 
 /* --- Map Core --- */
 
 function getMapPadding() {
-  const panel = document.querySelector(".analysis-panel");
-  const panelWidth = panel ? panel.offsetWidth : 420;
-  return { left: 0, right: panelWidth + 40, top: 0, bottom: 0 };
+  return { left: 0, right: 0, top: 0, bottom: 0 };
+}
+
+function centeredCameraOptions(options = {}) {
+  return {
+    ...options,
+    padding: getMapPadding(),
+    offset: [0, 0]
+  };
+}
+
+function easeToCentered(options) {
+  if (!liveMap) return;
+  liveMap.setPadding(getMapPadding());
+  liveMap.easeTo(centeredCameraOptions(options));
+}
+
+function flyToCentered(options) {
+  if (!liveMap) return;
+  liveMap.setPadding(getMapPadding());
+  liveMap.flyTo(centeredCameraOptions(options));
+}
+
+function zoomCentered(delta) {
+  if (!liveMap) return;
+  const currentZoom = liveMap.getZoom();
+  const targetZoom = Math.max(liveMap.getMinZoom(), Math.min(liveMap.getMaxZoom(), currentZoom + delta));
+  easeToCentered({
+    center: liveMap.getCenter(),
+    zoom: targetZoom,
+    pitch: targetZoom <= globePitchResetZoom ? 0 : liveMap.getPitch(),
+    duration: 280
+  });
+}
+
+function firstSymbolLayerId() {
+  const layers = liveMap?.getStyle()?.layers || [];
+  return layers.find((layer) => layer.type === "symbol")?.id;
+}
+
+function setPaintIfPossible(layerId, property, value) {
+  try {
+    liveMap.setPaintProperty(layerId, property, value);
+  } catch {
+    // Style variants may not support every paint property.
+  }
+}
+
+function tuneMapFor3DReadability() {
+  const layers = liveMap?.getStyle()?.layers || [];
+  layers.forEach((layer) => {
+    if (layer.source !== "openmaptiles") return;
+
+    if (layer.type === "symbol") {
+      setPaintIfPossible(layer.id, "text-opacity", 0.78);
+      setPaintIfPossible(layer.id, "text-color", "#a8a8a8");
+      setPaintIfPossible(layer.id, "icon-opacity", 0.58);
+      setPaintIfPossible(layer.id, "text-halo-color", "#000000");
+      setPaintIfPossible(layer.id, "text-halo-width", 1.6);
+    }
+
+    if (layer.type === "line") {
+      const id = layer.id.toLowerCase();
+      if (id.includes("road") || id.includes("transport") || id.includes("path") || id.includes("rail")) {
+        setPaintIfPossible(layer.id, "line-opacity", 0.52);
+        setPaintIfPossible(layer.id, "line-color", "#424242");
+      }
+    }
+
+    if (layer.type === "fill") {
+      const id = layer.id.toLowerCase();
+      if (id.includes("land") || id.includes("park") || id.includes("place")) {
+        setPaintIfPossible(layer.id, "fill-color", "#151515");
+        setPaintIfPossible(layer.id, "fill-opacity", 0.95);
+      }
+      if (id.includes("water")) {
+        setPaintIfPossible(layer.id, "fill-color", "#1f1f1f");
+        setPaintIfPossible(layer.id, "fill-opacity", 1);
+      }
+    }
+
+    if (layer.type === "fill" && layer.id.toLowerCase().includes("building")) {
+      setPaintIfPossible(layer.id, "fill-opacity", 0.08);
+    }
+  });
+}
+
+function addBuildingExtrusions() {
+  if (!liveMap || liveMap.getLayer("heimdall-building-extrusion") || !liveMap.getSource("openmaptiles")) return;
+  liveMap.addLayer({
+    id: "heimdall-building-extrusion",
+    type: "fill-extrusion",
+    source: "openmaptiles",
+    "source-layer": "building",
+    minzoom: 13,
+    paint: {
+      "fill-extrusion-color": [
+        "interpolate",
+        ["linear"],
+        ["zoom"],
+        13,
+        "#3f3f3f",
+        16,
+        "#707070"
+      ],
+      "fill-extrusion-height": [
+        "interpolate",
+        ["linear"],
+        ["zoom"],
+        13,
+        0,
+        15,
+        ["coalesce", ["to-number", ["get", "render_height"]], ["to-number", ["get", "height"]], 12]
+      ],
+      "fill-extrusion-base": ["coalesce", ["to-number", ["get", "render_min_height"]], ["to-number", ["get", "min_height"]], 0],
+      "fill-extrusion-opacity": 1,
+      "fill-extrusion-vertical-gradient": true
+    }
+  }, firstSymbolLayerId());
+}
+
+function moveLayerToTop(layerId) {
+  if (!liveMap?.getLayer(layerId)) return;
+  try {
+    liveMap.moveLayer(layerId);
+  } catch {
+    // Ignore layer-order races during style/data refreshes.
+  }
+}
+
+function bringCandidateLayersToFront() {
+  [
+    "ring-fill",
+    "ring-layer",
+    "mean-layer",
+    "candidate-halo-layer",
+    "candidate-stem-layer",
+    "candidate-layer",
+    "candidate-label-layer",
+    "candidate-hit-layer",
+    ...candidateRankLayerIds()
+  ].forEach(moveLayerToTop);
+}
+
+function clearCandidateMarkers() {
+  candidateMarkers.forEach((marker) => marker.remove());
+  candidateMarkers = [];
+}
+
+function updateHtmlMarkerSelection(index) {
+  candidateMarkers.forEach((marker) => {
+    const el = marker.getElement();
+    const indices = markerCandidateIndices(el);
+    el.classList.toggle("selected", indices.includes(index));
+    el.classList.toggle("top", indices.includes(0));
+  });
+}
+
+function updatePinScale() {
+  if (!liveMap) return;
+  const zoom = liveMap.getZoom();
+  const t = Math.max(0, Math.min(1, (zoom - 2) / 12));
+  const eased = t * t * (3 - 2 * t);
+  const scale = 0.72 + eased * 0.42;
+  candidateMarkers.forEach((marker) => {
+    const el = marker.getElement();
+    el.style.setProperty("--pin-scale", scale.toFixed(2));
+    el.classList.remove("pin-hidden", "pin-dot");
+  });
+}
+
+function fusedMapCoord(result) {
+  const fusion = result?.fused_estimate || {};
+  const lat = Number(fusion.display_lat ?? fusion.lat);
+  const lon = Number(fusion.display_lon ?? fusion.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+  return { lat, lon };
+}
+
+function operatorMapCoord(item) {
+  return numericCandidateCoord(item);
+}
+
+function renderHtmlCandidateMarkers(candidates) {
+  activeCandidateItems = buildCandidateMarkerItems(candidates);
+  refreshCandidateMarkers();
+}
+
+function buildCandidateMarkerItems(candidates) {
+  return candidates.slice(0, topLimit).flatMap((item, idx) => {
+    const coord = operatorMapCoord(item);
+    if (!coord) return [];
+    return [{ item, index: idx, coord }];
+  });
+}
+
+function refreshCandidateMarkers() {
+  clearCandidateMarkers();
+  if (!liveMap) return;
+
+  clusterCandidateItems(activeCandidateItems).forEach((cluster) => {
+    const isCluster = cluster.items.length > 1;
+    const topItem = cluster.items[0];
+    const topIndex = topItem.index;
+
+    const el = document.createElement("button");
+    el.type = "button";
+    el.className = `geo-pin compact${isCluster ? " cluster" : ""}${cluster.items.some(({ index }) => index === 0) ? " top" : ""}${cluster.items.some(({ index }) => index === selectedIndex) ? " selected" : ""}`;
+    el.dataset.indices = cluster.items.map(({ index }) => index).join(",");
+    el.setAttribute(
+      "aria-label",
+      isCluster ? `Zoom to ${cluster.items.length} grouped geo candidates` : `Select geo candidate ${topIndex + 1}`
+    );
+    el.innerHTML = `<span class="geo-pin-head">${isCluster ? cluster.items.length : topIndex + 1}</span>`;
+    el.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (isCluster) {
+        if (liveMap.getZoom() >= 16) {
+          selectCandidate(topIndex);
+        } else {
+          easeToCentered({
+            center: [cluster.coord.lon, cluster.coord.lat],
+            zoom: Math.min(liveMap.getZoom() + 2.2, 16),
+            pitch: 0,
+            bearing: 0,
+            duration: 650
+          });
+        }
+      } else {
+        selectCandidate(topIndex);
+      }
+    });
+
+    const marker = new maplibregl.Marker({
+      element: el,
+      anchor: "center",
+      offset: [0, 0]
+    })
+      .setLngLat([cluster.coord.lon, cluster.coord.lat])
+      .addTo(liveMap);
+    candidateMarkers.push(marker);
+  });
+
+  updatePinScale();
+}
+
+function clusterCandidateItems(items) {
+  if (!liveMap) return [];
+  const clusters = [];
+
+  items.forEach((item) => {
+    const point = liveMap.project([item.coord.lon, item.coord.lat]);
+    let target = null;
+    let targetDistance = Infinity;
+
+    clusters.forEach((cluster) => {
+      const distance = Math.hypot(point.x - cluster.point.x, point.y - cluster.point.y);
+      if (distance < candidateClusterRadiusPx && distance < targetDistance) {
+        target = cluster;
+        targetDistance = distance;
+      }
+    });
+
+    if (!target) {
+      clusters.push({
+        items: [item],
+        point,
+        coord: { ...item.coord }
+      });
+      return;
+    }
+
+    target.items.push(item);
+    target.point = averageClusterPoint(target.items);
+    target.coord = averageClusterCoord(target.items);
+  });
+
+  return clusters;
+}
+
+function averageClusterPoint(items) {
+  const sum = items.reduce((acc, item) => {
+    const point = liveMap.project([item.coord.lon, item.coord.lat]);
+    return { x: acc.x + point.x, y: acc.y + point.y };
+  }, { x: 0, y: 0 });
+  return { x: sum.x / items.length, y: sum.y / items.length };
+}
+
+function averageClusterCoord(items) {
+  const sum = items.reduce((acc, item) => ({
+    lat: acc.lat + item.coord.lat,
+    lon: acc.lon + item.coord.lon
+  }), { lat: 0, lon: 0 });
+  return { lat: sum.lat / items.length, lon: sum.lon / items.length };
+}
+
+function markerCandidateIndices(el) {
+  return (el.dataset.indices || "")
+    .split(",")
+    .map((value) => Number(value))
+    .filter((value) => Number.isFinite(value));
+}
+
+function numericCandidateCoord(item) {
+  const lat = Number(candidateMapLat(item));
+  const lon = Number(candidateMapLon(item));
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+  return { lat, lon };
+}
+
+function candidateRankLayerIds() {
+  const ids = [];
+  for (let i = 0; i < maxCandidateLayers; i += 1) {
+    ids.push(`candidate-rank-halo-${i}`, `candidate-rank-dot-${i}`, `candidate-rank-label-${i}`, `candidate-rank-hit-${i}`);
+  }
+  return ids;
+}
+
+function rankLayerStyle(index, selected = selectedIndex) {
+  const isSelected = index === selected;
+  const isTop = index === 0;
+  return {
+    dotColor: isSelected ? "#ffffff" : isTop ? "#10b981" : "#5f6468",
+    dotText: isSelected ? "#111111" : "#ffffff",
+    haloColor: isSelected ? "#d7d7d7" : isTop ? "#10b981" : "#bdbdbd",
+    dotRadius: isSelected ? 9 : isTop ? 8 : 7,
+    haloRadius: isSelected ? 18 : isTop ? 16 : 14,
+    strokeWidth: isSelected ? 3 : isTop ? 2.5 : 1.8,
+    haloOpacity: isSelected ? 0.28 : isTop ? 0.22 : 0.14
+  };
+}
+
+function addCandidateRankLayers() {
+  for (let i = 0; i < maxCandidateLayers; i += 1) {
+    const offset = [0, 0];
+    const style = rankLayerStyle(i);
+    const filter = ["==", ["get", "index"], i];
+
+    liveMap.addLayer({
+      id: `candidate-rank-halo-${i}`,
+      type: "circle",
+      source: "candidates",
+      filter,
+      paint: {
+        "circle-color": style.haloColor,
+        "circle-opacity": style.haloOpacity,
+        "circle-radius": ["interpolate", ["linear"], ["zoom"], 1.5, style.haloRadius, 14, style.haloRadius + 8],
+        "circle-stroke-color": "#ffffff",
+        "circle-stroke-opacity": 0.1,
+        "circle-stroke-width": 1,
+        "circle-translate": offset,
+        "circle-translate-anchor": "viewport"
+      }
+    });
+    liveMap.addLayer({
+      id: `candidate-rank-dot-${i}`,
+      type: "circle",
+      source: "candidates",
+      filter,
+      paint: {
+        "circle-color": style.dotColor,
+        "circle-opacity": 0.96,
+        "circle-radius": ["interpolate", ["linear"], ["zoom"], 1.5, style.dotRadius, 14, style.dotRadius + 7],
+        "circle-stroke-color": "#f4f4f4",
+        "circle-stroke-width": style.strokeWidth,
+        "circle-translate": offset,
+        "circle-translate-anchor": "viewport"
+      }
+    });
+    liveMap.addLayer({
+      id: `candidate-rank-label-${i}`,
+      type: "symbol",
+      source: "candidates",
+      filter,
+      layout: {
+        "text-field": ["to-string", ["get", "rank"]],
+        "text-size": i === selectedIndex ? 15 : 13,
+        "text-font": ["Open Sans Bold"],
+        "text-allow-overlap": true,
+        "text-ignore-placement": true
+      },
+      paint: {
+        "text-color": style.dotText,
+        "text-halo-color": "rgba(0,0,0,0)",
+        "text-halo-width": 0,
+        "text-opacity": ["interpolate", ["linear"], ["zoom"], 2.5, 0, 4, 1],
+        "text-translate": offset,
+        "text-translate-anchor": "viewport"
+      }
+    });
+    liveMap.addLayer({
+      id: `candidate-rank-hit-${i}`,
+      type: "circle",
+      source: "candidates",
+      filter,
+      paint: {
+        "circle-color": "#ffffff",
+        "circle-opacity": 0.01,
+        "circle-radius": 24,
+        "circle-translate": offset,
+        "circle-translate-anchor": "viewport"
+      }
+    });
+  }
 }
 
 function ensureLiveMap() {
@@ -28,18 +442,18 @@ function ensureLiveMap() {
     return Promise.reject("No map container");
   }
 
-  const styleUrl = "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json";
   const padding = getMapPadding();
 
   try {
     liveMap = new maplibregl.Map({
       container: el,
-      style: styleUrl,
-      center: initialCenter,
-      zoom: initialZoom,
+      style: mapStyleUrl,
+      center: globeCenter,
+      zoom: globeZoom,
       pitch: 0, 
       bearing: 0,
       padding: padding,
+      projection: { type: "globe" },
       attributionControl: false,
       antialias: true
     });
@@ -62,24 +476,25 @@ function ensureLiveMap() {
         console.warn("LOG: Globe fallback:", e);
       }
 
-      // Neutralize Background Layer
       const style = liveMap.getStyle();
       const bgLayer = style.layers.find(l => l.type === "background");
       if (bgLayer) {
-        liveMap.setPaintProperty(bgLayer.id, "background-color", "#0B0B0B");
+        liveMap.setPaintProperty(bgLayer.id, "background-color", "#000000");
       }
 
-      // Neutralize Atmosphere / Fog
       if (typeof liveMap.setFog === "function") {
         liveMap.setFog({
-          color: "#0B0B0B",
-          "high-color": "#0B0B0B",
-          "space-color": "#0B0B0B",
+          color: "#000000",
+          "high-color": "#000000",
+          "space-color": "#000000",
           "horizon-blend": 0.02
         });
       }
 
-      liveMap.getCanvas().style.backgroundColor = "#0B0B0B";
+      liveMap.getCanvas().style.backgroundColor = "#000000";
+
+      tuneMapFor3DReadability();
+      addBuildingExtrusions();
 
       // Sources
       liveMap.addSource("candidates", { type: "geojson", data: emptyFeatureCollection });
@@ -100,16 +515,70 @@ function ensureLiveMap() {
         paint: { "line-color": "#10b981", "line-width": 2, "line-dasharray": [2, 1], "line-opacity": 0.6 }
       });
       liveMap.addLayer({
+        id: "candidate-stem-layer",
+        type: "circle",
+        source: "candidates",
+        paint: {
+          "circle-color": ["case", ["==", ["get", "index"], selectedIndex], "#eaeaea", ["==", ["get", "rank"], 1], "#7dd3a4", "#9a9a9a"],
+          "circle-radius": 0,
+          "circle-opacity": 0
+        }
+      });
+      liveMap.addLayer({
+        id: "candidate-halo-layer",
+        type: "circle",
+        source: "candidates",
+        paint: {
+          "circle-color": ["case", ["==", ["get", "index"], selectedIndex], "#d7d7d7", ["==", ["get", "rank"], 1], "#10b981", "#bdbdbd"],
+          "circle-opacity": 0,
+          "circle-radius": 0,
+          "circle-stroke-color": "#ffffff",
+          "circle-stroke-opacity": ["case", ["==", ["get", "index"], selectedIndex], 0.18, 0.08],
+          "circle-stroke-width": 1
+        }
+      });
+      liveMap.addLayer({
         id: "candidate-layer",
         type: "circle",
         source: "candidates",
         paint: {
-          "circle-color": ["case", ["==", ["get", "rank"], 1], "#10b981", "#EAEAEA"],
-          "circle-radius": ["case", ["==", ["get", "rank"], 1], 10, 6],
-          "circle-stroke-color": "#000",
-          "circle-stroke-width": 1.5
+          "circle-color": ["case", ["==", ["get", "index"], selectedIndex], "#ffffff", ["==", ["get", "rank"], 1], "#10b981", "#5f6468"],
+          "circle-radius": 0,
+          "circle-stroke-color": "#f4f4f4",
+          "circle-stroke-width": ["case", ["==", ["get", "index"], selectedIndex], 3, ["==", ["get", "rank"], 1], 2.5, 1.8],
+          "circle-opacity": 0
         }
       });
+      liveMap.addLayer({
+        id: "candidate-label-layer",
+        type: "symbol",
+        source: "candidates",
+        layout: {
+          "text-field": ["to-string", ["get", "rank"]],
+          "text-size": ["case", ["==", ["get", "index"], selectedIndex], 17, 14],
+          "text-font": ["Open Sans Bold"],
+          "text-allow-overlap": true,
+          "text-ignore-placement": true
+        },
+        paint: {
+          "text-color": ["case", ["==", ["get", "index"], selectedIndex], "#111111", "#ffffff"],
+          "text-halo-color": "rgba(0,0,0,0)",
+          "text-halo-width": 0,
+          "text-opacity": 0
+        }
+      });
+      liveMap.addLayer({
+        id: "candidate-hit-layer",
+        type: "circle",
+        source: "candidates",
+        paint: {
+          "circle-color": "#ffffff",
+          "circle-opacity": 0.01,
+          "circle-radius": 0,
+          "circle-stroke-opacity": 0
+        }
+      });
+      addCandidateRankLayers();
       liveMap.addLayer({
         id: "mean-layer",
         type: "circle",
@@ -118,29 +587,56 @@ function ensureLiveMap() {
       });
 
       // Map Interaction: Click Marker to Select Card
-      liveMap.on("click", "candidate-layer", (e) => {
+      const handleCandidateMarkerClick = (e) => {
         if (e.features.length > 0) {
-          const index = e.features[0].properties.index;
-          if (index !== undefined) {
+          const index = Number(e.features[0].properties.index);
+          if (Number.isFinite(index)) {
             console.log(`LOG: Map marker clicked (Index ${index})`);
             selectCandidate(index);
           }
         }
+      };
+
+      liveMap.on("click", "candidate-layer", handleCandidateMarkerClick);
+      liveMap.on("click", "candidate-hit-layer", handleCandidateMarkerClick);
+      for (let i = 0; i < maxCandidateLayers; i += 1) {
+        liveMap.on("click", `candidate-rank-dot-${i}`, handleCandidateMarkerClick);
+        liveMap.on("click", `candidate-rank-hit-${i}`, handleCandidateMarkerClick);
+      }
+
+      const showPointer = () => {
+        liveMap.getCanvas().style.cursor = "pointer";
+      };
+      const clearPointer = () => {
+        liveMap.getCanvas().style.cursor = "";
+      };
+      liveMap.on("mouseenter", "candidate-layer", showPointer);
+      liveMap.on("mouseenter", "candidate-hit-layer", showPointer);
+      liveMap.on("mouseleave", "candidate-layer", clearPointer);
+      liveMap.on("mouseleave", "candidate-hit-layer", clearPointer);
+      for (let i = 0; i < maxCandidateLayers; i += 1) {
+        liveMap.on("mouseenter", `candidate-rank-dot-${i}`, showPointer);
+        liveMap.on("mouseenter", `candidate-rank-hit-${i}`, showPointer);
+        liveMap.on("mouseleave", `candidate-rank-dot-${i}`, clearPointer);
+        liveMap.on("mouseleave", `candidate-rank-hit-${i}`, clearPointer);
+      }
+      liveMap.on("zoom", refreshCandidateMarkers);
+      liveMap.on("move", refreshCandidateMarkers);
+      liveMap.on("zoomend", () => {
+        if (liveMap.getZoom() <= globePitchResetZoom && liveMap.getPitch() !== 0) {
+          easeToCentered({ center: liveMap.getCenter(), pitch: 0, duration: 180 });
+        }
+        refreshCandidateMarkers();
       });
 
-      liveMap.on("mouseenter", "candidate-layer", () => {
-        liveMap.getCanvas().style.cursor = "pointer";
-      });
-      liveMap.on("mouseleave", "candidate-layer", () => {
-        liveMap.getCanvas().style.cursor = "";
-      });
+      bringCandidateLayersToFront();
 
       window.addEventListener("resize", () => {
         liveMap.setPadding(getMapPadding());
         liveMap.resize();
       });
 
-      setTimeout(() => liveMap.resize(), 100);
+      setTimeout(() => liveMap.resize(), 500);
       resolve();
     });
   });
@@ -169,6 +665,99 @@ function setMetric(id, value) {
   if (el) el.textContent = value;
 }
 
+function updateSelectedMarker(index) {
+  if (!liveMap || !liveMap.getLayer?.("candidate-layer")) return;
+  liveMap.setPaintProperty("candidate-stem-layer", "circle-color", [
+    "case",
+    ["==", ["get", "index"], index],
+    "#eaeaea",
+    ["==", ["get", "rank"], 1],
+    "#7dd3a4",
+    "#9a9a9a"
+  ]);
+  liveMap.setPaintProperty("candidate-stem-layer", "circle-radius", 0);
+  liveMap.setPaintProperty("candidate-stem-layer", "circle-opacity", 0);
+  liveMap.setPaintProperty("candidate-halo-layer", "circle-color", [
+    "case",
+    ["==", ["get", "index"], index],
+    "#d7d7d7",
+    ["==", ["get", "rank"], 1],
+    "#10b981",
+    "#bdbdbd"
+  ]);
+  liveMap.setPaintProperty("candidate-halo-layer", "circle-opacity", [
+    "case",
+    ["==", ["get", "index"], index],
+    0.28,
+    ["==", ["get", "rank"], 1],
+    0.22,
+    0.14
+  ]);
+  liveMap.setPaintProperty("candidate-halo-layer", "circle-radius", [
+    "interpolate",
+    ["linear"],
+    ["zoom"],
+    1.5,
+    ["case", ["==", ["get", "index"], index], 10, ["==", ["get", "rank"], 1], 9, 8],
+    5,
+    ["case", ["==", ["get", "index"], index], 13, ["==", ["get", "rank"], 1], 12, 10],
+    14,
+    ["case", ["==", ["get", "index"], index], 22, ["==", ["get", "rank"], 1], 20, 16]
+  ]);
+  liveMap.setPaintProperty("candidate-layer", "circle-color", [
+    "case",
+    ["==", ["get", "index"], index],
+    "#ffffff",
+    ["==", ["get", "rank"], 1],
+    "#10b981",
+    "#5f6468"
+  ]);
+  liveMap.setPaintProperty("candidate-layer", "circle-radius", [
+    "interpolate",
+    ["linear"],
+    ["zoom"],
+    1.5,
+    ["case", ["==", ["get", "index"], index], 5.5, ["==", ["get", "rank"], 1], 5, 4.5],
+    5,
+    ["case", ["==", ["get", "index"], index], 7.5, ["==", ["get", "rank"], 1], 7, 6],
+    14,
+    ["case", ["==", ["get", "index"], index], 16, ["==", ["get", "rank"], 1], 15, 12]
+  ]);
+  liveMap.setPaintProperty("candidate-layer", "circle-stroke-width", [
+    "case",
+    ["==", ["get", "index"], index],
+    3,
+    ["==", ["get", "rank"], 1],
+    2.5,
+    1.8
+  ]);
+  liveMap.setLayoutProperty("candidate-label-layer", "text-size", [
+    "case",
+    ["==", ["get", "index"], index],
+    17,
+    14
+  ]);
+  liveMap.setPaintProperty("candidate-label-layer", "text-color", [
+    "case",
+    ["==", ["get", "index"], index],
+    "#111111",
+    "#ffffff"
+  ]);
+
+  for (let i = 0; i < maxCandidateLayers; i += 1) {
+    if (!liveMap.getLayer(`candidate-rank-dot-${i}`)) continue;
+    const style = rankLayerStyle(i, index);
+    liveMap.setPaintProperty(`candidate-rank-halo-${i}`, "circle-color", style.haloColor);
+    liveMap.setPaintProperty(`candidate-rank-halo-${i}`, "circle-opacity", style.haloOpacity);
+    liveMap.setPaintProperty(`candidate-rank-halo-${i}`, "circle-radius", ["interpolate", ["linear"], ["zoom"], 1.5, style.haloRadius, 14, style.haloRadius + 8]);
+    liveMap.setPaintProperty(`candidate-rank-dot-${i}`, "circle-color", style.dotColor);
+    liveMap.setPaintProperty(`candidate-rank-dot-${i}`, "circle-radius", ["interpolate", ["linear"], ["zoom"], 1.5, style.dotRadius, 14, style.dotRadius + 7]);
+    liveMap.setPaintProperty(`candidate-rank-dot-${i}`, "circle-stroke-width", style.strokeWidth);
+    liveMap.setLayoutProperty(`candidate-rank-label-${i}`, "text-size", i === index ? 15 : 13);
+    liveMap.setPaintProperty(`candidate-rank-label-${i}`, "text-color", style.dotText);
+  }
+}
+
 function selectCandidate(index) {
   const cards = document.querySelectorAll(".candidate-card");
   if (!cards.length) return;
@@ -181,6 +770,8 @@ function selectCandidate(index) {
   
   cards.forEach(c => c.classList.remove("active"));
   card.classList.add("active");
+  updateSelectedMarker(index);
+  updateHtmlMarkerSelection(index);
   card.scrollIntoView({ behavior: "smooth", block: "nearest" });
   
   const lat = parseFloat(card.dataset.lat);
@@ -188,15 +779,52 @@ function selectCandidate(index) {
   
   if (liveMap) {
     console.log(`LOG: Inspecting candidate #${index + 1} at ${lat}, ${lon}`);
-    liveMap.flyTo({ 
+    flyToCentered({
       center: [lon, lat], 
       zoom: 18, 
       pitch: 0,
       bearing: 0,
-      padding: getMapPadding(),
       duration: 1200 
     });
   }
+}
+
+function recordCandidateAction(action, index = selectedIndex) {
+  if (index < 0) return Promise.resolve(null);
+  return postForm("/api/operator/confirm", JSON.stringify({ rank: index + 1, action }));
+}
+
+function candidateWeight(item) {
+  return item?.posterior_weight ?? item?.posterior ?? item?.score ?? 0;
+}
+
+function candidateLat(item) {
+  return item?.lat ?? item?.candidate?.latitude ?? item?.display_lat;
+}
+
+function candidateLon(item) {
+  return item?.lon ?? item?.candidate?.longitude ?? item?.display_lon;
+}
+
+function candidateDisplayLat(item) {
+  return item?.display_lat ?? candidateLat(item);
+}
+
+function candidateDisplayLon(item) {
+  return item?.display_lon ?? candidateLon(item);
+}
+
+function candidateMapLat(item) {
+  return candidateLat(item) ?? item?.display_lat;
+}
+
+function candidateMapLon(item) {
+  return candidateLon(item) ?? item?.display_lon;
+}
+
+function sortedCandidates(result) {
+  const candidates = Array.isArray(result?.candidates) ? result.candidates : [];
+  return [...candidates].sort((a, b) => candidateWeight(b) - candidateWeight(a));
 }
 
 function renderCandidateList(result) {
@@ -204,22 +832,21 @@ function renderCandidateList(result) {
   if (!container) return;
   container.replaceChildren();
 
-  const fusion = result?.result?.fusion;
-  const candidates = Array.isArray(fusion?.candidates) ? fusion.candidates : [];
+  const candidates = sortedCandidates(result);
 
   if (candidates.length === 0) {
     container.innerHTML = '<div class="empty-state">No candidates found.</div>';
     return;
   }
 
-  const sorted = [...candidates].sort((a, b) => (b.posterior_weight ?? 0) - (a.posterior_weight ?? 0));
-  const slice = sorted.slice(0, topLimit);
+  const slice = candidates.slice(0, topLimit);
 
   slice.forEach((item, idx) => {
     const rank = idx + 1;
-    const cand = item.candidate || {};
-    const lat = cand.latitude;
-    const lon = cand.longitude;
+    const cand = item || {};
+    const mapCoord = operatorMapCoord(cand);
+    const lat = mapCoord?.lat ?? candidateMapLat(cand);
+    const lon = mapCoord?.lon ?? candidateMapLon(cand);
     const card = document.createElement("div");
     card.className = "candidate-card";
     card.dataset.lat = lat;
@@ -230,19 +857,27 @@ function renderCandidateList(result) {
     const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
     
     // Check source
-    const isExif = cand.match_id === "exif:gps";
-    const sourceLabel = isExif ? "IMAGE METADATA (EXIF)" : `MATCH ID: ${cand.match_id || "N/A"}`;
+    const sourceId = cand.match_id || cand.source || "N/A";
+    const isExif = sourceId === "exif:gps";
+    const sourceLabel = isExif ? "IMAGE METADATA (EXIF)" : `MATCH ID: ${sourceId}`;
 
     card.innerHTML = `
       <div class="card-top">
         <span class="card-rank">#${rank}</span>
-        <span class="card-score">${((item.posterior_weight ?? 0) * 100).toFixed(1)}%</span>
+        <span class="card-score">${(candidateWeight(item) * 100).toFixed(1)}%</span>
       </div>
       <div class="card-address">Target Point ${rank}</div>
-      <div class="card-sub">Paris, France • ${sourceLabel}</div>
+      <div class="card-sub-wrap">
+        <div class="card-sub" title="Click to copy source">Paris, France - ${sourceLabel}</div>
+        <button class="source-more" type="button" hidden>Show more</button>
+      </div>
       <div class="card-coords-row">
         <div class="card-coords">${coordString}</div>
         <button class="btn-icon-small copy-coords" title="Copy Coordinates">COPY</button>
+      </div>
+      <div style="display: flex; gap: 8px; margin-top: 8px;" class="card-actions-wrapper">
+       <button class="btn-card-action candidate-action" data-action="confirm" type="button">CONFIRM</button>
+       <button class="btn-card-action candidate-action" data-action="reject" type="button">REJECT</button>
       </div>
       <button class="btn-card-action open-maps">Open in Google Maps</button>
       <span class="copied-hint">Copied</span>
@@ -257,9 +892,44 @@ function renderCandidateList(result) {
       });
     });
 
+    const sourceText = `Paris, France - ${sourceLabel}`;
+    const subEl = card.querySelector(".card-sub");
+    const sourceMore = card.querySelector(".source-more");
+    if (subEl && sourceMore) {
+      requestAnimationFrame(() => {
+        const isOverflowing = subEl.scrollHeight > subEl.clientHeight + 1;
+        sourceMore.hidden = !isOverflowing;
+      });
+      sourceMore.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const expanded = subEl.classList.toggle("expanded");
+        sourceMore.textContent = expanded ? "Show less" : "Show more";
+      });
+      subEl.addEventListener("click", (e) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(sourceText).then(() => {
+          const hint = card.querySelector(".copied-hint");
+          hint.textContent = "Source copied";
+          hint.classList.add("visible");
+          setTimeout(() => {
+            hint.classList.remove("visible");
+            hint.textContent = "Copied";
+          }, 2000);
+        });
+      });
+    }
+
     card.querySelector(".open-maps").addEventListener("click", (e) => {
       e.stopPropagation();
       window.open(mapsUrl, "_blank");
+    });
+
+    card.querySelectorAll(".candidate-action").forEach((button) => {
+      button.addEventListener("click", (e) => {
+        e.stopPropagation();
+        selectCandidate(idx);
+        recordCandidateAction(button.dataset.action || "confirm", idx);
+      });
     });
 
     card.addEventListener("click", () => selectCandidate(idx));
@@ -270,44 +940,38 @@ function renderCandidateList(result) {
   selectedIndex = -1;
 }
 
-function renderLiveMap(result) {
+function renderLiveMap(result, { resetView = false } = {}) {
   ensureLiveMap();
-  const fusion = result?.result?.fusion;
-  const candidates = Array.isArray(fusion?.candidates) ? fusion.candidates : [];
+  const fusion = result?.fused_estimate;
+  const candidates = sortedCandidates(result);
   
   if (!fusion || candidates.length === 0) return;
 
-  const features = candidates.slice(0, topLimit).map((item, idx) => ({
-    type: "Feature",
-    geometry: { type: "Point", coordinates: [item.candidate.longitude, item.candidate.latitude] },
-    properties: { 
-      rank: idx + 1,
-      index: idx 
-    }
-  }));
+  const visibleCandidates = candidates.slice(0, topLimit);
 
-  const ringRadius = fusion.uncertainty_radius_m || (fusion.ellipse?.major_axis_m ? fusion.ellipse.major_axis_m * 0.6 : null) || result.result?.geo?.uncertainty_m;
-  const ringFeature = (fusion.mean_latitude && fusion.mean_longitude && ringRadius) ? {
+  const ringRadius =
+    (fusion.radius_km ? fusion.radius_km * 1000 : null) ||
+    fusion.uncertainty_radius_m ||
+    (fusion.ellipse?.major_axis_m ? fusion.ellipse.major_axis_m * 0.6 : null) ||
+    result?.result?.geo?.uncertainty_m;
+  const ringFeature = (fusion.display_lat && fusion.display_lon && ringRadius) ? {
     type: "Feature",
-    geometry: { type: "Polygon", coordinates: [circlePolygon(fusion.mean_latitude, fusion.mean_longitude, ringRadius)] }
+    geometry: { type: "Polygon", coordinates: [circlePolygon(fusion.display_lat, fusion.display_lon, ringRadius)] }
   } : null;
 
   liveMapReady.then(() => {
-    liveMap.getSource("candidates").setData({ type: "FeatureCollection", features });
+    liveMap.getSource("candidates").setData(emptyFeatureCollection);
+    renderHtmlCandidateMarkers(visibleCandidates);
     liveMap.getSource("ring").setData({ type: "FeatureCollection", features: ringFeature ? [ringFeature] : [] });
-    liveMap.getSource("mean").setData({
-      type: "FeatureCollection",
-      features: [{ type: "Feature", geometry: { type: "Point", coordinates: [fusion.mean_longitude, fusion.mean_latitude] } }]
-    });
-
-    if (candidates.length > 0) {
-      const top = candidates[0].candidate;
-      liveMap.easeTo({ 
-        center: [top.longitude, top.latitude], 
-        zoom: 15, 
-        pitch: 0, 
-        padding: getMapPadding(),
-        duration: 800 
+    liveMap.getSource("mean").setData(emptyFeatureCollection);
+    bringCandidateLayersToFront();
+    if (resetView) {
+      easeToCentered({
+        center: globeCenter,
+        zoom: globeZoom,
+        pitch: 0,
+        bearing: 0,
+        duration: 600
       });
     }
   });
@@ -315,18 +979,20 @@ function renderLiveMap(result) {
 
 function renderSummary(result) {
   console.log("LOG: Rendering Summary", result);
-  const res = result.result || {};
-  const fusion = res.fusion || {};
-  const geo = res.geo || {};
+  const res = result || {};
+  const fusion = res.fused_estimate || {};
+  const geo = res.fused_estimate || {};
 
   // Diagnostics
-  setMetric("diag-backend", res.backend || "-");
-  setMetric("diag-worker", result.runtime?.worker_mode || "-");
-  setMetric("diag-tier", geo.confidence_tier || "-");
+  setMetric("diag-backend", res.source?.filename || "-");
+  setMetric("diag-worker", res.runtime?.worker_mode || "-");
+  setMetric("diag-tier", geo.tier || "-");
   
   // Radius: prefer non-zero fusion radius, fallback to geo uncertainty
   let radius = "-";
-  if (fusion.uncertainty_radius_m !== undefined && fusion.uncertainty_radius_m > 0) {
+  if (fusion.radius_km !== undefined && fusion.radius_km > 0) {
+    radius = `${(fusion.radius_km * 1000).toFixed(1)}m`;
+  } else if (fusion.uncertainty_radius_m !== undefined && fusion.uncertainty_radius_m > 0) {
     radius = `${fusion.uncertainty_radius_m.toFixed(1)}m`;
   } else if (geo.uncertainty_m !== undefined) {
     radius = `${geo.uncertainty_m}m`;
@@ -334,7 +1000,7 @@ function renderSummary(result) {
   setMetric("diag-radius", radius);
   
   // Model Status: Check safe_demo or backend name
-  const isDemo = result.safe_demo || res.backend === "demo";
+  const isDemo = Boolean(res.safe_demo);
   const modelStatus = isDemo ? "DEMO FALLBACK" : "REAL MODEL";
   const modelStatusEl = byId("diag-model-status");
   if (modelStatusEl) {
@@ -345,7 +1011,11 @@ function renderSummary(result) {
   byId("raw-json").textContent = JSON.stringify(result, null, 2);
 
   renderCandidateList(result);
-  renderLiveMap(result);
+  renderLiveMap(result, { resetView: true });
+  renderTimeline(result);
+  renderClues(result);
+  selectedLightboxDetectionIndex = 0;
+  renderLightboxIntel();
 }
 
 function showAnalysisAlert(message) {
@@ -362,6 +1032,8 @@ function clearAnalysisResults() {
   }
   const rawJson = byId("raw-json");
   if (rawJson) rawJson.textContent = "{}";
+  clearCandidateMarkers();
+  activeCandidateItems = [];
   lastResult = null;
 }
 
@@ -393,6 +1065,8 @@ function setupFilePicker() {
       reader.onload = (e) => {
         thumb.src = e.target.result;
         lightboxImg.src = e.target.result;
+        selectedLightboxDetectionIndex = 0;
+        lightboxImg.onload = renderLightboxIntel;
         lightboxName.textContent = file.name;
         ingestBlock.style.display = "none";
         previewBlock.style.display = "flex";
@@ -432,7 +1106,10 @@ function setupLightbox() {
   const backdrop = byId("lightbox-backdrop");
 
   const close = () => modal.classList.remove("active");
-  expandBtn.addEventListener("click", () => modal.classList.add("active"));
+  expandBtn.addEventListener("click", () => {
+    modal.classList.add("active");
+    renderLightboxIntel();
+  });
   closeBtn.addEventListener("click", close);
   backdrop.addEventListener("click", close);
   window.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
@@ -463,7 +1140,18 @@ function setupAnalysis() {
       btn.disabled = true;
       
       const startTime = performance.now();
-      const result = await postForm(`/analyze/image?profile=${profile}`, form);
+
+      const devMode = byId("dev-mode-toggle")?.checked ? "1" : "";
+      form.append("profile", profile);
+      if (devMode) form.append("dev_mode", devMode);
+      const result = await postForm(`/api/operator/analyze`, form);
+
+      // Handle the case where the server returns an error JSON with a session attached
+      if (result.error && result.session) {
+          lastResult = result.session;
+          throw new Error(result.error);
+      }
+
       const duration = (performance.now() - startTime) / 1000;
       
       console.log(`LOG: Pipeline finished in ${duration.toFixed(2)}s`);
@@ -481,7 +1169,13 @@ function setupAnalysis() {
       const msg = normalizeError(err);
       console.error("LOG: Pipeline error", err);
       clearAnalysisResults();
-      showAnalysisAlert(`Analysis failed. Output is not trustworthy.\n${msg}`);
+
+      if (lastResult) {
+          renderSummary(lastResult);
+      }
+      showAnalysisAlert(`Analysis failed.
+${msg}`);
+
     } finally {
       if (progress) progress.style.display = "none";
       btn.disabled = false;
@@ -490,14 +1184,90 @@ function setupAnalysis() {
 }
 
 function setupMapControls() {
-  byId("map-zoom-in").addEventListener("click", () => liveMap?.zoomIn());
-  byId("map-zoom-out").addEventListener("click", () => liveMap?.zoomOut());
+  byId("map-zoom-in").addEventListener("click", () => zoomCentered(1));
+  byId("map-zoom-out").addEventListener("click", () => zoomCentered(-1));
+  const tiltHandle = byId("map-tilt-handle");
+  const tiltLabel = byId("map-tilt-label");
+
+  const updateTiltLabel = () => {
+    if (!tiltLabel || !liveMap) return;
+    const pitch = Math.round(liveMap.getPitch());
+    const bearing = Math.round(liveMap.getBearing());
+    tiltLabel.textContent = `${pitch}/${bearing}`;
+  };
+
+  const setViewAngle = ({ pitch = liveMap?.getPitch() || 0, bearing = liveMap?.getBearing() || 0 }, duration = 180) => {
+    if (!liveMap) return;
+    easeToCentered({
+      pitch: Math.max(minPitch, Math.min(maxPitch, pitch)),
+      bearing,
+      duration
+    });
+    window.setTimeout(updateTiltLabel, duration + 20);
+  };
+
+  if (tiltHandle) {
+    let dragging = false;
+    let suppressClick = false;
+    let startX = 0;
+    let startY = 0;
+    let startPitch = 0;
+    let startBearing = 0;
+
+    tiltHandle.addEventListener("click", () => {
+      if (suppressClick) {
+        suppressClick = false;
+        return;
+      }
+      if (liveMap?.getPitch() || Math.round(liveMap?.getBearing() || 0) !== 0) {
+        setViewAngle({ pitch: 0, bearing: 0 }, 280);
+      } else {
+        setViewAngle({ pitch: 45, bearing: -25 }, 280);
+      }
+    });
+    tiltHandle.addEventListener("pointerdown", (e) => {
+      if (!liveMap) return;
+      dragging = false;
+      startX = e.clientX;
+      startY = e.clientY;
+      startPitch = liveMap.getPitch();
+      startBearing = liveMap.getBearing();
+      tiltHandle.setPointerCapture(e.pointerId);
+      tiltHandle.classList.add("dragging");
+    });
+    tiltHandle.addEventListener("pointermove", (e) => {
+      if (!tiltHandle.hasPointerCapture(e.pointerId) || !liveMap) return;
+      const deltaX = e.clientX - startX;
+      const deltaY = startY - e.clientY;
+      if (Math.abs(deltaY) > 2 || Math.abs(deltaX) > 2) dragging = true;
+      liveMap.setPitch(Math.max(minPitch, Math.min(maxPitch, startPitch + deltaY * 0.45)));
+      liveMap.setBearing(startBearing + deltaX * 0.55);
+      updateTiltLabel();
+    });
+    const endDrag = (e) => {
+      if (tiltHandle.hasPointerCapture(e.pointerId)) {
+        tiltHandle.releasePointerCapture(e.pointerId);
+      }
+      tiltHandle.classList.remove("dragging");
+      if (dragging) {
+        suppressClick = true;
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+    tiltHandle.addEventListener("pointerup", endDrag);
+    tiltHandle.addEventListener("pointercancel", endDrag);
+  }
+
+  liveMapReady?.then(updateTiltLabel);
   
   byId("map-reset-paris").addEventListener("click", () => {
-    liveMap?.easeTo({ center: initialCenter, zoom: 11, pitch: 0, bearing: 0, padding: getMapPadding(), duration: 1000 });
+    easeToCentered({ center: parisCenter, zoom: 11, pitch: 0, bearing: 0, duration: 1400 });
+    window.setTimeout(updateTiltLabel, 1420);
   });
   byId("map-reset-globe").addEventListener("click", () => {
-    liveMap?.easeTo({ center: [10, 20], zoom: 1.8, pitch: 0, bearing: 0, padding: getMapPadding(), duration: 1500 });
+    easeToCentered({ center: globeCenter, zoom: globeZoom, pitch: 0, bearing: 0, duration: 1800 });
+    window.setTimeout(updateTiltLabel, 1820);
   });
 }
 
@@ -537,8 +1307,6 @@ function setupToggles() {
 }
 
 function setupDiagnostics() {
-  const trigger = byId("diag-trigger");
-  const body = byId("diag-accordion");
   const copySumBtn = byId("copy-diag-all");
   const copyJsonBtn = byId("copy-json");
   const expandJsonBtn = byId("expand-json");
@@ -548,8 +1316,6 @@ function setupDiagnostics() {
   const closeJsonBtn = byId("close-json-modal");
   const jsonBackdrop = byId("json-modal-backdrop");
   const copyModalBtn = byId("copy-json-modal");
-
-  if (trigger && body) trigger.addEventListener("click", () => body.classList.toggle("active"));
 
   const flashBtn = (btn, text = "COPIED") => {
     const old = btn.textContent;
@@ -585,6 +1351,30 @@ function setupDiagnostics() {
   if (jsonBackdrop) jsonBackdrop.addEventListener("click", closeJson);
 }
 
+function setupCollapsiblePanel(triggerId, bodyId) {
+  const trigger = byId(triggerId);
+  const body = byId(bodyId);
+  if (!trigger || !body) return;
+
+  const icon = trigger.querySelector("span");
+  const syncIcon = () => {
+    if (icon) icon.textContent = body.classList.contains("active") ? "v" : ">";
+  };
+
+  trigger.addEventListener("click", () => {
+    body.classList.toggle("active");
+    syncIcon();
+  });
+  syncIcon();
+}
+
+function setupPanelAccordions() {
+  setupCollapsiblePanel("timeline-trigger", "timeline-accordion");
+  setupCollapsiblePanel("clues-trigger", "clues-accordion");
+  setupCollapsiblePanel("notes-trigger", "notes-accordion");
+  setupCollapsiblePanel("diag-trigger", "diag-accordion");
+}
+
 function init() {
   console.log("LOG: Operator UI Initializing");
   ensureLiveMap();
@@ -594,7 +1384,9 @@ function init() {
   setupMapControls();
   setupKeyboardNav();
   setupDiagnostics();
+  setupPanelAccordions();
   setupToggles();
+  setupOperatorActions();
   
   const profileSelect = byId("profile-select");
   if (profileSelect) {
@@ -605,3 +1397,202 @@ function init() {
 }
 
 window.addEventListener("load", init);
+
+
+function renderTimeline(session) {
+  const timelineEl = byId("session-timeline");
+  if (!timelineEl) return;
+  timelineEl.innerHTML = "";
+
+  if (!session || !session.timeline) return;
+  session.timeline.forEach(event => {
+     const div = document.createElement("div");
+     div.className = `timeline-item ${event.level}`;
+     div.innerHTML = `
+        <div class="timeline-time">${event.timestamp.split(" ").slice(1).join(" ")}</div>
+        <div class="timeline-msg">${event.message}</div>
+     `;
+     timelineEl.appendChild(div);
+  });
+}
+
+function renderClues(session) {
+  const cluesEl = byId("clues-list");
+  if (!cluesEl) return;
+  cluesEl.innerHTML = "";
+
+  if (!session || !session.clues || session.clues.length === 0) {
+      cluesEl.innerHTML = '<div class="empty-state">No clues extracted.</div>';
+      return;
+  }
+
+  session.clues.forEach(clue => {
+      const div = document.createElement("div");
+      div.className = "clue-chip";
+      div.innerHTML = `<strong>${clue.name}</strong> <span>(${(clue.score*100).toFixed(0)}%)</span> - ${clue.description}`;
+      cluesEl.appendChild(div);
+  });
+}
+
+function getImageDetections() {
+  const direct = Array.isArray(lastResult?.detections) ? lastResult.detections : [];
+  const nested = Array.isArray(lastResult?.result?.detections) ? lastResult.result.detections : [];
+  return direct.length ? direct : nested;
+}
+
+function detectionPoints(det) {
+  const obb = Array.isArray(det?.obb) ? det.obb : [];
+  if (obb.length !== 4) return [];
+  const points = obb
+    .map((pt) => [Number(pt?.[0]), Number(pt?.[1])])
+    .filter(([x, y]) => Number.isFinite(x) && Number.isFinite(y));
+  return points.length === 4 ? points : [];
+}
+
+function formatDetectionDetail(det) {
+  const score = Number.isFinite(Number(det?.confidence)) ? `${Math.round(Number(det.confidence) * 100)}%` : "-";
+  const heading = Number.isFinite(Number(det?.heading_deg)) ? `head ${Number(det.heading_deg).toFixed(0)} deg` : null;
+  const shadow = Number.isFinite(Number(det?.shadow_azimuth_deg)) ? `shadow ${Number(det.shadow_azimuth_deg).toFixed(0)} deg` : null;
+  return [score, heading, shadow].filter(Boolean).join(" | ");
+}
+
+function renderLightboxIntel() {
+  const img = byId("lightbox-img");
+  const overlay = byId("lightbox-overlay");
+  const intel = byId("lightbox-intel");
+  if (!img || !overlay || !intel) return;
+
+  const detections = getImageDetections();
+  const clues = Array.isArray(lastResult?.clues) ? lastResult.clues : [];
+  const width = img.naturalWidth || 1;
+  const height = img.naturalHeight || 1;
+
+  overlay.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  overlay.replaceChildren();
+
+  if (detections.length && selectedLightboxDetectionIndex >= detections.length) {
+    selectedLightboxDetectionIndex = 0;
+  }
+
+  const activeDetection = detections[selectedLightboxDetectionIndex];
+  const activePoints = detectionPoints(activeDetection);
+  if (activePoints.length) {
+    const polygon = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+    polygon.setAttribute("points", activePoints.map(([x, y]) => `${x},${y}`).join(" "));
+    polygon.setAttribute("class", "det-obb active");
+    overlay.appendChild(polygon);
+
+    const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    const x = Math.min(...activePoints.map(([px]) => px));
+    const y = Math.min(...activePoints.map(([, py]) => py));
+    label.setAttribute("x", String(Math.max(8, x)));
+    label.setAttribute("y", String(Math.max(18, y - 8)));
+    label.setAttribute("class", "det-label");
+    label.textContent = `${selectedLightboxDetectionIndex + 1}. ${activeDetection?.label || "object"}`;
+    overlay.appendChild(label);
+  }
+
+  intel.replaceChildren();
+  const title = document.createElement("div");
+  title.className = "intel-title";
+  title.textContent = detections.length ? `Detected Objects (${detections.length})` : "Detected Objects";
+  intel.appendChild(title);
+
+  const addIntelRow = (name, detail, idx = null) => {
+    const row = document.createElement("div");
+    row.className = `intel-row${idx === selectedLightboxDetectionIndex ? " active" : ""}`;
+    if (idx !== null) {
+      row.tabIndex = 0;
+      row.setAttribute("role", "button");
+      row.addEventListener("click", () => {
+        selectedLightboxDetectionIndex = idx;
+        renderLightboxIntel();
+      });
+      row.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        selectedLightboxDetectionIndex = idx;
+        renderLightboxIntel();
+      });
+    }
+    const strong = document.createElement("strong");
+    strong.textContent = name;
+    const span = document.createElement("span");
+    span.textContent = detail;
+    row.append(strong, span);
+    intel.appendChild(row);
+  };
+
+  detections.forEach((det, idx) => {
+    addIntelRow(`${idx + 1}. ${det?.label || "object"}`, formatDetectionDetail(det), idx);
+  });
+
+  if (!detections.length && clues.length) {
+    clues.forEach((clue, idx) => {
+      const score = Number.isFinite(Number(clue?.score)) ? `${Math.round(Number(clue.score) * 100)}%` : "-";
+      addIntelRow(`${idx + 1}. ${clue?.name || "clue"}`, `${score} | ${clue?.description || ""}`);
+    });
+  }
+
+  if (!detections.length && !clues.length) {
+    const empty = document.createElement("div");
+    empty.className = "intel-empty";
+    empty.textContent = "No object detections available for this image.";
+    intel.appendChild(empty);
+  }
+}
+
+function setupOperatorActions() {
+    const confirmBtn = byId("btn-confirm-cand");
+    const rejectBtn = byId("btn-reject-cand");
+    const noteInput = byId("operator-note-input");
+    const saveNoteBtn = byId("btn-save-note");
+    const exportBtn = byId("btn-export-session");
+
+    if (confirmBtn) {
+        confirmBtn.addEventListener("click", () => {
+             recordCandidateAction("confirm");
+        });
+    }
+    if (rejectBtn) {
+        rejectBtn.addEventListener("click", () => {
+             recordCandidateAction("reject");
+        });
+    }
+    if (saveNoteBtn && noteInput) {
+        saveNoteBtn.addEventListener("click", () => {
+             postForm("/api/operator/note", JSON.stringify({note: noteInput.value}));
+        });
+    }
+
+    if (exportBtn) {
+        exportBtn.addEventListener("click", () => {
+             fetch("/api/operator/export.json").then(r=>r.json()).then(data => {
+                  const blob = new Blob([JSON.stringify(data, null, 2)], {type: "application/json"});
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = "session_export.json";
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                  URL.revokeObjectURL(url);
+             });
+        });
+    }
+
+    // allow manual map pin
+    if (liveMap) {
+        liveMap.on('click', (e) => {
+             const manualPinMode = byId("manual-pin-mode")?.checked;
+             if (manualPinMode) {
+                  const lat = e.lngLat.lat;
+                  const lon = e.lngLat.lng;
+                  postForm("/api/operator/pin", JSON.stringify({lat, lon, label: "Operator Pin"})).then(() => {
+                      // refresh UI
+                      fetch("/api/operator/session").then(r=>r.json()).then(renderSummary);
+                  });
+             }
+        });
+    }
+}

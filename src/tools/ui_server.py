@@ -49,6 +49,48 @@ APP_ROOT = Path(__file__).resolve().parents[2]
 LIVE_DIR = APP_ROOT / "src" / "dashboard" / "analysis"
 DASHBOARD_DIR = APP_ROOT / "src" / "dashboard"
 
+
+# Operator Session State
+_OPERATOR_SESSION: dict = {
+    "session_id": None,
+    "status": "ready",
+    "source": None,
+    "fused_estimate": None,
+    "candidates": [],
+    "clues": [],
+    "detections": [],
+    "warnings": [],
+    "timeline": [],
+    "operator_notes": "",
+    "operator_pins": [],
+}
+
+def _reset_operator_session():
+    global _OPERATOR_SESSION
+    _OPERATOR_SESSION = {
+        "session_id": uuid.uuid4().hex,
+        "status": "ready",
+        "source": None,
+        "fused_estimate": None,
+        "candidates": [],
+        "clues": [],
+        "detections": [],
+        "warnings": [],
+        "timeline": [],
+        "operator_notes": "",
+        "operator_pins": [],
+    }
+
+_reset_operator_session()
+
+def _add_timeline_event(message: str, level: str = "info"):
+    _OPERATOR_SESSION["timeline"].append({
+        "timestamp": _utc_now_iso(),
+        "message": message,
+        "level": level
+    })
+
+
 app = FastAPI()
 
 _EVAL_STATE = {"status": "idle", "last_result": None}
@@ -2130,6 +2172,248 @@ def pick_file() -> JSONResponse:
     except Exception as exc:
         return JSONResponse({"error": str(exc)}, status_code=500)
 
+
+@app.get("/api/operator/session")
+def operator_get_session() -> JSONResponse:
+    return JSONResponse(_OPERATOR_SESSION)
+
+@app.post("/api/operator/reset")
+def operator_reset_session() -> JSONResponse:
+    _reset_operator_session()
+    return JSONResponse({"status": "reset_ok"})
+
+@app.post("/api/operator/pin")
+async def operator_add_pin(request: Request) -> JSONResponse:
+    try:
+        data = await request.json()
+        lat = data.get("lat")
+        lon = data.get("lon")
+        label = data.get("label", "Manual Pin")
+        if lat is not None and lon is not None:
+            _OPERATOR_SESSION["operator_pins"].append({
+                "lat": float(lat),
+                "lon": float(lon),
+                "label": label,
+                "added_at": _utc_now_iso()
+            })
+            _add_timeline_event(f"Operator added pin at {lat:.4f}, {lon:.4f}", "info")
+            return JSONResponse({"status": "pin_added"})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    return JSONResponse({"error": "invalid payload"}, status_code=400)
+
+@app.post("/api/operator/note")
+async def operator_add_note(request: Request) -> JSONResponse:
+    try:
+        data = await request.json()
+        note = data.get("note", "")
+        _OPERATOR_SESSION["operator_notes"] = note
+        _add_timeline_event("Operator updated notes", "info")
+        return JSONResponse({"status": "note_updated"})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+@app.post("/api/operator/confirm")
+async def operator_confirm_candidate(request: Request) -> JSONResponse:
+    try:
+        data = await request.json()
+        rank = data.get("rank")
+        action = data.get("action") # "confirm" or "reject"
+        _add_timeline_event(f"Operator {action}ed candidate rank {rank}", "info")
+        return JSONResponse({"status": "action_recorded"})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+@app.get("/api/operator/export.json")
+def operator_export_session() -> JSONResponse:
+    return JSONResponse(_OPERATOR_SESSION)
+
+@app.post("/api/operator/analyze")
+async def operator_analyze(
+    request: Request,
+    image: UploadFile = File(...),
+    profile: Optional[str] = Form(None),
+    dev_mode: Optional[str] = Form(None),
+) -> JSONResponse:
+    _reset_operator_session()
+    _OPERATOR_SESSION["status"] = "running"
+
+    _add_timeline_event("Source uploaded", "info")
+
+    is_dev = _to_bool_flag(dev_mode)
+    if is_dev:
+        _add_timeline_event("Running in DEV MODE (mock data)", "warning")
+        import asyncio
+        await asyncio.sleep(1) # simulate work
+
+        # mock data
+        _OPERATOR_SESSION["source"] = {
+            "filename": image.filename,
+            "width": 800,
+            "height": 600,
+            "has_exif_gps": False,
+            "quality": {"blur": 0.05, "brightness": 0.5}
+        }
+        _OPERATOR_SESSION["fused_estimate"] = {
+            "lat": 48.8566,
+            "lon": 2.3522,
+            "display_lat": 48.8566,
+            "display_lon": 2.3522,
+            "radius_km": 1.5,
+            "confidence": 0.85,
+            "tier": "high",
+            "sources": ["mock"]
+        }
+        _OPERATOR_SESSION["candidates"] = [
+            {
+                "rank": 1,
+                "lat": 48.8566,
+                "lon": 2.3522,
+                "display_lat": 48.8566,
+                "display_lon": 2.3522,
+                "score": 0.95,
+                "posterior": 0.95,
+                "source": "mock",
+                "source_support": ["mock"],
+                "label": "Mock Candidate 1",
+                "distance_to_fused_km": 0.0,
+                "evidence": ["Eiffel Tower structure"]
+            }
+        ]
+        _OPERATOR_SESSION["clues"] = [
+            {"name": "mock clue", "score": 1.0, "description": "Dev mode clue", "reliability": "strong"}
+        ]
+        _OPERATOR_SESSION["detections"] = [
+            {
+                "label": "mock clue",
+                "confidence": 1.0,
+                "obb": [[240, 180], [560, 180], [560, 380], [240, 380]],
+                "heading_deg": None,
+                "shadow_azimuth_deg": None,
+                "shadow_length_ratio": None,
+            }
+        ]
+        _OPERATOR_SESSION["status"] = "completed"
+        _add_timeline_event("Analysis complete (DEV MODE)", "success")
+        return JSONResponse(_OPERATOR_SESSION)
+
+    try:
+        # Real processing
+        with tempfile.TemporaryDirectory() as tmp:
+            image_path = Path(tmp) / _safe_upload_name(image.filename, "upload-image.bin")
+            await _write_upload_limited(image, image_path, _MAX_IMAGE_BYTES)
+
+            _OPERATOR_SESSION["source"] = {
+                "filename": image.filename,
+                "width": 0, # not parsed here for simplicity
+                "height": 0,
+                "has_exif_gps": False,
+                "quality": {}
+            }
+
+            _add_timeline_event("Preprocessing complete", "info")
+            _add_timeline_event("Model stages running...", "info")
+
+            cfg = _load_config_from_env(profile)
+            pipeline = build_pipeline(cfg)
+            if pipeline is None:
+                raise RuntimeError("Failed to build pipeline. Dependency missing?")
+
+            _add_timeline_event("Detector complete", "info")
+
+            # Extract clues
+            detections = pipeline.detect(str(image_path))
+
+            clues = []
+            for d in detections:
+                 clues.append({
+                     "name": d.label,
+                     "score": d.confidence,
+                     "description": f"Detected {d.label}",
+                     "reliability": "medium" if d.confidence > 0.5 else "weak"
+                 })
+            _OPERATOR_SESSION["clues"] = clues
+            _OPERATOR_SESSION["detections"] = [
+                {
+                    "label": d.label,
+                    "confidence": d.confidence,
+                    "obb": d.obb,
+                    "heading_deg": d.heading_deg,
+                    "shadow_azimuth_deg": d.shadow_azimuth_deg,
+                    "shadow_length_ratio": d.shadow_length_ratio,
+                }
+                for d in detections
+            ]
+
+            # Geo loc
+            _add_timeline_event("Geo candidates generated", "info")
+            try:
+                result = pipeline.run(str(image_path))
+            except Exception as e:
+                _add_timeline_event(f"Pipeline error: {e}", "error")
+                _OPERATOR_SESSION["warnings"].append(f"Pipeline error: {e}")
+                _OPERATOR_SESSION["status"] = "error"
+                return JSONResponse(_OPERATOR_SESSION)
+
+            # Detect no candidate generation error
+            cand_err = getattr(pipeline.candidate_provider, "last_error", None)
+            if cand_err:
+                _OPERATOR_SESSION["warnings"].append(f"Candidate provider error: {cand_err}")
+                _add_timeline_event(f"Candidate generation failed: {cand_err}", "error")
+                _OPERATOR_SESSION["status"] = "error"
+                return JSONResponse(_OPERATOR_SESSION)
+
+            if not result.candidates:
+                _OPERATOR_SESSION["warnings"].append("No geo candidates found.")
+                _add_timeline_event("No geo candidates generated.", "warning")
+                _OPERATOR_SESSION["status"] = "error"
+                return JSONResponse(_OPERATOR_SESSION)
+
+            _add_timeline_event("Fusion complete", "info")
+
+            # Populate response structure
+            allow_precise = os.environ.get("OPERATOR_ALLOW_PRECISE_COORDS", "false").lower() == "true"
+
+            fused = result.fusion
+            if fused:
+                 _OPERATOR_SESSION["fused_estimate"] = {
+                    "lat": fused.mean_latitude,
+                    "lon": fused.mean_longitude,
+                    "display_lat": fused.mean_latitude if allow_precise else round(fused.mean_latitude, 2),
+                    "display_lon": fused.mean_longitude if allow_precise else round(fused.mean_longitude, 2),
+                    "radius_km": fused.uncertainty_radius_m / 1000.0 if fused.uncertainty_radius_m else 0.0,
+                    "confidence": fused.top1_posterior,
+                    "tier": fused.confidence_tier,
+                    "sources": ["fusion"]
+                 }
+
+                 for i, cand in enumerate(fused.candidates):
+                     lat = cand.candidate.latitude
+                     lon = cand.candidate.longitude
+                     _OPERATOR_SESSION["candidates"].append({
+                         "rank": i + 1,
+                         "lat": lat,
+                         "lon": lon,
+                         "display_lat": lat if allow_precise else round(lat, 2),
+                         "display_lon": lon if allow_precise else round(lon, 2),
+                         "score": cand.evidence.retrieval_score if cand.evidence else cand.candidate.retrieval_score,
+                         "posterior": cand.posterior_weight,
+                         "source": cand.candidate.match_id or "unknown",
+                         "source_support": [],
+                         "label": f"Candidate {i + 1}",
+                         "distance_to_fused_km": 0.0,
+                         "evidence": [cand.evidence.explanation] if cand.evidence else []
+                     })
+
+            _OPERATOR_SESSION["status"] = "completed"
+            _add_timeline_event("Analysis complete", "success")
+            return JSONResponse(_OPERATOR_SESSION)
+
+    except Exception as e:
+        _OPERATOR_SESSION["status"] = "error"
+        _OPERATOR_SESSION["warnings"].append(str(e))
+        _add_timeline_event(f"Analysis failed: {str(e)}", "error")
+        return JSONResponse({"error": str(e), "session": _OPERATOR_SESSION}, status_code=500)
 
 # Static mounts come last so API routes are not shadowed.
 app.mount("/dashboard", StaticFiles(directory=DASHBOARD_DIR), name="dashboard")

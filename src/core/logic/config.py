@@ -129,8 +129,8 @@ class FusionConfig:
     confidence_medium_threshold: float = 0.45
     confidence_high_min_cross_source_support: Optional[float] = 0.30
     confidence_medium_min_cross_source_support: Optional[float] = 0.10
-    confidence_high_max_uncertainty_m: Optional[float] = 500_000.0
-    confidence_medium_max_uncertainty_m: Optional[float] = 2_000_000.0
+    confidence_high_max_uncertainty_m: Optional[float] = 150_000.0
+    confidence_medium_max_uncertainty_m: Optional[float] = 800_000.0
     shadow_sigma_deg: float = 20.0
     terrain_sigma: float = 100.0
     use_shadow: bool = True
@@ -287,8 +287,8 @@ def load_config(path: str) -> HeimdallConfig:
             confidence_medium_threshold=fusion.get("confidence_medium_threshold", 0.45),
             confidence_high_min_cross_source_support=fusion.get("confidence_high_min_cross_source_support", 0.30),
             confidence_medium_min_cross_source_support=fusion.get("confidence_medium_min_cross_source_support", 0.10),
-            confidence_high_max_uncertainty_m=fusion.get("confidence_high_max_uncertainty_m", 500_000.0),
-            confidence_medium_max_uncertainty_m=fusion.get("confidence_medium_max_uncertainty_m", 2_000_000.0),
+            confidence_high_max_uncertainty_m=fusion.get("confidence_high_max_uncertainty_m", 150_000.0),
+            confidence_medium_max_uncertainty_m=fusion.get("confidence_medium_max_uncertainty_m", 800_000.0),
             shadow_sigma_deg=fusion.get("shadow_sigma_deg", 20.0),
             terrain_sigma=fusion.get("terrain_sigma", 100.0),
             use_shadow=fusion.get("use_shadow", True),
