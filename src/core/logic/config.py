@@ -140,6 +140,8 @@ class FusionConfig:
     use_top_cluster_for_stats: bool = True
     credible_cluster_radius_km: float = 500.0
     min_credible_cluster_weight: float = 0.35
+    candidate_reranker_path: Optional[str] = None
+    candidate_reranker_weight: float = 0.0
     top_k: int = 5
 
 
@@ -298,6 +300,8 @@ def load_config(path: str) -> HeimdallConfig:
             use_top_cluster_for_stats=fusion.get("use_top_cluster_for_stats", True),
             credible_cluster_radius_km=fusion.get("credible_cluster_radius_km", 500.0),
             min_credible_cluster_weight=fusion.get("min_credible_cluster_weight", 0.35),
+            candidate_reranker_path=fusion.get("candidate_reranker_path"),
+            candidate_reranker_weight=fusion.get("candidate_reranker_weight", 0.0),
             top_k=fusion.get("top_k", 5),
         ),
         score=ScoreConfig(

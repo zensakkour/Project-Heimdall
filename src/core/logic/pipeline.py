@@ -3,6 +3,7 @@ Core pipeline wiring (stub): detection -> geolocation -> verification -> score.
 """
 from __future__ import annotations
 
+from datetime import datetime
 from typing import List, Optional
 
 from src.core.detection import Detector
@@ -52,7 +53,7 @@ class HeimdallPipeline:
     ) -> Optional[Verification]:
         return run_verification(image_path, geo, detections, self.verification_config)
 
-    def run(self, image_path: str) -> Assessment:
+    def run(self, image_path: str, capture_time: Optional[datetime] = None) -> Assessment:
         detections = self.detect(image_path)
         detections = enrich_detections_with_shadows(image_path, detections)
         geo = self.geolocate(image_path)
@@ -67,6 +68,7 @@ class HeimdallPipeline:
                     candidates=candidates,
                     detections=detections,
                     config=self.fusion_config,
+                    capture_time=capture_time,
                 )
                 if geo is None and fusion is not None and fusion.candidates:
                     top = fusion.candidates[0]
@@ -88,5 +90,4 @@ class HeimdallPipeline:
             fusion=fusion,
             backend=self.detector_backend,
         )
-
 

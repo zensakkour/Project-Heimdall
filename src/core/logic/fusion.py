@@ -4,9 +4,11 @@ Probabilistic fusion of geo candidates and verification signals.
 from __future__ import annotations
 
 import math
+from datetime import datetime
 from typing import Iterable, List, Optional, Sequence, Tuple
 
 from .astro import sun_position
+from .candidate_rerank import candidate_rerank_likelihoods, load_candidate_rerank_model
 from .config import FusionConfig
 from .image_meta import extract_capture_time
 from .likelihoods import gaussian_likelihood
@@ -25,6 +27,7 @@ def fuse_candidates(
     candidates: Sequence[GeoCandidate],
     detections: Sequence[Detection],
     config: Optional[FusionConfig] = None,
+    capture_time: Optional[datetime] = None,
 ) -> Optional[FusionResult]:
     if not candidates:
         return None
@@ -33,7 +36,7 @@ def fuse_candidates(
     log_weights: List[float] = []
     evidences: List[Evidence] = []
 
-    capture_time = extract_capture_time(image_path)
+    capture_time = capture_time or extract_capture_time(image_path)
     observed_shadow = _mean_shadow_azimuth(detections)
     retrieval_scores = _normalized_retrieval_scores(candidates, cfg.retrieval_score_norm)
     spatial_likes = _spatial_consensus_likelihoods(
@@ -46,6 +49,7 @@ def fuse_candidates(
         retrieval_scores,
         sigma_km=cfg.cross_source_sigma_km,
     )
+    candidate_rerank_likes = _candidate_reranker_likelihoods(candidates, cfg)
 
     for idx, (cand, norm_score) in enumerate(zip(candidates, retrieval_scores)):
         retrieval_like = _to_unit_interval(norm_score)
@@ -76,6 +80,10 @@ def fuse_candidates(
             cross_like = cross_source_likes[idx]
             logp += max(0.0, cfg.cross_source_weight) * math.log(max(cross_like, 1e-12))
             likelihoods["cross_source"] = cross_like
+        if candidate_rerank_likes:
+            rerank_like = candidate_rerank_likes[idx]
+            logp += max(0.0, cfg.candidate_reranker_weight) * math.log(max(rerank_like, 1e-12))
+            likelihoods["candidate_reranker"] = rerank_like
         if shadow_like is not None:
             logp += math.log(max(shadow_like, 1e-12))
             likelihoods["shadow"] = shadow_like
@@ -549,6 +557,21 @@ def _cross_source_agreement_likelihoods(
     if peak <= 0.0:
         return [1.0 for _ in candidates]
     return [max(1e-3, min(1.0, value / peak)) for value in raw]
+
+
+def _candidate_reranker_likelihoods(candidates: Sequence[GeoCandidate], cfg: FusionConfig) -> List[float]:
+    path = cfg.candidate_reranker_path
+    weight = max(0.0, float(cfg.candidate_reranker_weight))
+    if not path or weight <= 0.0:
+        return []
+    try:
+        model = load_candidate_rerank_model(path)
+    except Exception:
+        return []
+    likes = candidate_rerank_likelihoods(candidates, model)
+    if len(likes) != len(candidates):
+        return []
+    return likes
 
 
 def _calibrate_probability(prob: float, logit_scale: float, logit_bias: float) -> float:
