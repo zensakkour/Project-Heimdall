@@ -3,11 +3,15 @@ Tests for geo fusion robustness improvements.
 """
 from __future__ import annotations
 
+import json
 import math
+import tempfile
+from datetime import datetime, timezone
+from pathlib import Path
 
 from src.core.logic.config import FusionConfig
 from src.core.logic.fusion import fuse_candidates
-from src.core.logic.types import GeoCandidate
+from src.core.logic.types import Detection, GeoCandidate
 
 
 def test_fusion_handles_dateline_longitudes() -> None:
@@ -764,3 +768,89 @@ def test_top_cluster_stats_choose_densest_cluster_not_top1_anchor() -> None:
     # Cluster-aware stats should snap toward the denser Paris pair even if top-1 is an outlier.
     assert abs(cluster.mean_latitude - paris_lat) < abs(no_cluster.mean_latitude - paris_lat)
     assert cluster.credible_set_size == 2
+
+
+def test_sidecar_capture_time_enables_shadow_reranking() -> None:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        image_path = Path(tmpdir) / "query.jpg"
+        Path(str(image_path) + ".meta.json").write_text(
+            json.dumps({"captured_at": "2026-06-01T12:00:00Z"}),
+            encoding="utf-8",
+        )
+
+        candidates = [
+            GeoCandidate(latitude=34.0522, longitude=-118.2437, retrieval_score=0.80, match_id="la"),
+            GeoCandidate(latitude=48.8566, longitude=2.3522, retrieval_score=0.72, match_id="paris"),
+        ]
+        detections = [
+            Detection(
+                label="building",
+                confidence=0.9,
+                obb=((0.0, 0.0), (10.0, 0.0), (10.0, 5.0), (0.0, 5.0)),
+                shadow_azimuth_deg=6.0,
+            )
+        ]
+        without_shadow_cfg = FusionConfig(
+            retrieval_temperature=0.3,
+            retrieval_score_norm="none",
+            use_spatial_consensus=False,
+            use_cross_source_agreement=False,
+            use_shadow=False,
+            use_terrain=False,
+            top_k=2,
+        )
+        with_shadow_cfg = FusionConfig(
+            retrieval_temperature=0.3,
+            retrieval_score_norm="none",
+            use_spatial_consensus=False,
+            use_cross_source_agreement=False,
+            use_shadow=True,
+            shadow_sigma_deg=18.0,
+            use_terrain=False,
+            top_k=2,
+        )
+
+        baseline = fuse_candidates(str(image_path), candidates, detections=detections, config=without_shadow_cfg)
+        reranked = fuse_candidates(str(image_path), candidates, detections=detections, config=with_shadow_cfg)
+
+        assert baseline is not None
+        assert reranked is not None
+        assert baseline.candidates[0].candidate.match_id == "la"
+        assert reranked.candidates[0].candidate.match_id == "paris"
+        assert reranked.candidates[0].evidence.shadow_residual_deg is not None
+
+
+def test_explicit_capture_time_enables_shadow_reranking_without_sidecar() -> None:
+    candidates = [
+        GeoCandidate(latitude=34.0522, longitude=-118.2437, retrieval_score=0.80, match_id="la"),
+        GeoCandidate(latitude=48.8566, longitude=2.3522, retrieval_score=0.72, match_id="paris"),
+    ]
+    detections = [
+        Detection(
+            label="building",
+            confidence=0.9,
+            obb=((0.0, 0.0), (10.0, 0.0), (10.0, 5.0), (0.0, 5.0)),
+            shadow_azimuth_deg=6.0,
+        )
+    ]
+    cfg = FusionConfig(
+        retrieval_temperature=0.3,
+        retrieval_score_norm="none",
+        use_spatial_consensus=False,
+        use_cross_source_agreement=False,
+        use_shadow=True,
+        shadow_sigma_deg=18.0,
+        use_terrain=False,
+        top_k=2,
+    )
+
+    result = fuse_candidates(
+        "missing.jpg",
+        candidates,
+        detections=detections,
+        config=cfg,
+        capture_time=datetime(2026, 6, 1, 12, 0, 0, tzinfo=timezone.utc),
+    )
+
+    assert result is not None
+    assert result.candidates[0].candidate.match_id == "paris"
