@@ -42,12 +42,17 @@ def test_infer_dataset_scope_from_paths() -> None:
         Path("data/spacenet_paris_test/chips"),
         Path("data/spacenet_paris_test/metadata.csv"),
     )
+    paris_realistic = infer_dataset_scope(
+        Path("data/paris_realistic_v1/street_combined"),
+        Path("data/paris_realistic_v1_combined/splits_strict/test_pairs.csv"),
+    )
     us = infer_dataset_scope(
         Path("data/open_geo/images"),
         Path("data/open_geo/metadata.csv"),
     )
     unknown = infer_dataset_scope(Path("data/custom/images"), Path("data/custom/meta.csv"))
     assert paris == "PARIS"
+    assert paris_realistic == "PARIS"
     assert us == "US"
     assert unknown == "UNKNOWN"
 
@@ -66,4 +71,3 @@ def test_validate_scope_alignment_returns_warning_with_override() -> None:
 
 def test_validate_scope_alignment_accepts_match() -> None:
     assert validate_scope_alignment("PARIS", "PARIS", allow_scope_mismatch=False) is None
-

@@ -3,7 +3,9 @@ Image metadata helpers (EXIF).
 """
 from __future__ import annotations
 
-from datetime import datetime
+import json
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Optional, Tuple
 
 from PIL import Image, ExifTags
@@ -76,10 +78,93 @@ def extract_capture_time(image_path: str) -> Optional[datetime]:
         value = exif.get(key)
         if not value:
             continue
+        parsed = parse_capture_time(value)
+        if parsed is not None:
+            return parsed
+    return _extract_sidecar_capture_time(image_path)
+
+
+def _extract_sidecar_capture_time(image_path: str) -> Optional[datetime]:
+    path = Path(image_path)
+    candidates = [
+        Path(str(path) + ".meta.json"),
+        path.with_suffix(".meta.json"),
+        Path(str(path) + ".geo.json"),
+        path.with_suffix(".geo.json"),
+        Path(str(path) + ".geoloc.json"),
+        path.with_suffix(".geoloc.json"),
+        Path(str(path) + ".detections.json"),
+        path.with_suffix(".detections.json"),
+    ]
+    for sidecar in candidates:
+        if not sidecar.exists():
+            continue
         try:
-            return datetime.strptime(value, "%Y:%m:%d %H:%M:%S")
+            raw = json.loads(sidecar.read_text(encoding="utf-8"))
         except Exception:
             continue
+        parsed = _capture_time_from_payload(raw)
+        if parsed is not None:
+            return parsed
     return None
+
+
+def _capture_time_from_payload(raw: Any) -> Optional[datetime]:
+    if not isinstance(raw, dict):
+        return None
+    for key in (
+        "captured_at",
+        "capture_time",
+        "datetime",
+        "datetimetz",
+        "DateTimeOriginal",
+        "DateTime",
+        "DateTimeDigitized",
+    ):
+        parsed = parse_capture_time(raw.get(key))
+        if parsed is not None:
+            return parsed
+    for key in ("image", "metadata", "meta", "exif"):
+        nested = raw.get(key)
+        if isinstance(nested, dict):
+            parsed = _capture_time_from_payload(nested)
+            if parsed is not None:
+                return parsed
+    return None
+
+
+def parse_capture_time(value: Any) -> Optional[datetime]:
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, (int, float)):
+        return _parse_epoch_capture_time(float(value))
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    if text.isdigit():
+        return _parse_epoch_capture_time(float(text))
+    for fmt in ("%Y:%m:%d %H:%M:%S", "%Y-%m-%d %H:%M:%S"):
+        try:
+            return datetime.strptime(text, fmt)
+        except ValueError:
+            pass
+    iso_text = text[:-1] + "+00:00" if text.endswith("Z") else text
+    try:
+        return datetime.fromisoformat(iso_text)
+    except ValueError:
+        return None
+
+
+def _parse_epoch_capture_time(value: float) -> Optional[datetime]:
+    if value <= 0.0:
+        return None
+    # Mapillary exports milliseconds, while some feeds export seconds.
+    seconds = value / 1000.0 if value > 10_000_000_000 else value
+    try:
+        return datetime.fromtimestamp(seconds, tz=timezone.utc)
+    except (OverflowError, OSError, ValueError):
+        return None
 
 

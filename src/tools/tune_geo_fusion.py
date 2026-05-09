@@ -11,10 +11,15 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Iterable, List, Optional
 
-import pandas as pd
-
 from src.core.logic.config import HeimdallConfig, load_config
-from src.tools.run_geo_eval import build_pipeline, haversine_km, predict_latlon, resolve_image_path
+from src.tools.run_geo_eval import (
+    build_pipeline,
+    capture_time_from_record,
+    haversine_km,
+    load_metadata_records,
+    predict_latlon,
+    resolve_image_path,
+)
 
 
 def _parse_float_list(raw: str) -> List[float]:
@@ -74,7 +79,7 @@ def _evaluate(cfg: HeimdallConfig, images_dir: Path, records: List[dict]) -> dic
         if not image_path.exists():
             missing += 1
             continue
-        result = pipeline.run(str(image_path))
+        result = pipeline.run(str(image_path), capture_time=capture_time_from_record(item))
         pred = predict_latlon(result)
         if pred is None:
             null_pred += 1
@@ -108,6 +113,11 @@ def main(argv: Optional[List[str]] = None) -> None:
     parser.add_argument("--config", default="src/config/paris_test.json", help="Base config.")
     parser.add_argument("--images-dir", required=True, help="Images directory.")
     parser.add_argument("--metadata", required=True, help="Metadata CSV (path, latitude, longitude).")
+    parser.add_argument(
+        "--query-metadata",
+        default="",
+        help="Optional image metadata CSV used to fill missing capture timestamps for pair rows.",
+    )
     parser.add_argument("--output", default="runs/tune_geo_fusion.json", help="Output JSON.")
     parser.add_argument("--limit", type=int, default=200, help="Limit number of samples.")
     parser.add_argument("--seed", type=int, default=42, help="Shuffle seed.")
@@ -135,11 +145,9 @@ def main(argv: Optional[List[str]] = None) -> None:
     cfg = load_config(args.config)
     images_dir = Path(args.images_dir)
     metadata_path = Path(args.metadata)
-    df = pd.read_csv(metadata_path)
-    if not {"path", "latitude", "longitude"}.issubset(df.columns):
-        raise ValueError("metadata must include columns: path, latitude, longitude")
-
-    records = df[["path", "latitude", "longitude"]].to_dict("records")
+    query_metadata_path = Path(args.query_metadata) if args.query_metadata else None
+    records = load_metadata_records(metadata_path, query_metadata_path=query_metadata_path, images_dir=images_dir)
+    enriched_records = sum(1 for item in records if item.get("_query_metadata_enriched"))
     random.Random(args.seed).shuffle(records)
     if args.limit and args.limit > 0:
         records = records[: args.limit]
@@ -264,6 +272,8 @@ def main(argv: Optional[List[str]] = None) -> None:
         "config": args.config,
         "images_dir": str(images_dir),
         "metadata": str(metadata_path),
+        "query_metadata": str(query_metadata_path) if query_metadata_path else None,
+        "query_metadata_enriched": enriched_records,
         "limit": args.limit,
         "results": results,
         "best": results[0] if results else None,

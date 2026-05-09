@@ -1,7 +1,7 @@
 ﻿# Project Heimdall: Research Paper Draft
 
-Version: v1.1  
-Date: April 30, 2026
+Version: v1.2
+Date: May 9, 2026
 Author: Zein Sakkour
 
 Companion external landscape review: `src/docs/MARKET_RESEARCH.md`.
@@ -82,6 +82,7 @@ Retrieval controls explored:
 Fusion is performed in log-space with source-aware priors and additional likelihood terms:
 - Spatial consensus likelihood.
 - Cross-source agreement likelihood.
+- Optional sun/shadow consistency likelihood when capture time and observed shadow direction are available.
 - Optional plausibility reranking.
 - Adaptive outlier guard (robust medoid/MAD-style suppression).
 - Dateline-safe longitudinal statistics.
@@ -248,7 +249,26 @@ R_alpha = smallest region such that sum_{y_i in R_alpha} P(y_i | q) >= alpha
 
 Confidence tiers then combine posterior mass, cross-source support, and uncertainty radius. This is why the system reports both a point prediction and diagnostics rather than a single unqualified coordinate.
 
-#### 4.6.7 Leakage-Safe Spatial Splitting
+#### 4.6.7 Sun/Shadow Consistency as Physical Evidence
+The May 2026 iteration added a benchmarkable path for using capture time as physical evidence. If a query has a timestamp and the detector or sidecar provides an observed shadow azimuth, each candidate location can be checked against an approximate solar position model:
+
+```text
+shadow_expected(y_i, t) = (sun_azimuth(y_i, t) + 180 deg) mod 360 deg
+delta_shadow = angular_distance(shadow_expected, shadow_observed)
+L_shadow(y_i | q, t) = exp(-0.5 * (delta_shadow / sigma_shadow)^2)
+```
+
+The candidate log posterior receives `log L_shadow` only when both timestamp and shadow evidence are present. Missing timestamps or missing shadow observations leave the ranking unchanged. This avoids penalizing ordinary images while allowing time-aware disambiguation when the evidence exists.
+
+#### 4.6.8 Candidate Reranking and Local Visual Verification
+The May 2026 runtime branch also tested a second-stage candidate reranker because candidate-oracle analysis showed that useful candidates are often present but not top-ranked. Two paths were separated:
+
+1. A lightweight learned candidate-feature scorer using rank, normalized score, source type, local support density, and distance-to-centroid features.
+2. A local visual verifier over the top retrieved aerial chips, using the existing dual local feature stack to rescore visually compatible chips before fusion.
+
+The learned feature scorer was kept as infrastructure but not enabled by default because the first leakage-safe probe did not move held-out top-rank metrics. The local visual verifier did improve the full runtime fusion path, so the Paris runtime profile now enables a limited top-12 local match pass.
+
+#### 4.6.9 Leakage-Safe Spatial Splitting
 The realistic Paris dataset is split by geographic cells rather than random rows. Let each pair be assigned to a spatial cell:
 
 ```text
@@ -263,7 +283,7 @@ min_{i in split A, j in split B} d(y_i, y_j) >= d_min
 
 The current combined strict split reports `min_cross_split_distance_m = 1201.23`, which makes it materially safer than the earlier permissive split with meter-scale leakage.
 
-#### 4.6.8 Evaluation Metrics
+#### 4.6.10 Evaluation Metrics
 For a benchmark set `Q`, mean and median error are:
 
 ```text
@@ -318,6 +338,16 @@ The project reports multiple radii because a method can improve medium-range loc
 - Added a query-only street-to-aerial projection trainer that maps street embeddings into the fixed aerial embedding space.
 - Ran the first combined strict-probe model adaptation: the learned projection improved mean error from `10.97 km` to `9.75 km` and `within_5km_pct` from `12.50%` to `20.42%`, while regressing `within_1km_pct` from `2.92%` to `2.08%`.
 
+### 5.5 Phase V: Physical-Feature Fusion Path (May 9, 2026)
+- Wired sidecar capture-time metadata into the shared image metadata helper so EXIF is no longer the only way to activate sun/shadow scoring.
+- Added support for ISO timestamps, EXIF-style timestamps, Unix seconds, and Mapillary-style epoch milliseconds.
+- Added explicit capture-time injection through `fuse_candidates()` and `HeimdallPipeline.run()` so offline benchmark rows can exercise the same physical feature without mutating image files.
+- Updated `run_geo_eval.py` and `tune_geo_fusion.py` to normalize realistic CSV schemas (`street_path`/`lat`/`lon`) and enrich pair rows from street image metadata when the pair CSV does not carry `captured_at`.
+- Added regression tests showing that shadow evidence can promote the physically plausible candidate over a higher raw retrieval-score candidate when capture time is available.
+- Ran strict-probe fusion sweeps on the Paris runtime profile. The promoted setting increases retrieval temperature (`0.08` -> `0.28`), disables the current spatial-consensus term for this close-range Paris profile, weakens cross-source agreement, keeps a lighter plausibility rerank, disables the adaptive outlier guard for this profile, and enables timestamp-gated shadow scoring. On a fixed 40-sample strict probe, mean error improved from `9.65 km` to `9.26 km`, median from `7.14 km` to `7.10 km`, `<=1 km` from `0.00%` to `2.50%`, `<=5 km` from `25.00%` to `32.50%`, and `<=10 km` from `62.50%` to `67.50%`.
+- Added candidate-level reranking infrastructure and a supervised training tool (`src/tools/train_geo_candidate_reranker.py`). The first learned feature scorer was rejected for default use because it did not improve the fixed held-out 40-sample probe, but the infrastructure remains available for larger feature/model experiments.
+- Re-enabled local visual verification for the Paris runtime profile with a bounded top-12 candidate pass (`retrieval_local_match_top_n=12`, `retrieval_local_match_weight=0.6`, `retrieval_local_match_max_features=1800`). On the same fixed 40-sample strict probe, full runtime fusion improved from the Phase V retune (`9.26 km` mean, `7.10 km` median, `19.66 km` p90, `67.50% <=10 km`) to `8.61 km` mean, `6.77 km` median, `17.63 km` p90, and `72.50% <=10 km`. The tradeoff is a small `<=5 km` decrease (`32.50%` -> `30.00%`), so this is promoted as a medium/tail-error improvement rather than a close-range breakthrough.
+
 ## 6. Experimental Protocol
 ### 6.1 Datasets and Artifacts Used in This Document
 - SpaceNet Paris train-like index artifacts (`data/geo_index/spacenet_paris_clip.npz`).
@@ -327,6 +357,8 @@ The project reports multiple radii because a method can improve medium-range loc
 - Full realistic Paris combined dataset (`data/paris_realistic_v1_combined/pairs.csv`) with `40,000` paired street-to-aerial examples.
 - Full realistic Paris combined strict split (`data/paris_realistic_v1_combined/splits_strict/`) with `34,821` retained pairs and `5,179` excluded boundary pairs.
 - Full realistic Paris aerial index (`data/paris_realistic_v1_combined/indices/aerial_clip_index.npz`).
+- Realistic street metadata includes timestamp fields in source metadata tables; the current evaluation tooling can now pass those timestamps into fusion when present.
+- Pair-level benchmark CSVs may omit `captured_at`; evaluator and tuner tooling now auto-discover `metadata.csv` under the supplied street image directory and use it to fill missing capture-time fields by `street_id`, `image_id`, or normalized image path.
 
 ### 6.2 Core Metrics
 - Distance metrics: `mean_km`, `median_km`, `p90_km`, `p95_km`.
@@ -940,6 +972,16 @@ Interpretation:
 - Expanding from the sampled `10k` aerial index to the full `40k` index slightly improved close-range hit rates, but not mean or median error.
 - The first query-only street-to-aerial projection run is the first real model-side gain on the merged benchmark: `mean_km` improved from `10.97` to `9.75`, `<=2km` improved from `5.83%` to `7.50%`, and `<=5km` improved from `12.50%` to `20.42%`, but `<=1km` regressed from `2.92%` to `2.08%`.
 - The system is therefore no longer blocked on missing realistic data; it is now blocked on the strength of the cross-view model trained on that data.
+
+Runtime fusion benchmark snapshot:
+
+| Runtime profile | Query set | Mean km | Median km | p90 km | <=2 km | <=5 km | <=10 km | Notes |
+|---|---|---:|---:|---:|---:|---:|---:|---|
+| Paris profile before Phase V fusion retune | strict combined pair probe, fixed 40-sample seed slice | 9.65 | 7.14 | 19.66 | 2.50% | 25.00% | 62.50% | `runs/fusion_sweep_paris_runtime_40.json` baseline |
+| Paris profile after Phase V fusion retune | same fixed 40-sample seed slice | 9.26 | 7.10 | 19.66 | 5.00% | 32.50% | 67.50% | `runs/geo_eval_branch_paris_tuned2_40.json` |
+| Paris profile with bounded local visual verification | same fixed 40-sample seed slice | 8.61 | 6.77 | 17.63 | 5.00% | 30.00% | 72.50% | `runs/geo_eval_branch_local_match_40.json` |
+
+This is a runtime profile improvement, not a replacement for the larger `240`-query cross-view benchmark. The result is still useful because it validates the production inference path used by the app: RF-DETR detections, retrieval candidates, metadata-enriched capture time, and probabilistic fusion all execute together under `run_geo_eval.py`.
 
 First combined cross-view training workflow used in this repo:
 
