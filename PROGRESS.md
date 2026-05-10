@@ -2535,3 +2535,19 @@ Do not delete or edit past entries. Append new work at the end.
   - `runs/geo_eval_hardneg_projection_v4_cap16_initv1_80.json`
   - `runs/retrieval_hard_triplets_train480_diverse_v3_summary.json`
 - Decision: Keep on this branch and push. This is a measured incremental model improvement, not the requested breakthrough. The important finding is that repeated-reference concentration is now a known bottleneck; the next real step should expand diverse near-field mistakes rather than train longer on the same failure chips.
+
+## 2026-05-10 Candidate Oracle Rank Diagnostic
+- Hypothesis: The current hard-negative projection may already retrieve near-correct locations, but rank them below visually similar wrong Paris candidates.
+- Change:
+  - Added candidate-oracle diagnostics to `src.tools.run_geo_eval`, including closest returned candidate distance, closest returned candidate rank, candidate count, and aggregate oracle metrics.
+  - Added focused tests for oracle-rank extraction.
+  - Updated `research.md` and `src/docs/RESEARCH_PAPER.md` with the candidate-oracle conclusion.
+- Validation commands:
+  - `$env:TMP='c:\Users\zen\Desktop\Projects\Project-Heimdall\.tmp'; $env:TEMP=$env:TMP; .\.venv\Scripts\python.exe -m pytest src\tests\test_run_geo_eval_retrieval_provider.py -q`
+  - `.\.venv\Scripts\python.exe -m src.tools.run_geo_eval --config src/config/paris.json --images-dir data/paris_realistic_v1/street_combined --metadata data/paris_realistic_v1_combined/splits_strict/test_pairs_probe240.csv --limit 80 --seed 42 --output runs/geo_eval_oracle_rank_diagnostics_80.json --allow-scope-mismatch --diag-samples 10`
+- Metrics on the same `80` strict probe samples:
+  - current serving prediction: `mean 4.5791`, `median 4.6367`, `p90 5.9161`, `<=2km 0.00%`, `<=5km 67.50%`, `<=10km 100.00%`
+  - returned top-25 oracle: `mean 2.3528`, `median 2.1638`, `p90 4.0063`, `<=1km 21.25%`, `<=2km 43.75%`, `<=5km 100.00%`
+  - mean rank of closest returned candidate: `15.125`
+  - rejected graph-support real pipeline test: `mean 4.7027`, `p90 6.5027`, `<=2km 2.50%`, `<=5km 67.50%`
+- Decision: Keep and push diagnostics, but do not promote graph support or the existing learned candidate reranker. The next bottleneck is visual ranking inside the returned shortlist, not candidate coverage or pure spatial clustering.
