@@ -66,6 +66,46 @@ def test_mine_triplets_uses_retrieved_wrong_candidates_as_negatives() -> None:
     assert row["triplet_weight"] > 1.0
 
 
+def test_mine_triplets_can_use_closest_candidate_as_positive() -> None:
+    candidates = [
+        GeoCandidate(
+            latitude=48.0200,
+            longitude=2.0000,
+            retrieval_score=0.99,
+            match_id="wrong_top",
+            image_path="data/spacenet_paris/chips/wrong_top.jpg",
+        ),
+        GeoCandidate(
+            latitude=48.0005,
+            longitude=2.0000,
+            retrieval_score=0.70,
+            match_id="oracle_positive",
+            image_path="data/spacenet_paris/chips/oracle_positive.jpg",
+        ),
+    ]
+
+    row = mine_triplets_for_query(
+        query_path="street/query.jpg",
+        gt_latitude=48.0000,
+        gt_longitude=2.0000,
+        candidates=candidates,
+        reference_records=[],
+        positive_radius_km=0.2,
+        positive_fallback_top_k=1,
+        negative_min_gt_distance_km=1.0,
+        negative_max_gt_distance_km=5.0,
+        max_positives=1,
+        max_negatives=2,
+        positive_source="closest_candidate",
+    )
+
+    assert row is not None
+    assert row["positive_source"] == "closest_candidate"
+    assert row["positives"][0]["path"] == "chips/oracle_positive.jpg"
+    assert row["positives"][0]["retrieval_rank"] == 2
+    assert row["hard_negatives"][0]["path"] == "chips/wrong_top.jpg"
+
+
 def test_mine_retrieval_triplets_resolves_existing_images(tmp_path: Path) -> None:
     images_dir = tmp_path / "street"
     images_dir.mkdir()

@@ -2551,3 +2551,21 @@ Do not delete or edit past entries. Append new work at the end.
   - mean rank of closest returned candidate: `15.125`
   - rejected graph-support real pipeline test: `mean 4.7027`, `p90 6.5027`, `<=2km 2.50%`, `<=5km 67.50%`
 - Decision: Keep and push diagnostics, but do not promote graph support or the existing learned candidate reranker. The next bottleneck is visual ranking inside the returned shortlist, not candidate coverage or pure spatial clustering.
+
+## 2026-05-10 Oracle-Candidate Ranking Experiments
+- Hypothesis: If the closest returned candidate is already present, direct listwise ranking or oracle-candidate triplets should move it toward rank 1.
+- Change:
+  - Added `exp` activation support to `CandidateRerankModel`.
+  - Added `--fit-mode listwise` to `src.tools.train_geo_candidate_reranker`.
+  - Added `--positive-source closest_candidate` to `src.tools.mine_retrieval_hard_triplets` so the positive can be the closest returned retrieval candidate instead of only the nearest reference metadata chip.
+  - Added focused tests for listwise reranker training and closest-candidate positive mining.
+- Validation commands:
+  - `New-Item -ItemType Directory -Force .tmp | Out-Null; $env:TMP=(Resolve-Path .tmp).Path; $env:TEMP=$env:TMP; .\.venv\Scripts\python.exe -m pytest src\tests\test_candidate_rerank.py src\tests\test_mine_retrieval_hard_triplets.py -q`
+  - `.\.venv\Scripts\python.exe -m src.tools.train_geo_candidate_reranker --config src/config/paris.json --images-dir data/paris_realistic_v1/street_combined --metadata data/paris_realistic_v1_combined/splits_strict/train_pairs.csv --eval-metadata data/paris_realistic_v1_combined/splits_strict/test_pairs_probe240.csv --limit 240 --eval-limit 80 --seed 42 --fit-mode listwise --target-sigma-km 1.5 --listwise-epochs 40 --listwise-learning-rate 0.02 --listwise-l2 0.001 --fusion-weight 1.5 --temperature 0.22 --output runs/candidate_reranker_listwise_v1.json --report-output runs/candidate_reranker_listwise_v1.report.json`
+  - `.\.venv\Scripts\python.exe -m src.tools.mine_retrieval_hard_triplets --config src/config/paris.json --images-dir data/paris_realistic_v1/street_combined --metadata data/paris_realistic_v1_combined/splits_strict/train_pairs.csv --reference-metadata data/spacenet_paris/metadata.csv --limit 240 --seed 42 --positive-source closest_candidate --positive-radius-km 2.0 --positive-fallback-top-k 1 --negative-min-gt-distance-km 0.75 --negative-max-gt-distance-km 18.0 --max-positives 1 --max-negatives 8 --max-negative-reuse 16 --output runs/retrieval_oracle_candidate_triplets_train240_v1.jsonl --summary-output runs/retrieval_oracle_candidate_triplets_train240_v1_summary.json`
+- Metrics:
+  - listwise reranker full fusion test: `mean 5.3499`, `p90 6.7075`, `<=5km 42.50%`; rejected.
+  - oracle-candidate triplet mining: `104` triplets from `240` records, but only `8` unique positive chips; this is too concentrated.
+  - oracle-candidate projection full serving test: `mean 5.0353`, `median 5.0583`, `p90 6.3590`, `<=5km 50.00%`; rejected.
+  - oracle-candidate projection improved closest-candidate rank (`15.125` -> `10.375`) but worsened oracle `<=2km` (`43.75%` -> `30.00%`), so it damaged candidate coverage while improving one ranking diagnostic.
+- Decision: Keep the tooling and artifacts as research evidence, but do not promote either model. The fix is not more pressure on the same tiny positive pool; the next step is to increase diverse true-positive candidates in the retrieval index/training set.
