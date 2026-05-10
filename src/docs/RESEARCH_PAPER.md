@@ -1104,6 +1104,21 @@ Second, I modified `src.tools.mine_retrieval_hard_triplets` so positives can be 
 
 The resulting model-improvement plan is therefore more specific. The next bottleneck is not simply "add a ranking loss"; it is "create enough diverse correct visual positives inside the shortlist for a ranking loss to learn from." The retrieval index and training mining path need more local positive variety before another projection or encoder pass is likely to produce a large improvement.
 
+### 15.6 May 10, 2026 Realistic Aerial Index as Active Candidate Source
+
+The next experiment attacked the positive-diversity problem directly. Instead of training another projection on the same concentrated SpaceNet positives, I added the full `40,000`-item realistic IGN aerial index (`data/paris_realistic_v1_combined/indices/aerial_clip_index.npz`) to the active Paris retrieval profile. The projected SpaceNet indices still use `runs/retrieval_hardneg_crossview_projection_v4_cap16_initv1.npz`; the realistic aerial index is queried with raw CLIP because it was built in raw CLIP space.
+
+On the fixed `80` strict Paris probe, this was the first candidate-source change after the oracle diagnostic that improved the promoted serving path:
+
+| Variant | Mean km | Median km | p90 km | <=2 km | <=5 km | Oracle mean km | Oracle <=2 km | Oracle best-rank mean | Decision |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| Previous serving profile | 4.5791 | 4.6367 | 5.9161 | 0.00% | 67.50% | 2.3528 | 43.75% | 15.125 | replaced |
+| Realistic aerial index, RRF | 4.4793 | 4.6127 | 5.7859 | 0.00% | 70.00% | 1.6715 | 66.25% | 18.250 | promoted |
+| Lighter rank-fusion weighting | 4.5026 | 4.6306 | 5.8956 | 3.75% | 66.25% | 1.5891 | 66.25% | 14.538 | kept as diagnostic |
+| Score-based weighted fusion | 5.2260 | 5.3401 | 7.9741 | 8.75% | 45.00% | 1.6658 | 67.50% | 9.588 | rejected |
+
+The important result is not only the small top-1 gain. The candidate oracle improved from `2.3528 km` mean to `1.6715 km`, and oracle `<=2 km` improved from `43.75%` to `66.25%`. This means the added realistic aerial source is giving the system a better shortlist. However, the best returned candidate is still often buried (`18.25` mean rank in the promoted setting), so the next model work should target visual shortlist reranking using this richer candidate pool rather than reverting to more spatial clustering.
+
 ## Appendix A: Major Algorithmic Knobs (Geo)
 - Retrieval:
   - `retrieval_projection_path`
@@ -1200,6 +1215,9 @@ The resulting model-improvement plan is therefore more specific. The next bottle
 - `runs/retrieval_oracle_candidate_triplets_train240_v1_summary.json`
 - `runs/retrieval_oracle_candidate_projection_v1.report.json`
 - `runs/geo_eval_oracle_candidate_projection_v1_80.json`
+- `runs/geo_eval_realistic_aerial_index_v1_80.json`
+- `runs/geo_eval_realistic_rrf_w050_top25_full_80.json`
+- `runs/geo_eval_realistic_weighted_w050_top25_retrieval_only_80.json`
 - `runs/geo_impact_latest.json`
 - `runs/geo_impact_latest.md`
 
