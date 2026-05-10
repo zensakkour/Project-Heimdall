@@ -1,0 +1,49 @@
+{
+  "source": "runs\\retrieval_hard_triplets_train480_v2.jsonl",
+  "max_negative_reuse": 16,
+  "triplets_written": 152,
+  "unique_positive_paths": 39,
+  "unique_negative_paths": 49,
+  "top_negative_reuse": [
+    {
+      "path": "chips/16feb29111912-s2as_r11c10-056155973010_01_p001_r7168_c0.jpg",
+      "count": 16
+    },
+    {
+      "path": "chips/16feb29111912-s2as_r11c09-056155973010_01_p001_r512_c0.jpg",
+      "count": 16
+    },
+    {
+      "path": "chips/16feb29111912-s2as_r09c09-056155973010_01_p001_r2048_c2048.jpg",
+      "count": 16
+    },
+    {
+      "path": "chips/16feb29111912-s2as_r11c10-056155973010_01_p001_r5632_c0.jpg",
+      "count": 16
+    },
+    {
+      "path": "chips/16feb29111912-s2as_r10c09-056155973010_01_p001_r1024_c0.jpg",
+      "count": 16
+    },
+    {
+      "path": "chips/16feb29111912-s2as_r11c08-056155973010_01_p001_r1536_c1536.jpg",
+      "count": 16
+    },
+    {
+      "path": "chips/16feb29111912-s2as_r11c09-056155973010_01_p001_r2048_c4096.jpg",
+      "count": 16
+    },
+    {
+      "path": "chips/16feb29111912-s2as_r11c08-056155973010_01_p001_r1536_c1024.jpg",
+      "count": 16
+    },
+    {
+      "path": "chips/16feb29111912-s2as_r09c09-056155973010_01_p001_r2048_c1536.jpg",
+      "count": 16
+    },
+    {
+      "path": "chips/16feb29111912-s2as_r09c07-056155973010_01_p001_r512_c2560.jpg",
+      "count": 16
+    }
+  ]
+}

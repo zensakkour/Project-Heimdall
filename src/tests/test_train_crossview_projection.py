@@ -105,3 +105,29 @@ def test_train_crossview_projection_main(tmp_path: Path, monkeypatch: pytest.Mon
     with np.load(output_path, allow_pickle=False) as payload:
         assert payload["matrix"].shape == (3, 3)
         assert payload["bias"].shape == (3,)
+
+
+def test_load_initial_projection_validates_shape(tmp_path: Path) -> None:
+    projection = tmp_path / "projection.npz"
+    np.savez(
+        projection,
+        matrix=np.eye(3, dtype=np.float32),
+        bias=np.asarray([0.1, 0.2, 0.3], dtype=np.float32),
+    )
+
+    matrix, bias = tool._load_initial_projection(projection, input_dim=3, output_dim=3)
+
+    assert matrix.shape == (3, 3)
+    assert bias.tolist() == pytest.approx([0.1, 0.2, 0.3])
+
+
+def test_load_initial_projection_rejects_mismatched_shape(tmp_path: Path) -> None:
+    projection = tmp_path / "projection_bad.npz"
+    np.savez(
+        projection,
+        matrix=np.eye(2, dtype=np.float32),
+        bias=np.zeros(2, dtype=np.float32),
+    )
+
+    with pytest.raises(ValueError, match="shape mismatch"):
+        tool._load_initial_projection(projection, input_dim=3, output_dim=3)
