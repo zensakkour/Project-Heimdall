@@ -39,7 +39,7 @@
     "retrieval_index_projection_paths": [
       "runs/retrieval_hardneg_crossview_projection_v4_cap16_initv1.npz",
       "runs/retrieval_hardneg_crossview_projection_v4_cap16_initv1.npz",
-      null
+      "runs/retrieval_realistic_source_projection_v1.npz"
     ],
     "retrieval_model_id": "openai/clip-vit-large-patch14",
     "retrieval_projection_path": "runs/retrieval_hardneg_crossview_projection_v4_cap16_initv1.npz",
@@ -88,7 +88,12 @@
     "retrieval_kde_refine_max_iters": 8,
     "retrieval_kde_refine_adaptive_mass": 0.0,
     "retrieval_geo_prior_mode": "hard",
-    "retrieval_geo_prior_bbox": [48.40, 49.10, 2.05, 2.36],
+    "retrieval_geo_prior_bbox": [
+      48.4,
+      49.1,
+      2.05,
+      2.36
+    ],
     "retrieval_geo_prior_sigma_km": 35.0,
     "retrieval_geo_prior_min_keep": 2,
     "retrieval_query_tta_modes": [
