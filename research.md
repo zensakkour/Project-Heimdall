@@ -112,6 +112,43 @@ Post-promotion mining check:
 - A listwise aggregate-feature candidate reranker trained on the improved shortlist still regressed held-out retrieval-only evaluation (`mean 4.5748 -> 4.8177`, `<=5km 66.25% -> 60.00%`), so the next ranker needs visual pair evidence, not only rank/score/source/cluster features.
 - I then added source-filtered mining so positives and negatives can be constrained to `aerial_clip_index`. This produced a coherent realistic-only set (`75` triplets, `45` unique positives, `98` unique negatives), but a source-specific query projection trained on it regressed held-out retrieval-only evaluation (`mean 4.5748 -> 4.6198`, oracle `<=2km 66.25% -> 45.00%`). The source-filtered miner is useful infrastructure; the projection itself is rejected.
 
+## May 10, 2026: Candidate-Cloud Consensus Promotion
+
+After the realistic aerial index improved oracle coverage, I tested whether a visual pair reranker could select better candidates directly. The new `src/tools/train_visual_pair_reranker.py` trainer uses frozen CLIP query/candidate embeddings, elementwise product and absolute-difference features, retrieval score, rank, and source flags. This is kept as research infrastructure, but the first leakage-safe run did not improve the held-out fixed probe.
+
+Visual pair reranker result (`80` strict probe samples, retrieval-only):
+
+| Variant | Mean km | Median km | p90 km | <=5 km | Decision |
+|---|---:|---:|---:|---:|---|
+| Base retrieval shortlist | 4.5748 | 4.6205 | 5.9087 | 66.25% | baseline |
+| Visual pair reranker, best fusion weight | 4.5748 | 4.6205 | 5.9087 | 66.25% | rejected because best weight was `0.0` |
+| Positive reranker weights | worse | worse | worse | 58.75-62.50% | rejected |
+
+I then extended `src/tools/tune_retrieval_geo.py` so the same tuner can sweep graph-support reranking, consensus refinement, and KDE mode refinement on realistic pair CSVs. The graph-support sweep looked strong inside the tuner (`mean 3.6347`, `<=5km 90.00%`), but the real evaluator path only reached `mean 4.5127`, `<=5km 67.50%`, so graph-support was not promoted.
+
+The validated improvement came from candidate-cloud consensus over the richer mixed shortlist:
+
+| Variant | Mean km | Median km | p90 km | <=2 km | <=5 km | Decision |
+|---|---:|---:|---:|---:|---:|---|
+| Previous promoted full profile | 4.4793 | 4.6127 | 5.7859 | 0.00% | 70.00% | replaced |
+| Raw retrieval-only baseline for this probe | 4.5748 | 4.6205 | 5.9087 | n/a | 66.25% | diagnostic |
+| Candidate-cloud consensus (`top_n=25`, `radius=2km`, `score_power=0`) | 3.9904 | 4.0641 | 5.7860 | 8.75% | 76.25% | promoted |
+
+Decision:
+
+- Promote `retrieval_consensus_top_n=25`, `retrieval_consensus_radius_km=2.0`, and `retrieval_consensus_score_power=0.0` in `src/config/paris.json`.
+- Keep `src/tools/train_visual_pair_reranker.py` as a negative ablation/infrastructure path, but do not enable its model.
+- Keep the expanded tuner support because it made the graph/consensus/KDE comparison reproducible and exposed a tuner-vs-runtime mismatch that must be checked before future promotions.
+- The candidate oracle still remains much better than top-1 (`oracle <=2km 66.25%`, `oracle <=5km 100%`), so the next major jump still needs visual ranking/encoder improvement rather than only spatial consensus.
+
+Validation:
+
+```powershell
+$env:TMP='c:\Users\zen\Desktop\Projects\Project-Heimdall\.tmp'; $env:TEMP=$env:TMP; .\.venv\Scripts\python.exe -m pytest src\tests\test_config_loading.py src\tests\test_retrieval_diversity.py src\tests\test_retrieval_provider_multi_index.py src\tests\test_tune_retrieval_geo.py -q
+```
+
+Result: `46 passed`.
+
 ## May 9, 2026: Retrieval-Mistake Hard-Negative Projection
 
 This branch tested a more targeted answer to the "what is the model missing?" question. Instead of adding another heuristic reranker, it mined hard-negative triplets from the current production retrieval stack's own high-scoring wrong candidates. The training examples therefore encode the mistakes the app actually makes at inference time.

@@ -8,18 +8,22 @@ import json
 import math
 import random
 from dataclasses import dataclass
+from itertools import product
 from pathlib import Path
 from typing import Iterable, List, Optional
 
 from src.core.geo.retrieval_provider import (
     GeoRetrievalProvider,
+    _apply_consensus_refinement,
+    _apply_graph_support_rerank,
+    _apply_kde_mode_refinement,
     _apply_locality_rerank,
     _select_diverse_geo_candidates,
     _select_source_balanced_candidates,
 )
 from src.core.logic.config import HeimdallConfig, load_config
 from src.core.logic.types import GeoCandidate
-from src.tools.run_geo_eval import haversine_km, resolve_image_path
+from src.tools.run_geo_eval import haversine_km, load_metadata_records, resolve_image_path
 
 _VALID_TTA_REDUCE = {"mean", "median", "max", "rrf"}
 _VALID_RANK_OBJECTIVE = {
@@ -150,6 +154,21 @@ def _postprocess_candidates(
     locality_radius_km: float,
     locality_weight: float,
     source_balance_beta: float,
+    graph_rerank_top_n: int = 0,
+    graph_rerank_sigma_km: float = 3.0,
+    graph_rerank_score_alpha: float = 0.4,
+    graph_rerank_support_beta: float = 1.0,
+    graph_rerank_center_radius_km: float = 0.0,
+    consensus_top_n: int = 0,
+    consensus_radius_km: float = 0.0,
+    consensus_score_power: float = 1.0,
+    kde_refine_top_n: int = 0,
+    kde_refine_sigma_km: float = 2.0,
+    kde_refine_score_power: float = 1.0,
+    kde_refine_margin_threshold: float = 0.0,
+    kde_refine_switch_radius_km: float = 0.0,
+    kde_refine_max_iters: int = 8,
+    kde_refine_adaptive_mass: float = 0.0,
 ) -> List[GeoCandidate]:
     ordered_raw = sorted(list(raw_candidates), key=lambda cand: float(cand.retrieval_score), reverse=True)
     filtered = [cand for cand in ordered_raw if float(cand.retrieval_score) >= float(min_score)]
@@ -163,12 +182,36 @@ def _postprocess_candidates(
         top_k=max(1, int(top_k)),
         balance_beta=max(0.0, float(source_balance_beta)),
     )
-    selected = _select_diverse_geo_candidates(
+    graph_ranked = _apply_graph_support_rerank(
         balanced,
+        top_n=max(0, int(graph_rerank_top_n)),
+        sigma_km=max(0.1, float(graph_rerank_sigma_km)),
+        score_alpha=max(0.0, float(graph_rerank_score_alpha)),
+        support_beta=max(0.0, float(graph_rerank_support_beta)),
+        center_radius_km=max(0.0, float(graph_rerank_center_radius_km)),
+    )
+    selected = _select_diverse_geo_candidates(
+        graph_ranked,
         top_k=max(1, int(top_k)),
         radius_km=max(0.0, float(diversity_radius_km)),
         diversity_lambda=min(1.0, max(0.0, float(diversity_lambda))),
         min_keep=max(0, int(diversity_min_keep)),
+    )
+    selected = _apply_consensus_refinement(
+        selected,
+        top_n=max(0, int(consensus_top_n)),
+        radius_km=max(0.0, float(consensus_radius_km)),
+        score_power=max(0.0, float(consensus_score_power)),
+    )
+    selected = _apply_kde_mode_refinement(
+        selected,
+        top_n=max(0, int(kde_refine_top_n)),
+        sigma_km=max(0.1, float(kde_refine_sigma_km)),
+        score_power=max(0.0, float(kde_refine_score_power)),
+        margin_threshold=max(0.0, float(kde_refine_margin_threshold)),
+        switch_radius_km=max(0.0, float(kde_refine_switch_radius_km)),
+        max_iters=max(1, int(kde_refine_max_iters)),
+        adaptive_mass=max(0.0, min(1.0, float(kde_refine_adaptive_mass))),
     )
     required = min(max(0, int(min_keep_topk)), max(1, int(top_k)))
     if len(selected) < required:
@@ -317,14 +360,30 @@ def _write_best_to_config(config_path: Path, best: dict) -> None:
         geo["retrieval_structure_rerank_top_n"] = int(best["retrieval_structure_rerank_top_n"])
     if "retrieval_structure_rerank_weight" in best:
         geo["retrieval_structure_rerank_weight"] = float(best["retrieval_structure_rerank_weight"])
+    if "retrieval_graph_rerank_top_n" in best:
+        geo["retrieval_graph_rerank_top_n"] = int(best["retrieval_graph_rerank_top_n"])
+        geo["retrieval_graph_rerank_sigma_km"] = float(best["retrieval_graph_rerank_sigma_km"])
+        geo["retrieval_graph_rerank_score_alpha"] = float(best["retrieval_graph_rerank_score_alpha"])
+        geo["retrieval_graph_rerank_support_beta"] = float(best["retrieval_graph_rerank_support_beta"])
+        geo["retrieval_graph_rerank_center_radius_km"] = float(best["retrieval_graph_rerank_center_radius_km"])
+    if "retrieval_consensus_top_n" in best:
+        geo["retrieval_consensus_top_n"] = int(best["retrieval_consensus_top_n"])
+        geo["retrieval_consensus_radius_km"] = float(best["retrieval_consensus_radius_km"])
+        geo["retrieval_consensus_score_power"] = float(best["retrieval_consensus_score_power"])
+    if "retrieval_kde_refine_top_n" in best:
+        geo["retrieval_kde_refine_top_n"] = int(best["retrieval_kde_refine_top_n"])
+        geo["retrieval_kde_refine_sigma_km"] = float(best["retrieval_kde_refine_sigma_km"])
+        geo["retrieval_kde_refine_score_power"] = float(best["retrieval_kde_refine_score_power"])
+        geo["retrieval_kde_refine_margin_threshold"] = float(best["retrieval_kde_refine_margin_threshold"])
+        geo["retrieval_kde_refine_switch_radius_km"] = float(best["retrieval_kde_refine_switch_radius_km"])
+        geo["retrieval_kde_refine_max_iters"] = int(best["retrieval_kde_refine_max_iters"])
+        geo["retrieval_kde_refine_adaptive_mass"] = float(best["retrieval_kde_refine_adaptive_mass"])
     if best.get("retrieval_query_tta_reduce"):
         geo["retrieval_query_tta_reduce"] = str(best["retrieval_query_tta_reduce"])
     config_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
 def main(argv: Optional[List[str]] = None) -> int:
-    import pandas as pd
-
     parser = argparse.ArgumentParser(description="Tune retrieval post-processing precision.")
     parser.add_argument("--config", default="src/config/paris_test.json")
     parser.add_argument("--images-dir", required=True)
@@ -342,6 +401,21 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--retrieval-locality-radius-km", default="0.0,25.0,60.0")
     parser.add_argument("--retrieval-locality-weight", default="0.0,0.8,1.2,1.8")
     parser.add_argument("--retrieval-source-balance-beta", default="0.0,0.35,0.7")
+    parser.add_argument("--retrieval-graph-rerank-top-n", default="", help="Comma list; empty uses config value.")
+    parser.add_argument("--retrieval-graph-rerank-sigma-km", default="", help="Comma list; empty uses config value.")
+    parser.add_argument("--retrieval-graph-rerank-score-alpha", default="", help="Comma list; empty uses config value.")
+    parser.add_argument("--retrieval-graph-rerank-support-beta", default="", help="Comma list; empty uses config value.")
+    parser.add_argument("--retrieval-graph-rerank-center-radius-km", default="", help="Comma list; empty uses config value.")
+    parser.add_argument("--retrieval-consensus-top-n", default="", help="Comma list; empty uses config value.")
+    parser.add_argument("--retrieval-consensus-radius-km", default="", help="Comma list; empty uses config value.")
+    parser.add_argument("--retrieval-consensus-score-power", default="", help="Comma list; empty uses config value.")
+    parser.add_argument("--retrieval-kde-refine-top-n", default="", help="Comma list; empty uses config value.")
+    parser.add_argument("--retrieval-kde-refine-sigma-km", default="", help="Comma list; empty uses config value.")
+    parser.add_argument("--retrieval-kde-refine-score-power", default="", help="Comma list; empty uses config value.")
+    parser.add_argument("--retrieval-kde-refine-margin-threshold", default="", help="Comma list; empty uses config value.")
+    parser.add_argument("--retrieval-kde-refine-switch-radius-km", default="", help="Comma list; empty uses config value.")
+    parser.add_argument("--retrieval-kde-refine-max-iters", default="", help="Comma list; empty uses config value.")
+    parser.add_argument("--retrieval-kde-refine-adaptive-mass", default="", help="Comma list; empty uses config value.")
     parser.add_argument(
         "--retrieval-structure-rerank-top-n",
         default="",
@@ -368,10 +442,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     cfg = load_config(args.config)
     images_dir = Path(args.images_dir)
     metadata = Path(args.metadata)
-    df = pd.read_csv(metadata)
-    if not {"path", "latitude", "longitude"}.issubset(df.columns):
-        raise ValueError("metadata must include columns: path, latitude, longitude")
-    records = df[["path", "latitude", "longitude"]].to_dict("records")
+    records = load_metadata_records(metadata, images_dir=images_dir)
     random.Random(args.seed).shuffle(records)
     if args.limit and args.limit > 0:
         records = records[: args.limit]
@@ -385,6 +456,21 @@ def main(argv: Optional[List[str]] = None) -> int:
     retrieval_locality_radius = _parse_float_list(args.retrieval_locality_radius_km)
     retrieval_locality_weight = _parse_float_list(args.retrieval_locality_weight)
     retrieval_source_balance = _parse_float_list(args.retrieval_source_balance_beta)
+    retrieval_graph_rerank_top_n = _parse_int_list(args.retrieval_graph_rerank_top_n)
+    retrieval_graph_rerank_sigma_km = _parse_float_list(args.retrieval_graph_rerank_sigma_km)
+    retrieval_graph_rerank_score_alpha = _parse_float_list(args.retrieval_graph_rerank_score_alpha)
+    retrieval_graph_rerank_support_beta = _parse_float_list(args.retrieval_graph_rerank_support_beta)
+    retrieval_graph_rerank_center_radius_km = _parse_float_list(args.retrieval_graph_rerank_center_radius_km)
+    retrieval_consensus_top_n = _parse_int_list(args.retrieval_consensus_top_n)
+    retrieval_consensus_radius_km = _parse_float_list(args.retrieval_consensus_radius_km)
+    retrieval_consensus_score_power = _parse_float_list(args.retrieval_consensus_score_power)
+    retrieval_kde_refine_top_n = _parse_int_list(args.retrieval_kde_refine_top_n)
+    retrieval_kde_refine_sigma_km = _parse_float_list(args.retrieval_kde_refine_sigma_km)
+    retrieval_kde_refine_score_power = _parse_float_list(args.retrieval_kde_refine_score_power)
+    retrieval_kde_refine_margin_threshold = _parse_float_list(args.retrieval_kde_refine_margin_threshold)
+    retrieval_kde_refine_switch_radius_km = _parse_float_list(args.retrieval_kde_refine_switch_radius_km)
+    retrieval_kde_refine_max_iters = _parse_int_list(args.retrieval_kde_refine_max_iters)
+    retrieval_kde_refine_adaptive_mass = _parse_float_list(args.retrieval_kde_refine_adaptive_mass)
     retrieval_structure_rerank_top_n = _parse_int_list(args.retrieval_structure_rerank_top_n)
     retrieval_structure_rerank_weight = _parse_float_list(args.retrieval_structure_rerank_weight)
     tta_reduce_modes = _parse_tta_reduce_list(str(args.retrieval_query_tta_reduce))
@@ -395,6 +481,36 @@ def main(argv: Optional[List[str]] = None) -> int:
         retrieval_structure_rerank_top_n = [int(cfg.geolocator.retrieval_structure_rerank_top_n)]
     if not retrieval_structure_rerank_weight:
         retrieval_structure_rerank_weight = [float(cfg.geolocator.retrieval_structure_rerank_weight)]
+    if not retrieval_graph_rerank_top_n:
+        retrieval_graph_rerank_top_n = [int(cfg.geolocator.retrieval_graph_rerank_top_n)]
+    if not retrieval_graph_rerank_sigma_km:
+        retrieval_graph_rerank_sigma_km = [float(cfg.geolocator.retrieval_graph_rerank_sigma_km)]
+    if not retrieval_graph_rerank_score_alpha:
+        retrieval_graph_rerank_score_alpha = [float(cfg.geolocator.retrieval_graph_rerank_score_alpha)]
+    if not retrieval_graph_rerank_support_beta:
+        retrieval_graph_rerank_support_beta = [float(cfg.geolocator.retrieval_graph_rerank_support_beta)]
+    if not retrieval_graph_rerank_center_radius_km:
+        retrieval_graph_rerank_center_radius_km = [float(cfg.geolocator.retrieval_graph_rerank_center_radius_km)]
+    if not retrieval_consensus_top_n:
+        retrieval_consensus_top_n = [int(cfg.geolocator.retrieval_consensus_top_n)]
+    if not retrieval_consensus_radius_km:
+        retrieval_consensus_radius_km = [float(cfg.geolocator.retrieval_consensus_radius_km)]
+    if not retrieval_consensus_score_power:
+        retrieval_consensus_score_power = [float(cfg.geolocator.retrieval_consensus_score_power)]
+    if not retrieval_kde_refine_top_n:
+        retrieval_kde_refine_top_n = [int(cfg.geolocator.retrieval_kde_refine_top_n)]
+    if not retrieval_kde_refine_sigma_km:
+        retrieval_kde_refine_sigma_km = [float(cfg.geolocator.retrieval_kde_refine_sigma_km)]
+    if not retrieval_kde_refine_score_power:
+        retrieval_kde_refine_score_power = [float(cfg.geolocator.retrieval_kde_refine_score_power)]
+    if not retrieval_kde_refine_margin_threshold:
+        retrieval_kde_refine_margin_threshold = [float(cfg.geolocator.retrieval_kde_refine_margin_threshold)]
+    if not retrieval_kde_refine_switch_radius_km:
+        retrieval_kde_refine_switch_radius_km = [float(cfg.geolocator.retrieval_kde_refine_switch_radius_km)]
+    if not retrieval_kde_refine_max_iters:
+        retrieval_kde_refine_max_iters = [int(cfg.geolocator.retrieval_kde_refine_max_iters)]
+    if not retrieval_kde_refine_adaptive_mass:
+        retrieval_kde_refine_adaptive_mass = [float(cfg.geolocator.retrieval_kde_refine_adaptive_mass)]
 
     max_top_k = max(retrieval_topk) if retrieval_topk else cfg.geolocator.retrieval_top_k
     min_score_floor = min(retrieval_min_score) if retrieval_min_score else cfg.geolocator.retrieval_min_score
@@ -420,48 +536,120 @@ def main(argv: Optional[List[str]] = None) -> int:
                 missing_files = max(missing_files, int(missing))
 
     results = []
-    for tta_mode in tta_reduce_modes:
-        for structure_top_n in retrieval_structure_rerank_top_n:
-            for structure_weight in retrieval_structure_rerank_weight:
-                samples = samples_by_mode.get((tta_mode, int(structure_top_n), float(structure_weight)), [])
-                for top_k in retrieval_topk:
-                    for min_score in retrieval_min_score:
-                        for min_keep_topk in retrieval_min_keep_topk:
-                            for diversity_radius in retrieval_diversity_radius:
-                                for diversity_lambda in retrieval_diversity_lambda:
-                                    for diversity_min_keep in retrieval_diversity_min_keep:
-                                        for locality_radius in retrieval_locality_radius:
-                                            for locality_weight in retrieval_locality_weight:
-                                                for source_balance_beta in retrieval_source_balance:
-                                                    metrics = _evaluate_samples(
-                                                        samples,
-                                                        top_k=top_k,
-                                                        min_score=min_score,
-                                                        min_keep_topk=min_keep_topk,
-                                                        diversity_radius_km=diversity_radius,
-                                                        diversity_lambda=diversity_lambda,
-                                                        diversity_min_keep=diversity_min_keep,
-                                                        locality_radius_km=locality_radius,
-                                                        locality_weight=locality_weight,
-                                                        source_balance_beta=source_balance_beta,
-                                                    )
-                                                    results.append(
-                                                        {
-                                                            "retrieval_query_tta_reduce": tta_mode,
-                                                            "retrieval_structure_rerank_top_n": int(structure_top_n),
-                                                            "retrieval_structure_rerank_weight": float(structure_weight),
-                                                            "retrieval_top_k": top_k,
-                                                            "retrieval_min_score": min_score,
-                                                            "retrieval_min_keep_topk": min_keep_topk,
-                                                            "retrieval_diversity_radius_km": diversity_radius,
-                                                            "retrieval_diversity_lambda": diversity_lambda,
-                                                            "retrieval_diversity_min_keep": diversity_min_keep,
-                                                            "retrieval_locality_radius_km": locality_radius,
-                                                            "retrieval_locality_weight": locality_weight,
-                                                            "retrieval_source_balance_beta": source_balance_beta,
-                                                            **metrics,
-                                                        }
-                                                    )
+    mode_grid = product(tta_reduce_modes, retrieval_structure_rerank_top_n, retrieval_structure_rerank_weight)
+    param_grid_axes = (
+        retrieval_topk,
+        retrieval_min_score,
+        retrieval_min_keep_topk,
+        retrieval_diversity_radius,
+        retrieval_diversity_lambda,
+        retrieval_diversity_min_keep,
+        retrieval_locality_radius,
+        retrieval_locality_weight,
+        retrieval_source_balance,
+        retrieval_graph_rerank_top_n,
+        retrieval_graph_rerank_sigma_km,
+        retrieval_graph_rerank_score_alpha,
+        retrieval_graph_rerank_support_beta,
+        retrieval_graph_rerank_center_radius_km,
+        retrieval_consensus_top_n,
+        retrieval_consensus_radius_km,
+        retrieval_consensus_score_power,
+        retrieval_kde_refine_top_n,
+        retrieval_kde_refine_sigma_km,
+        retrieval_kde_refine_score_power,
+        retrieval_kde_refine_margin_threshold,
+        retrieval_kde_refine_switch_radius_km,
+        retrieval_kde_refine_max_iters,
+        retrieval_kde_refine_adaptive_mass,
+    )
+    for tta_mode, structure_top_n, structure_weight in mode_grid:
+        samples = samples_by_mode.get((tta_mode, int(structure_top_n), float(structure_weight)), [])
+        for (
+            top_k,
+            min_score,
+            min_keep_topk,
+            diversity_radius,
+            diversity_lambda,
+            diversity_min_keep,
+            locality_radius,
+            locality_weight,
+            source_balance_beta,
+            graph_top_n,
+            graph_sigma,
+            graph_alpha,
+            graph_beta,
+            graph_center_radius,
+            consensus_top_n,
+            consensus_radius,
+            consensus_power,
+            kde_top_n,
+            kde_sigma,
+            kde_power,
+            kde_margin,
+            kde_switch_radius,
+            kde_iters,
+            kde_mass,
+        ) in product(*param_grid_axes):
+            metrics = _evaluate_samples(
+                samples,
+                top_k=top_k,
+                min_score=min_score,
+                min_keep_topk=min_keep_topk,
+                diversity_radius_km=diversity_radius,
+                diversity_lambda=diversity_lambda,
+                diversity_min_keep=diversity_min_keep,
+                locality_radius_km=locality_radius,
+                locality_weight=locality_weight,
+                source_balance_beta=source_balance_beta,
+                graph_rerank_top_n=graph_top_n,
+                graph_rerank_sigma_km=graph_sigma,
+                graph_rerank_score_alpha=graph_alpha,
+                graph_rerank_support_beta=graph_beta,
+                graph_rerank_center_radius_km=graph_center_radius,
+                consensus_top_n=consensus_top_n,
+                consensus_radius_km=consensus_radius,
+                consensus_score_power=consensus_power,
+                kde_refine_top_n=kde_top_n,
+                kde_refine_sigma_km=kde_sigma,
+                kde_refine_score_power=kde_power,
+                kde_refine_margin_threshold=kde_margin,
+                kde_refine_switch_radius_km=kde_switch_radius,
+                kde_refine_max_iters=kde_iters,
+                kde_refine_adaptive_mass=kde_mass,
+            )
+            results.append(
+                {
+                    "retrieval_query_tta_reduce": tta_mode,
+                    "retrieval_structure_rerank_top_n": int(structure_top_n),
+                    "retrieval_structure_rerank_weight": float(structure_weight),
+                    "retrieval_top_k": top_k,
+                    "retrieval_min_score": min_score,
+                    "retrieval_min_keep_topk": min_keep_topk,
+                    "retrieval_diversity_radius_km": diversity_radius,
+                    "retrieval_diversity_lambda": diversity_lambda,
+                    "retrieval_diversity_min_keep": diversity_min_keep,
+                    "retrieval_locality_radius_km": locality_radius,
+                    "retrieval_locality_weight": locality_weight,
+                    "retrieval_source_balance_beta": source_balance_beta,
+                    "retrieval_graph_rerank_top_n": int(graph_top_n),
+                    "retrieval_graph_rerank_sigma_km": float(graph_sigma),
+                    "retrieval_graph_rerank_score_alpha": float(graph_alpha),
+                    "retrieval_graph_rerank_support_beta": float(graph_beta),
+                    "retrieval_graph_rerank_center_radius_km": float(graph_center_radius),
+                    "retrieval_consensus_top_n": int(consensus_top_n),
+                    "retrieval_consensus_radius_km": float(consensus_radius),
+                    "retrieval_consensus_score_power": float(consensus_power),
+                    "retrieval_kde_refine_top_n": int(kde_top_n),
+                    "retrieval_kde_refine_sigma_km": float(kde_sigma),
+                    "retrieval_kde_refine_score_power": float(kde_power),
+                    "retrieval_kde_refine_margin_threshold": float(kde_margin),
+                    "retrieval_kde_refine_switch_radius_km": float(kde_switch_radius),
+                    "retrieval_kde_refine_max_iters": int(kde_iters),
+                    "retrieval_kde_refine_adaptive_mass": float(kde_mass),
+                    **metrics,
+                }
+            )
 
     results.sort(key=lambda row: _result_sort_key(row, rank_objective))
     best = results[0] if results else None
@@ -487,6 +675,21 @@ def main(argv: Optional[List[str]] = None) -> int:
         "retrieval_query_tta_reduce": cfg.geolocator.retrieval_query_tta_reduce,
         "retrieval_structure_rerank_top_n_search": retrieval_structure_rerank_top_n,
         "retrieval_structure_rerank_weight_search": retrieval_structure_rerank_weight,
+        "retrieval_graph_rerank_top_n_search": retrieval_graph_rerank_top_n,
+        "retrieval_graph_rerank_sigma_km_search": retrieval_graph_rerank_sigma_km,
+        "retrieval_graph_rerank_score_alpha_search": retrieval_graph_rerank_score_alpha,
+        "retrieval_graph_rerank_support_beta_search": retrieval_graph_rerank_support_beta,
+        "retrieval_graph_rerank_center_radius_km_search": retrieval_graph_rerank_center_radius_km,
+        "retrieval_consensus_top_n_search": retrieval_consensus_top_n,
+        "retrieval_consensus_radius_km_search": retrieval_consensus_radius_km,
+        "retrieval_consensus_score_power_search": retrieval_consensus_score_power,
+        "retrieval_kde_refine_top_n_search": retrieval_kde_refine_top_n,
+        "retrieval_kde_refine_sigma_km_search": retrieval_kde_refine_sigma_km,
+        "retrieval_kde_refine_score_power_search": retrieval_kde_refine_score_power,
+        "retrieval_kde_refine_margin_threshold_search": retrieval_kde_refine_margin_threshold,
+        "retrieval_kde_refine_switch_radius_km_search": retrieval_kde_refine_switch_radius_km,
+        "retrieval_kde_refine_max_iters_search": retrieval_kde_refine_max_iters,
+        "retrieval_kde_refine_adaptive_mass_search": retrieval_kde_refine_adaptive_mass,
         "retrieval_query_expansion_top_n": cfg.geolocator.retrieval_query_expansion_top_n,
         "retrieval_query_expansion_beta": cfg.geolocator.retrieval_query_expansion_beta,
         "retrieval_query_expansion_alpha": cfg.geolocator.retrieval_query_expansion_alpha,
