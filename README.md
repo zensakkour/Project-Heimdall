@@ -494,6 +494,21 @@ For query-vs-reference triplets, `--embedding-index` should point at the referen
 The projection training report now includes sample-weight stats plus weighted triplet satisfaction/loss metrics, so you can compare uniform vs difficulty-aware runs without re-parsing raw JSONL.
 Controlled Paris realistic-split comparison (`n=180`, seed `42`, same 68 triplets): uniform single-index projection reached `<=1km 11.67%`, `<=2km 26.67%`, `<=5km 50.00%`, `<=10km 64.44%`, `mean 15.25 km`; difficulty-weighted training improved that to `<=1km 13.89%`, `<=2km 27.22%`, `<=5km 51.67%`, `<=10km 65.00%`, `mean 15.08 km`.
 
+### Mine retrieval mistakes into cross-view hard negatives
+
+For the production Paris profile, use the active retrieval stack itself to mine the negatives it currently confuses with the correct location:
+
+```powershell
+.\.venv\Scripts\python.exe -m src.tools.mine_retrieval_hard_triplets --config src/config/paris.json --images-dir data/paris_realistic_v1/street_combined --metadata data/paris_realistic_v1_combined/splits_strict/train_pairs.csv --reference-metadata data/spacenet_paris/metadata.csv --limit 160 --output runs/retrieval_hard_triplets_train160.jsonl --summary-output runs/retrieval_hard_triplets_train160_summary.json
+.\.venv\Scripts\python.exe -m src.tools.train_crossview_projection --triplets runs/retrieval_hard_triplets_train160.jsonl --aerial-index data/geo_index/spacenet_paris_chips_openai_clip_vit_large_patch14_proj_trainref_v2_mild.npz --street-images-dir data/paris_realistic_v1/street_combined --output runs/retrieval_hardneg_crossview_projection_v1.npz --max-triplets 160 --epochs 6 --batch-size 16 --learning-rate 3e-4 --weight-decay 1e-4 --margin 0.08 --temperature 0.07 --ce-weight 0.3 --sample-weight-mode triplet_weight --sample-weight-max 4 --device auto
+```
+
+The first promoted run changed only `geolocator.retrieval_projection_path` and improved the same `80` strict probe samples from `mean_km 9.1105` to `4.7680`, `p90_km 16.7438` to `6.0800`, `<=5km 25.00%` to `57.50%`, and `<=10km 62.50%` to `100.00%`. `<=2km` regressed from `3.75%` to `1.25%`, so the next mining pass should oversample near-field confusions.
+
+The follow-up compact-stat fusion setting keeps `fusion.top_k=25` so the UI still receives the full candidate set, but computes the displayed estimate from a tighter credible neighborhood. On the same `80` strict probe samples it moved the promoted v1 full pipeline from `mean_km 4.7680` to `4.7288`, `median_km 4.8332` to `4.7759`, and `p90_km 6.0800` to `6.0684`; `<=5km` moved from `57.50%` to `56.25%`, so this is a small center/tail improvement rather than a close-range breakthrough.
+
+The current Paris serving profile also disables GeoSpot/GeoCLIP candidate injection when a retrieval index is active (`geolocator.use_geoclip_with_retrieval=false`). On the same `80` strict probe samples this retrieval-dominant path improved the compact-stat profile from `mean_km 4.7288` to `4.6213`, `median_km 4.7759` to `4.6345`, and `<=5km 56.25%` to `66.25%`; `p90_km` moved slightly from `6.0684` to `6.0913`, so this is promoted as a close-range serving improvement with a negligible tail tradeoff.
+
 ### Run an iterative Paris `180` retrieval fine-tune loop
 
 ```powershell

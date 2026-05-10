@@ -108,6 +108,7 @@ def test_load_config_spatial_consensus_defaults() -> None:
         assert cfg.geolocator.retrieval_geo_prior_bbox == ()
         assert cfg.geolocator.retrieval_geo_prior_sigma_km == 250.0
         assert cfg.geolocator.retrieval_geo_prior_min_keep == 0
+        assert cfg.geolocator.use_geoclip_with_retrieval is True
 
 
 def test_load_config_spatial_consensus_overrides() -> None:
@@ -212,6 +213,7 @@ def test_load_config_spatial_consensus_overrides() -> None:
                     "retrieval_geo_prior_bbox": [48.4, 49.1, 2.05, 2.36],
                     "retrieval_geo_prior_sigma_km": 32.0,
                     "retrieval_geo_prior_min_keep": 3,
+                    "use_geoclip_with_retrieval": False,
                 },
             },
         )
@@ -313,6 +315,7 @@ def test_load_config_spatial_consensus_overrides() -> None:
         assert cfg.geolocator.retrieval_geo_prior_bbox == (48.4, 49.1, 2.05, 2.36)
         assert cfg.geolocator.retrieval_geo_prior_sigma_km == 32.0
         assert cfg.geolocator.retrieval_geo_prior_min_keep == 3
+        assert cfg.geolocator.use_geoclip_with_retrieval is False
 
 
 def test_load_config_invalid_retrieval_index_score_norm_falls_back_to_auto() -> None:
