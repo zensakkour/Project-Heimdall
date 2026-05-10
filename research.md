@@ -176,6 +176,33 @@ Research recommendation from this checkpoint:
 - The current frozen CLIP baseline on the combined strict probe is still far from a serious `~3 km` mean result.
 - The next priority should now shift from data collection to model training on this new benchmark root: mine harder triplets from `data/paris_realistic_v1_combined/splits_strict/train_pairs.csv`, train the cross-view projection / encoder path, and compare against the current full-index baseline.
 
+## May 10, 2026: Candidate Oracle Rank Diagnostic
+
+This branch added explicit top-k candidate oracle metrics to `src.tools.run_geo_eval`. The purpose was to separate two different failure modes:
+
+1. The right location is missing from the retrieved candidates.
+2. The right/near location is present but ranked below visually similar wrong candidates.
+
+On the same fixed `80` strict Paris probe samples (`seed=42`) with the promoted diversity-capped hard-negative projection, the full serving path remains:
+
+| Variant | Mean km | Median km | p90 km | <=1 km | <=2 km | <=5 km | <=10 km |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Current serving prediction | 4.5791 | 4.6367 | 5.9161 | 0.00% | 0.00% | 67.50% | 100.00% |
+| Candidate oracle over returned top-25 | 2.3528 | 2.1638 | 4.0063 | 21.25% | 43.75% | 100.00% | 100.00% |
+
+Additional diagnostic:
+
+- Mean returned candidate count: `25.0`.
+- Mean rank of the closest returned candidate: `15.125`.
+- Existing learned candidate reranker retest was rejected: base and reranked metrics were identical (`mean 4.5722 km`, `<=5 km 67.50%`), while the oracle remained much better.
+- Graph-support reranking was also rejected for default serving despite an offline shortlist improvement. The real pipeline run worsened mean and p90 (`mean 4.7027 km`, `p90 6.5027 km`) while only moving `<=2 km` to `2.50%`.
+
+Decision:
+
+- Keep the oracle-rank diagnostics because they expose the remaining bottleneck directly.
+- Do not promote the tested graph-support config or the current learned reranker.
+- The next model work should target a stronger street-to-aerial visual reranker or encoder adaptation objective that can lift the oracle candidate from rank ~15 toward rank 1. Pure spatial clustering is not enough.
+
 ## Timeline
 
 ## 1. Foundation Phase

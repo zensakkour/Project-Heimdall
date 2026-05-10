@@ -1083,6 +1083,21 @@ The near-field mixed v2 projection was rejected. Although it slightly improved p
 
 The May 10 serving-path update then tested whether the weaker global GeoSpot/GeoCLIP provider was diluting the now-stronger Paris retrieval index. The result supported that hypothesis. Setting `geolocator.use_geoclip_with_retrieval=false` keeps GeoCLIP available for profiles without retrieval indices, but uses the hard-negative retrieval provider alone when the Paris index is present. Compared with compact-stat fusion, mean error improved from `4.7288 km` to `4.6213 km`, median from `4.7759 km` to `4.6345 km`, and `<=5 km` from `56.25%` to `66.25%`; p90 moved slightly from `6.0684 km` to `6.0913 km`. A support-density selector was also tested and rejected (`mean 5.3660 km`, `<=5 km 42.50%`), showing that candidate clustering alone cannot replace learned cross-view ranking. Methodologically, this is a serving-path correction: once the specialized Paris retrieval model became stronger than the broad global provider, the system needed a way to stop adding lower-quality global hypotheses by default.
 
+### 15.5 May 10, 2026 Candidate Oracle Rank Diagnostic
+
+After promoting the diversity-capped hard-negative projection, I added candidate-oracle reporting to `src.tools.run_geo_eval`. The diagnostic asks a stricter question than top-1 accuracy: if the system is allowed to choose the closest candidate already returned in the top-25 shortlist, how good could it be without collecting more reference imagery?
+
+On the fixed `80` strict Paris probe (`seed=42`), the answer is that candidate coverage is not the main bottleneck:
+
+| Variant | Mean km | Median km | p90 km | <=1 km | <=2 km | <=5 km | <=10 km |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Current serving prediction | 4.5791 | 4.6367 | 5.9161 | 0.00% | 0.00% | 67.50% | 100.00% |
+| Candidate oracle over returned top-25 | 2.3528 | 2.1638 | 4.0063 | 21.25% | 43.75% | 100.00% | 100.00% |
+
+The closest returned candidate has mean rank `15.125`, which means the correct local evidence is often present but buried under higher-scoring confusions. I retested the existing learned candidate reranker and rejected it because it left the serving metrics unchanged. I also tested a graph-support rerank inspired by the offline shortlist sweep. It did move a few samples into `<=2 km`, but the real pipeline regressed (`mean 4.7027 km`, `p90 6.5027 km`), so it was rejected as a default.
+
+This changes the research diagnosis. The model is no longer primarily missing Paris candidate coverage on this probe; it is missing a visual ranking function strong enough to identify the correct street-level candidate inside a local cluster. Pure spatial support is insufficient because nearby wrong candidates are also spatially coherent. The next serious improvement should therefore target learned reranking or encoder adaptation with direct supervision over the returned shortlist, not more hand-tuned clustering.
+
 ## Appendix A: Major Algorithmic Knobs (Geo)
 - Retrieval:
   - `retrieval_projection_path`
@@ -1171,6 +1186,9 @@ The May 10 serving-path update then tested whether the weaker global GeoSpot/Geo
 - `runs/geo_eval_projection_trainref_v2_weighted_cmp_structure_v1_180.json`
 - `runs/geo_eval_paris_dualspace_rrf_v1_180.json`
 - `runs/bench_cfg/cfg_paris_dualspace_rrf_v1.json`
+- `runs/geo_eval_oracle_rank_diagnostics_80.json`
+- `runs/candidate_reranker_current_stack_v1.report.json`
+- `runs/geo_eval_graph_support_v1_80.json`
 - `runs/geo_impact_latest.json`
 - `runs/geo_impact_latest.md`
 
