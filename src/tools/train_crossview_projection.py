@@ -47,6 +47,28 @@ class QueryProjectionHead(nn.Module):
         return F.normalize(self.linear(x), dim=-1, eps=1e-12)
 
 
+def _load_initial_projection(
+    path: Optional[Path],
+    *,
+    input_dim: int,
+    output_dim: int,
+) -> Optional[tuple[np.ndarray, np.ndarray]]:
+    if path is None or not str(path).strip():
+        return None
+    with np.load(path, allow_pickle=False) as payload:
+        matrix = np.asarray(payload["matrix"], dtype=np.float32)
+        bias = np.asarray(payload["bias"], dtype=np.float32)
+    expected_matrix = (int(output_dim), int(input_dim))
+    expected_bias = (int(output_dim),)
+    if matrix.shape != expected_matrix or bias.shape != expected_bias:
+        raise ValueError(
+            "initial projection shape mismatch: "
+            f"matrix={matrix.shape} expected={expected_matrix}, "
+            f"bias={bias.shape} expected={expected_bias}"
+        )
+    return matrix, bias
+
+
 def _safe_float(value: object) -> Optional[float]:
     try:
         num = float(value)
@@ -285,6 +307,7 @@ def train_crossview_projection(
     ce_weight: float,
     seed: int,
     device: str,
+    initial_projection: Optional[tuple[np.ndarray, np.ndarray]] = None,
 ) -> tuple[np.ndarray, np.ndarray, dict]:
     if torch is None or nn is None or F is None:
         raise RuntimeError("torch_not_available")
@@ -305,6 +328,11 @@ def train_crossview_projection(
     r_base = F.normalize(r_base, dim=-1, eps=1e-12)
 
     model = QueryProjectionHead(input_dim=int(q_base.shape[1]), output_dim=int(r_base.shape[1])).to(torch_device)
+    if initial_projection is not None:
+        init_weight, init_bias = initial_projection
+        with torch.no_grad():
+            model.linear.weight.copy_(torch.as_tensor(init_weight, dtype=model.linear.weight.dtype, device=torch_device))
+            model.linear.bias.copy_(torch.as_tensor(init_bias, dtype=model.linear.bias.dtype, device=torch_device))
     optimizer = torch.optim.AdamW(model.parameters(), lr=float(learning_rate), weight_decay=float(max(0.0, weight_decay)))
 
     history: List[dict] = []
@@ -369,6 +397,7 @@ def train_crossview_projection(
         "margin": float(margin),
         "temperature": float(temp),
         "ce_weight": float(max(0.0, ce_weight)),
+        "initialized_from_projection": initial_projection is not None,
         "elapsed_sec": elapsed,
         "history": history,
     }
@@ -382,6 +411,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--street-images-dir", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--report-output", default="")
+    parser.add_argument("--init-projection", default="", help="Optional existing query projection to fine-tune from.")
     parser.add_argument("--embedding-model", default="openai/clip-vit-large-patch14")
     parser.add_argument("--max-triplets", type=int, default=0)
     parser.add_argument("--epochs", type=int, default=10)
@@ -420,6 +450,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         sample_weight_power=float(args.sample_weight_power),
         sample_weight_max=float(args.sample_weight_max),
     )
+    initial_projection = _load_initial_projection(
+        Path(args.init_projection) if str(args.init_projection).strip() else None,
+        input_dim=int(q_mat.shape[1]),
+        output_dim=int(r_mat.shape[1]),
+    )
     weight, bias, train_report = train_crossview_projection(
         query_embeddings=q_mat,
         aerial_embeddings=r_mat,
@@ -433,6 +468,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         ce_weight=float(args.ce_weight),
         seed=int(args.seed),
         device=str(args.device),
+        initial_projection=initial_projection,
     )
 
     output_path = Path(args.output)
@@ -450,6 +486,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         "street_images_dir": str(Path(args.street_images_dir)),
         "aerial_index": str(Path(args.aerial_index)),
         "embedding_model": str(args.embedding_model),
+        "init_projection": str(args.init_projection) if str(args.init_projection).strip() else None,
         "dataset_stats": dataset_stats,
         "training": train_report,
     }

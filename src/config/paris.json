@@ -36,7 +36,7 @@
     "retrieval_index_model_ids": [],
     "retrieval_index_projection_paths": [],
     "retrieval_model_id": "openai/clip-vit-large-patch14",
-    "retrieval_projection_path": "runs/retrieval_hardneg_crossview_projection_v1.npz",
+    "retrieval_projection_path": "runs/retrieval_hardneg_crossview_projection_v4_cap16_initv1.npz",
     "retrieval_top_k": 25,
     "retrieval_per_index_top_k": 0,
     "retrieval_index_score_norm": "auto",

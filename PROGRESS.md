@@ -2513,3 +2513,25 @@ Do not delete or edit past entries. Append new work at the end.
   - retrieval-dominant serving path: `mean 4.6213`, `median 4.6345`, `p90 6.0913`, `<=2km 0.00%`, `<=5km 66.25%`, `<=10km 100.00%`
   - rejected support-density selector: `mean 5.3660`, `median 5.1836`, `p90 7.3209`, `<=5km 42.50%`
 - Decision: Keep and promote. This is a meaningful close-range serving improvement with a negligible p90 tradeoff; it also reduces runtime cost by avoiding unnecessary GeoCLIP inference for Paris retrieval-index runs.
+
+## 2026-05-10 Diversity-Capped Retrieval-Mistake Projection
+- Hypothesis: The next improvement should come from training on the app's current high-scoring mistakes, but the larger mined pool must avoid overfitting repeated negative reference chips.
+- Change:
+  - Added `--init-projection` to `src.tools.train_crossview_projection` so new projection passes can fine-tune the current serving projection instead of resetting to identity.
+  - Added `--max-negative-reuse` plus diversity summary fields to `src.tools.mine_retrieval_hard_triplets`.
+  - Added tests for initial-projection shape validation and negative-reuse capping.
+  - Updated `src/config/paris.json` to use `runs/retrieval_hardneg_crossview_projection_v4_cap16_initv1.npz` on this branch.
+  - Updated `research.md` and `src/docs/RESEARCH_PAPER.md` with the accepted/rejected scaling results.
+- Validation commands:
+  - `$env:TMP='c:\Users\zen\Desktop\Projects\Project-Heimdall\.tmp'; $env:TEMP=$env:TMP; .\.venv\Scripts\python.exe -m pytest src\tests\test_train_crossview_projection.py src\tests\test_mine_retrieval_hard_triplets.py -q`
+  - `.\.venv\Scripts\python.exe -m src.tools.run_geo_eval --config runs/config_paris_hardneg_projection_v4_cap16_initv1.json --images-dir data/paris_realistic_v1/street_combined --metadata data/paris_realistic_v1_combined/splits_strict/test_pairs_probe240.csv --limit 80 --seed 42 --output runs/geo_eval_hardneg_projection_v4_cap16_initv1_80.json --allow-scope-mismatch --diag-samples 5`
+- Metrics on the same `80` strict probe samples:
+  - previous retrieval-dominant v1: `mean 4.6213`, `median 4.6345`, `p90 6.0913`, `<=2km 0.00%`, `<=5km 66.25%`, `<=10km 100.00%`
+  - v4 cap16 initialized from v1: `mean 4.5791`, `median 4.6367`, `p90 5.9161`, `<=2km 0.00%`, `<=5km 67.50%`, `<=10km 100.00%`
+  - rejected identity-init v2: `mean 21.6922`, `median 23.0790`, `p90 27.2324`, `<=5km 0.00%`
+  - rejected full 480 v1-init v2: `mean 5.3267`, `median 5.4025`, `p90 6.6124`, `<=5km 36.25%`
+- Artifacts:
+  - `runs/retrieval_hardneg_crossview_projection_v4_cap16_initv1.npz`
+  - `runs/geo_eval_hardneg_projection_v4_cap16_initv1_80.json`
+  - `runs/retrieval_hard_triplets_train480_diverse_v3_summary.json`
+- Decision: Keep on this branch and push. This is a measured incremental model improvement, not the requested breakthrough. The important finding is that repeated-reference concentration is now a known bottleneck; the next real step should expand diverse near-field mistakes rather than train longer on the same failure chips.

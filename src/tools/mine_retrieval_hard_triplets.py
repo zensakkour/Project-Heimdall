@@ -109,6 +109,7 @@ def mine_retrieval_triplets(
     negative_max_gt_distance_km: float,
     max_positives: int,
     max_negatives: int,
+    max_negative_reuse: int = 0,
 ) -> tuple[list[dict], dict]:
     ordered = list(records)
     random.Random(int(seed)).shuffle(ordered)
@@ -120,6 +121,7 @@ def mine_retrieval_triplets(
     no_candidates = 0
     no_triplet = 0
     candidate_counts: list[int] = []
+    negative_reuse_counts: dict[str, int] = {}
     for item in ordered:
         rel_path = str(item.get("path") or item.get("street_path") or item.get("image_path") or "")
         if not rel_path:
@@ -152,8 +154,44 @@ def mine_retrieval_triplets(
         if triplet is None:
             no_triplet += 1
             continue
+        if max_negative_reuse > 0:
+            filtered_negatives = []
+            for negative in triplet["hard_negatives"]:
+                key = _reuse_key(str(negative.get("path") or ""))
+                if negative_reuse_counts.get(key, 0) >= max_negative_reuse:
+                    continue
+                filtered_negatives.append(negative)
+                if len(filtered_negatives) >= max_negatives:
+                    break
+            if not filtered_negatives:
+                no_triplet += 1
+                continue
+            triplet["hard_negatives"] = filtered_negatives
+            closest_neg = min(float(item["distance_to_gt_km"]) for item in filtered_negatives)
+            farthest_neg = max(float(item["distance_to_gt_km"]) for item in filtered_negatives)
+            hardest_score = max(float(item.get("retrieval_score") or 0.0) for item in filtered_negatives)
+            triplet["min_retrieved_negative_gt_km"] = closest_neg
+            triplet["max_retrieved_negative_gt_km"] = farthest_neg
+            triplet["hardest_negative_retrieval_score"] = hardest_score
+            triplet["triplet_weight"] = _triplet_weight(closest_neg, farthest_neg, hardest_score)
+        for negative in triplet["hard_negatives"]:
+            key = _reuse_key(str(negative.get("path") or ""))
+            negative_reuse_counts[key] = negative_reuse_counts.get(key, 0) + 1
         triplets.append(triplet)
 
+    positive_paths = {
+        _reuse_key(str(item.get("path") or ""))
+        for triplet in triplets
+        for item in triplet.get("positives", [])
+        if item.get("path")
+    }
+    negative_paths = {
+        _reuse_key(str(item.get("path") or ""))
+        for triplet in triplets
+        for item in triplet.get("hard_negatives", [])
+        if item.get("path")
+    }
+    top_negative_reuse = sorted(negative_reuse_counts.items(), key=lambda item: item[1], reverse=True)[:10]
     summary = {
         "records_seen": len(ordered),
         "triplets_written": len(triplets),
@@ -167,6 +205,10 @@ def mine_retrieval_triplets(
         "negative_max_gt_distance_km": float(negative_max_gt_distance_km),
         "max_positives": int(max_positives),
         "max_negatives": int(max_negatives),
+        "max_negative_reuse": int(max_negative_reuse),
+        "unique_positive_paths": len(positive_paths),
+        "unique_negative_paths": len(negative_paths),
+        "top_negative_reuse": [{"path": path, "count": count} for path, count in top_negative_reuse],
     }
     return triplets, summary
 
@@ -255,6 +297,10 @@ def _reference_style_path(path: str) -> str:
     return normalized
 
 
+def _reuse_key(path: str) -> str:
+    return Path(str(path)).as_posix().lower()
+
+
 def _triplet_weight(closest_neg_km: float, farthest_neg_km: float, hardest_score: float) -> float:
     closeness = 1.0 / max(1.0, float(closest_neg_km))
     spread = min(1.0, max(0.0, (float(farthest_neg_km) - float(closest_neg_km)) / 25.0))
@@ -299,6 +345,12 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--negative-max-gt-distance-km", type=float, default=25.0)
     parser.add_argument("--max-positives", type=int, default=4)
     parser.add_argument("--max-negatives", type=int, default=12)
+    parser.add_argument(
+        "--max-negative-reuse",
+        type=int,
+        default=0,
+        help="Optional cap on how often the same hard-negative reference chip can appear across the mined set.",
+    )
     args = parser.parse_args(argv)
 
     cfg = load_config(args.config)
@@ -326,6 +378,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         negative_max_gt_distance_km=float(args.negative_max_gt_distance_km),
         max_positives=int(args.max_positives),
         max_negatives=int(args.max_negatives),
+        max_negative_reuse=int(args.max_negative_reuse),
     )
     out_path = Path(args.output)
     written = write_jsonl(out_path, triplets)
