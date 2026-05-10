@@ -2569,3 +2569,21 @@ Do not delete or edit past entries. Append new work at the end.
   - oracle-candidate projection full serving test: `mean 5.0353`, `median 5.0583`, `p90 6.3590`, `<=5km 50.00%`; rejected.
   - oracle-candidate projection improved closest-candidate rank (`15.125` -> `10.375`) but worsened oracle `<=2km` (`43.75%` -> `30.00%`), so it damaged candidate coverage while improving one ranking diagnostic.
 - Decision: Keep the tooling and artifacts as research evidence, but do not promote either model. The fix is not more pressure on the same tiny positive pool; the next step is to increase diverse true-positive candidates in the retrieval index/training set.
+
+## 2026-05-10 Realistic Aerial Index Promotion
+- Hypothesis: The oracle-candidate triplets failed because the shortlist positive pool was too concentrated. Adding the full realistic IGN aerial index should increase diverse true positives before another ranking loss is attempted.
+- Change:
+  - Added `data/paris_realistic_v1_combined/indices/aerial_clip_index.npz` to the active Paris retrieval profile.
+  - Kept the SpaceNet retrieval indices on `runs/retrieval_hardneg_crossview_projection_v4_cap16_initv1.npz`.
+  - Routed the realistic aerial index through raw CLIP by setting the third `retrieval_index_projection_paths` entry to `null`.
+  - Set `retrieval_per_index_top_k=25` so the realistic index contributes a full candidate shortlist instead of only competing after global top-k truncation.
+- Validation commands:
+  - `.\.venv\Scripts\python.exe -m src.tools.run_geo_eval --config runs/config_paris_with_realistic_aerial_index_v1.json --images-dir data/paris_realistic_v1/street_combined --metadata data/paris_realistic_v1_combined/splits_strict/test_pairs_probe240.csv --limit 80 --seed 42 --output runs/geo_eval_realistic_aerial_index_v1_80.json --allow-scope-mismatch --diag-samples 10`
+  - `.\.venv\Scripts\python.exe -m src.tools.run_geo_eval --config runs/fusion_sweep_configs/realistic_rrf_w050_top25.json --images-dir data/paris_realistic_v1/street_combined --metadata data/paris_realistic_v1_combined/splits_strict/test_pairs_probe240.csv --limit 80 --seed 42 --output runs/geo_eval_realistic_rrf_w050_top25_full_80.json --allow-scope-mismatch --diag-samples 10`
+  - `.\.venv\Scripts\python.exe -m src.tools.run_geo_eval --config runs/fusion_sweep_configs/realistic_weighted_w050_top25.json --images-dir data/paris_realistic_v1/street_combined --metadata data/paris_realistic_v1_combined/splits_strict/test_pairs_probe240.csv --limit 80 --seed 42 --retrieval-only --output runs/geo_eval_realistic_weighted_w050_top25_retrieval_only_80.json --allow-scope-mismatch --diag-samples 5`
+- Metrics on the same `80` strict probe samples:
+  - previous serving profile: `mean 4.5791`, `median 4.6367`, `p90 5.9161`, `<=2km 0.00%`, `<=5km 67.50%`; oracle `mean 2.3528`, `<=2km 43.75%`, best-rank mean `15.125`
+  - realistic aerial index profile: `mean 4.4793`, `median 4.6127`, `p90 5.7859`, `<=2km 0.00%`, `<=5km 70.00%`; oracle `mean 1.6715`, `<=2km 66.25%`, best-rank mean `18.25`
+  - lighter rank-fusion weighting: `mean 4.5026`, `median 4.6306`, `p90 5.8956`, `<=2km 3.75%`, `<=5km 66.25%`; oracle `mean 1.5891`, `<=2km 66.25%`, best-rank mean `14.5375`
+  - score-based weighted fusion was rejected despite `<=2km 8.75%` in retrieval-only because it regressed broad ranking (`mean 5.2260`, `p90 7.9741`, `<=5km 45.00%`).
+- Decision: Promote the realistic aerial index profile because it improves mean, median, p90, `<=5km`, and oracle coverage. Do not promote the lighter weighting yet; it helps close-range rank but gives up too much `<=5km` on the full pipeline. The new bottleneck is sharper rank selection from a much better shortlist, not candidate availability.

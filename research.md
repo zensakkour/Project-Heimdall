@@ -32,8 +32,9 @@ Current hard conclusion:
 - Heuristics helped, but only incrementally.
 - Geometry-lite reranking is real and worth keeping as an experimental branch result.
 - The best close-range gains came from multi-index projection + geo-aware DBA, not from more handcrafted scene cues alone.
-- The current stack is in a data-limited stalemate: the repo now has enough retrieval, projection, and eval machinery to measure progress honestly, but not enough realistic street-to-aerial supervision to unlock a major accuracy jump.
-- The path toward a major jump is model/data work: larger hard-negative sets, realistic street-view versus aerial pairs, and encoder adaptation, not more blind rerank knobs.
+- The full realistic aerial index is now useful in the active Paris profile: it improves top-1 serving error and substantially improves the returned-candidate oracle.
+- The current bottleneck has moved from "not enough diverse positive candidates" to "not enough visual ranking strength to select the best candidate from a much better shortlist."
+- The path toward a major jump is still model/data work: larger diverse realistic positives, stronger shortlist ranking, and encoder adaptation, not more blind rerank knobs.
 
 ## Realistic Paris Data Checkpoint
 
@@ -82,6 +83,26 @@ Interpretation:
 - Expanding the combined probe from the sampled `10k` aerial index to the full `40k` index modestly improved close-range hit rates (`<=1km`, `<=2km`, `<=5km`) but did not improve mean or median error yet.
 - The first query-only street-to-aerial projection run is the first real model-side gain on the harder combined benchmark: `mean_km` improved from `10.97` to `9.75`, `<=2km` improved from `5.83%` to `7.50%`, and `<=5km` improved from `12.50%` to `20.42%`, but `<=1km` regressed from `2.92%` to `2.08%`.
 - The bottleneck has therefore shifted from "insufficient realistic data exists" to "how well we train the cross-view model on the harder combined benchmark."
+
+## May 10, 2026: Realistic Aerial Index in the Active Paris Profile
+
+After the candidate-oracle diagnostic showed that direct oracle-positive training had only `8` unique positive chips, I tested whether the active app profile needed a richer candidate source before another ranking loss. The promoted change adds the full realistic IGN aerial index (`data/paris_realistic_v1_combined/indices/aerial_clip_index.npz`) to `src/config/paris.json`. The SpaceNet indices keep the current hard-negative projection, while the realistic aerial index is queried in raw CLIP space through per-index projection routing.
+
+Fixed strict probe comparison (`80` samples, `seed=42`, full app path):
+
+| Variant | Mean km | Median km | p90 km | <=2 km | <=5 km | Oracle mean km | Oracle <=2 km | Oracle best-rank mean | Decision |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| Previous serving profile | 4.5791 | 4.6367 | 5.9161 | 0.00% | 67.50% | 2.3528 | 43.75% | 15.125 | replaced |
+| Realistic aerial index, RRF | 4.4793 | 4.6127 | 5.7859 | 0.00% | 70.00% | 1.6715 | 66.25% | 18.250 | promoted |
+| Lighter rank-fusion weighting | 4.5026 | 4.6306 | 5.8956 | 3.75% | 66.25% | 1.5891 | 66.25% | 14.538 | kept as diagnostic |
+| Score-based weighted fusion | 5.2260 | 5.3401 | 7.9741 | 8.75% | 45.00% | 1.6658 | 67.50% | 9.588 | rejected |
+
+Decision:
+
+- Promote the realistic aerial index profile because it improves mean, median, p90, `<=5km`, and candidate-oracle coverage.
+- Do not promote lighter weighting yet: it creates the first `<=2km` hits in this branch, but gives up too much broad `<=5km` accuracy.
+- Reject score-based weighted fusion because it over-optimizes close hits and damages the general ranking.
+- The next serious model step is shortlist ranking on this richer candidate pool, not more spatial clustering.
 
 ## May 9, 2026: Retrieval-Mistake Hard-Negative Projection
 
