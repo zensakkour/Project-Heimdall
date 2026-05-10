@@ -348,6 +348,14 @@ The project reports multiple radii because a method can improve medium-range loc
 - Added candidate-level reranking infrastructure and a supervised training tool (`src/tools/train_geo_candidate_reranker.py`). The first learned feature scorer was rejected for default use because it did not improve the fixed held-out 40-sample probe, but the infrastructure remains available for larger feature/model experiments.
 - Re-enabled local visual verification for the Paris runtime profile with a bounded top-12 candidate pass (`retrieval_local_match_top_n=12`, `retrieval_local_match_weight=0.6`, `retrieval_local_match_max_features=1800`). On the same fixed 40-sample strict probe, full runtime fusion improved from the Phase V retune (`9.26 km` mean, `7.10 km` median, `19.66 km` p90, `67.50% <=10 km`) to `8.61 km` mean, `6.77 km` median, `17.63 km` p90, and `72.50% <=10 km`. The tradeoff is a small `<=5 km` decrease (`32.50%` -> `30.00%`), so this is promoted as a medium/tail-error improvement rather than a close-range breakthrough.
 
+### 5.6 Phase VI: Retrieval-Mistake Supervision and Diversity Control (May 10, 2026)
+- Added a retrieval-mistake hard-negative miner that trains on the app's own high-scoring wrong candidates rather than generic geographic negatives.
+- The first promoted projection (`runs/retrieval_hardneg_crossview_projection_v1.npz`) cut the fixed 80-sample strict Paris serving probe from `9.1105 km` mean / `16.7438 km` p90 to `4.7680 km` mean / `6.0800 km` p90.
+- The next serving update disabled GeoCLIP candidate injection when a Paris retrieval index is active, improving the same probe to `4.6213 km` mean, `4.6345 km` median, `6.0913 km` p90, `66.25% <=5 km`, and `100.00% <=10 km`.
+- A larger 480-query hard-negative pass exposed an overconcentration failure: naive training from identity regressed to `21.6922 km` mean, and v1-initialized training on the full concentrated set regressed to `5.3267 km` mean.
+- The current branch adds diversity-capped hard-negative mining and initialized projection fine-tuning. The best completed cap-16 run (`152` triplets, `49` unique negative chips) improves the retrieval-dominant baseline to `4.5791 km` mean, `5.9161 km` p90, `67.50% <=5 km`, and `100.00% <=10 km`.
+- Interpretation: this is a measured incremental model improvement, not a solved close-range model. The important research finding is that repeated-reference concentration is now a bottleneck; the next step must create broader near-field hard negatives or adapt the visual representation itself.
+
 ## 6. Experimental Protocol
 ### 6.1 Datasets and Artifacts Used in This Document
 - SpaceNet Paris train-like index artifacts (`data/geo_index/spacenet_paris_clip.npz`).

@@ -136,6 +136,32 @@ Interpretation:
 - The May 10 serving-path update adds `geolocator.use_geoclip_with_retrieval=false` for the Paris profile. This keeps GeoSpot/GeoCLIP available for profiles without retrieval indices, but prevents the weaker global provider from diluting the hard-negative retrieval model when the Paris index is active.
 - A support-density candidate selector was tested and rejected: `mean 5.3660 km`, `median 5.1836 km`, `p90 7.3209 km`, and `<=5 km 42.50%` on the same `80` strict probe samples. The result confirms that local candidate density alone is not a safe replacement for learned cross-view ranking.
 
+## May 10, 2026: Diversity-Capped Retrieval-Mistake Projection
+
+This branch tested the next hard-negative scaling step. A naive `480`-query mining pass produced valid triplets, but training exposed a concentration failure: the trainer touched only `84` unique references, and projections trained directly on that pool regressed the fixed strict probe. The fix was to make hard-negative mining diversity-aware and to support conservative fine-tuning from the current projection instead of always starting from identity.
+
+New tooling:
+
+- `src.tools.mine_retrieval_hard_triplets` now supports `--max-negative-reuse` and reports `unique_positive_paths`, `unique_negative_paths`, and `top_negative_reuse`.
+- `src.tools.train_crossview_projection` now supports `--init-projection`, allowing a new projection pass to fine-tune the current serving projection instead of resetting the learned mapping.
+
+Completed benchmark on the same `80` strict probe samples (`seed=42`):
+
+| Variant | Mean km | Median km | p90 km | <=2 km | <=5 km | <=10 km | Decision |
+|---|---:|---:|---:|---:|---:|---:|---|
+| Current retrieval-dominant v1 | 4.6213 | 4.6345 | 6.0913 | 0.00% | 66.25% | 100.00% | previous baseline |
+| 480 mined triplets, identity init | 21.6922 | 23.0790 | 27.2324 | 0.00% | 0.00% | 2.50% | rejected |
+| 480 mined triplets, v1 init | 5.3267 | 5.4025 | 6.6124 | 0.00% | 36.25% | 100.00% | rejected |
+| 480 mined triplets, tiny v1 update | 4.6347 | 4.6503 | 6.1219 | 0.00% | 67.50% | 100.00% | rejected: mixed |
+| Diversity cap 8, v1 init (`104` triplets, `37` unique negatives) | 4.5974 | 4.6376 | 5.9181 | 0.00% | 68.75% | 100.00% | kept as diagnostic |
+| Offline cap 16, v1 init (`152` triplets, `49` unique negatives) | 4.5791 | 4.6367 | 5.9161 | 0.00% | 67.50% | 100.00% | promoted on this branch |
+
+Decision:
+
+- Promote `runs/retrieval_hardneg_crossview_projection_v4_cap16_initv1.npz` on the branch because it improves mean error and p90 while preserving `<=10 km`.
+- Do not claim a breakthrough: the gain is real but modest, and `<=2 km` remains at `0.00%`.
+- The stronger research conclusion is diagnostic: the current Paris error set is extremely concentrated. Further large gains need broader near-field hard negatives or a stronger cross-view representation, not simply more epochs on repeated wrong chips.
+
 First combined cross-view training workflow used in the repo:
 
 ```powershell
