@@ -55,9 +55,9 @@
     "retrieval_diversity_min_keep": 1,
     "retrieval_locality_radius_km": 0.0,
     "retrieval_locality_weight": 0.0,
-    "retrieval_consensus_top_n": 20,
-    "retrieval_consensus_radius_km": 3.0,
-    "retrieval_consensus_score_power": 1.0,
+    "retrieval_consensus_top_n": 25,
+    "retrieval_consensus_radius_km": 2.0,
+    "retrieval_consensus_score_power": 0.0,
     "retrieval_query_tta_degrees": [
       0.0,
       90.0,
