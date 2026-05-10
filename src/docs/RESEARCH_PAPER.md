@@ -1119,6 +1119,10 @@ On the fixed `80` strict Paris probe, this was the first candidate-source change
 
 The important result is not only the small top-1 gain. The candidate oracle improved from `2.3528 km` mean to `1.6715 km`, and oracle `<=2 km` improved from `43.75%` to `66.25%`. This means the added realistic aerial source is giving the system a better shortlist. However, the best returned candidate is still often buried (`18.25` mean rank in the promoted setting), so the next model work should target visual shortlist reranking using this richer candidate pool rather than reverting to more spatial clustering.
 
+I then reran oracle-candidate mining with the promoted config to test whether this was only a benchmark artifact or whether it changed the learnable training pool. The pre-index oracle-positive miner produced `104` triplets but only `8` unique positive chips. With the realistic aerial index active and positive fallback disabled, the same `240`-record training probe produced `70` strict near-positive triplets with `46` unique positive paths; `67/70` positives came from the realistic aerial index, mean positive distance was `1.0336 km`, and mean positive rank was `22.3`.
+
+This is the first concrete evidence that the system now has enough diverse near positives to learn from. However, a listwise aggregate-feature candidate reranker still failed on the held-out `80`-query evaluation: base retrieval-only performance was `mean 4.5748 km`, `<=5 km 66.25%`, while reranking regressed to `mean 4.8177 km`, `<=5 km 60.00%`. The interpretation is narrow but important: the data bottleneck is improved, but rank/score/source/cluster features are still too weak. The next ranking model must look at visual query-candidate evidence or train source-specific projection heads, not only aggregate candidate metadata.
+
 ## Appendix A: Major Algorithmic Knobs (Geo)
 - Retrieval:
   - `retrieval_projection_path`
@@ -1218,6 +1222,8 @@ The important result is not only the small top-1 gain. The candidate oracle impr
 - `runs/geo_eval_realistic_aerial_index_v1_80.json`
 - `runs/geo_eval_realistic_rrf_w050_top25_full_80.json`
 - `runs/geo_eval_realistic_weighted_w050_top25_retrieval_only_80.json`
+- `runs/retrieval_oracle_candidate_triplets_realistic_index_train240_nearonly_v1_summary.json`
+- `runs/candidate_reranker_realistic_index_listwise_v1.report.json`
 - `runs/geo_impact_latest.json`
 - `runs/geo_impact_latest.md`
 

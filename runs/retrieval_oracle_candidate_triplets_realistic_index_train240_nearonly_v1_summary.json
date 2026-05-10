@@ -1,0 +1,65 @@
+{
+  "records_seen": 240,
+  "triplets_written": 70,
+  "missing_files": 0,
+  "no_candidates": 0,
+  "no_triplet": 170,
+  "candidate_count_mean": 25.0,
+  "positive_radius_km": 2.0,
+  "positive_fallback_top_k": 0,
+  "negative_min_gt_distance_km": 0.75,
+  "negative_max_gt_distance_km": 18.0,
+  "max_positives": 1,
+  "max_negatives": 8,
+  "max_negative_reuse": 16,
+  "positive_source": "closest_candidate",
+  "unique_positive_paths": 46,
+  "unique_negative_paths": 29,
+  "top_negative_reuse": [
+    {
+      "path": "chips/16feb29111912-s2as_r11c09-056155973010_01_p001_r512_c0.jpg",
+      "count": 16
+    },
+    {
+      "path": "chips/16feb29111912-s2as_r11c10-056155973010_01_p001_r5632_c0.jpg",
+      "count": 16
+    },
+    {
+      "path": "chips/16feb29111912-s2as_r11c08-056155973010_01_p001_r1536_c1024.jpg",
+      "count": 16
+    },
+    {
+      "path": "chips/16feb29111912-s2as_r09c09-056155973010_01_p001_r2048_c1536.jpg",
+      "count": 16
+    },
+    {
+      "path": "chips/16feb29111912-s2as_r10c09-056155973010_01_p001_r1024_c0.jpg",
+      "count": 16
+    },
+    {
+      "path": "chips/16feb29111912-s2as_r11c10-056155973010_01_p001_r7168_c0.jpg",
+      "count": 16
+    },
+    {
+      "path": "chips/16feb29111912-s2as_r10c09-056155973010_01_p001_r512_c6656.jpg",
+      "count": 16
+    },
+    {
+      "path": "chips/16feb29111912-s2as_r09c09-056155973010_01_p001_r2048_c2048.jpg",
+      "count": 16
+    },
+    {
+      "path": "chips/16feb29111912-s2as_r10c10-056155973010_01_p001_r512_c0.jpg",
+      "count": 16
+    },
+    {
+      "path": "chips/16feb29111912-s2as_r09c07-056155973010_01_p001_r512_c2560.jpg",
+      "count": 16
+    }
+  ],
+  "config": "src/config/paris.json",
+  "metadata": "data\\paris_realistic_v1_combined\\splits_strict\\train_pairs.csv",
+  "images_dir": "data\\paris_realistic_v1\\street_combined",
+  "reference_metadata": "data\\spacenet_paris\\metadata.csv",
+  "output": "runs\\retrieval_oracle_candidate_triplets_realistic_index_train240_nearonly_v1.jsonl"
+}
