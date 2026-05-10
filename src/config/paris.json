@@ -24,6 +24,7 @@
     "model_id": "sdan/geospot-base",
     "model_cache_dir": "data/models/geospot-base",
     "encoder_name": null,
+    "use_geoclip_with_retrieval": false,
     "retrieval_index_path": "data/geo_index/spacenet_paris_chips_openai_clip_vit_large_patch14_proj_trainref_v2_mild.npz",
     "retrieval_index_paths": [
       "data/geo_index/spacenet_paris_chips_openai_clip_vit_large_patch14_proj_trainref_v2_mild_dba_geo2_k5.npz"
@@ -35,7 +36,7 @@
     "retrieval_index_model_ids": [],
     "retrieval_index_projection_paths": [],
     "retrieval_model_id": "openai/clip-vit-large-patch14",
-    "retrieval_projection_path": "runs/retrieval_projection_paris_query_trainref_v2_mild.npz",
+    "retrieval_projection_path": "runs/retrieval_hardneg_crossview_projection_v1.npz",
     "retrieval_top_k": 25,
     "retrieval_per_index_top_k": 0,
     "retrieval_index_score_norm": "auto",
@@ -105,7 +106,7 @@
     "use_shadow_heading": true
   },
   "fusion": {
-    "retrieval_temperature": 0.28,
+    "retrieval_temperature": 0.22,
     "retrieval_score_norm": "none",
     "source_prior_retrieval": 1.0,
     "source_prior_retrieval_by_source": {},
@@ -118,7 +119,7 @@
     "cross_source_sigma_km": 8.0,
     "cross_source_weight": 0.5,
     "use_plausibility_rerank": true,
-    "plausibility_radius_km": 120.0,
+    "plausibility_radius_km": 12.0,
     "plausibility_weight": 1.0,
     "use_adaptive_outlier_guard": false,
     "outlier_guard_strength": 0.0,
@@ -136,10 +137,10 @@
     "terrain_sigma": 100.0,
     "use_shadow": true,
     "use_terrain": false,
-    "credible_mass": 0.9,
-    "min_credible_candidates": 2,
+    "credible_mass": 0.6,
+    "min_credible_candidates": 1,
     "use_top_cluster_for_stats": true,
-    "credible_cluster_radius_km": 120.0,
+    "credible_cluster_radius_km": 6.0,
     "min_credible_cluster_weight": 0.3,
     "top_k": 25
   }
