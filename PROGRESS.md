@@ -2598,3 +2598,19 @@ Do not delete or edit past entries. Append new work at the end.
   - post-index strict near-only mining: `70` triplets, `46` unique positive paths, `67/70` positives from the realistic aerial index, mean positive distance `1.0336 km`, mean positive rank `22.3`
   - listwise feature reranker on the improved shortlist regressed retrieval-only eval: base `mean 4.5748`, `<=5km 66.25%`; reranked `mean 4.8177`, `<=5km 60.00%`
 - Decision: Keep the mining artifacts and reject the feature-only reranker. The breakthrough is the new diverse near-positive pool; the next model step needs visual candidate-pair learning or source-specific projection training, not another aggregate-feature reranker.
+
+## 2026-05-10 Source-Consistent Realistic Projection Test
+- Hypothesis: The previous oracle-positive projection was invalid for the new mixed shortlist because positives and negatives came from different reference spaces. Training a projection only on realistic aerial-index positives and negatives should be more coherent.
+- Change:
+  - Added `--positive-candidate-source-filter` and `--negative-candidate-source-filter` to `src.tools.mine_retrieval_hard_triplets`.
+  - Added test coverage for candidate-source filtering.
+  - Mined a realistic-only triplet set with both positives and negatives constrained to `aerial_clip_index`.
+- Validation commands:
+  - `.\.venv\Scripts\python.exe -m pytest src\tests\test_mine_retrieval_hard_triplets.py -q`
+  - `.\.venv\Scripts\python.exe -m src.tools.mine_retrieval_hard_triplets --config src/config/paris.json --images-dir data/paris_realistic_v1/street_combined --metadata data/paris_realistic_v1_combined/splits_strict/train_pairs.csv --reference-metadata data/spacenet_paris/metadata.csv --limit 240 --seed 42 --positive-source closest_candidate --positive-radius-km 2.0 --positive-fallback-top-k 0 --positive-candidate-source-filter aerial_clip_index --negative-candidate-source-filter aerial_clip_index --negative-min-gt-distance-km 2.0 --negative-max-gt-distance-km 18.0 --max-positives 1 --max-negatives 8 --max-negative-reuse 16 --output runs/retrieval_oracle_candidate_triplets_realistic_source_train240_v1.jsonl --summary-output runs/retrieval_oracle_candidate_triplets_realistic_source_train240_v1_summary.json`
+  - `.\.venv\Scripts\python.exe -m src.tools.train_crossview_projection --triplets runs/retrieval_oracle_candidate_triplets_realistic_source_train240_v1.jsonl --aerial-index data/paris_realistic_v1_combined/indices/aerial_clip_index.npz --street-images-dir data/paris_realistic_v1/street_combined --output runs/retrieval_realistic_source_projection_v1.npz --report-output runs/retrieval_realistic_source_projection_v1.report.json --embedding-model openai/clip-vit-large-patch14 --max-triplets 0 --epochs 24 --batch-size 16 --learning-rate 3e-4 --weight-decay 1e-4 --margin 0.08 --temperature 0.07 --ce-weight 0.3 --sample-weight-mode triplet_weight --sample-weight-max 3.0 --seed 42 --device auto`
+- Results:
+  - realistic-only mining produced `75` triplets, `45` unique positives, and `98` unique negatives.
+  - projection training used all `75` triplets and `128` realistic aerial references.
+  - held-out retrieval-only eval regressed versus promoted raw-CLIP realistic source: `mean 4.5748 -> 4.6198`, `<=5km 66.25% -> 63.75%`, oracle `<=2km 66.25% -> 45.00%`.
+- Decision: Keep the source-filtered miner; reject `runs/retrieval_realistic_source_projection_v1.npz`. The training set is now coherent, but too small or too biased to replace raw CLIP for the realistic aerial index.

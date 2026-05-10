@@ -58,10 +58,14 @@ def mine_triplets_for_query(
     max_positives: int,
     max_negatives: int,
     positive_source: str = "reference",
+    positive_candidate_source_filter: Sequence[str] = (),
+    negative_candidate_source_filter: Sequence[str] = (),
 ) -> Optional[dict]:
+    positive_candidates = _filter_candidates_by_source(candidates, positive_candidate_source_filter)
+    negative_candidates = _filter_candidates_by_source(candidates, negative_candidate_source_filter)
     if str(positive_source).strip().lower() == "closest_candidate":
         positives = _retrieval_positive_items(
-            candidates,
+            positive_candidates,
             gt_latitude,
             gt_longitude,
             max_radius_km=max(0.0, float(positive_radius_km)),
@@ -78,7 +82,7 @@ def mine_triplets_for_query(
             limit=max(1, int(max_positives)),
         )
     negatives = _retrieval_negative_items(
-        candidates,
+        negative_candidates,
         gt_latitude,
         gt_longitude,
         min_distance_km=max(0.0, float(negative_min_gt_distance_km)),
@@ -123,6 +127,8 @@ def mine_retrieval_triplets(
     max_negatives: int,
     max_negative_reuse: int = 0,
     positive_source: str = "reference",
+    positive_candidate_source_filter: Sequence[str] = (),
+    negative_candidate_source_filter: Sequence[str] = (),
 ) -> tuple[list[dict], dict]:
     ordered = list(records)
     random.Random(int(seed)).shuffle(ordered)
@@ -164,6 +170,8 @@ def mine_retrieval_triplets(
             max_positives=max_positives,
             max_negatives=max_negatives,
             positive_source=positive_source,
+            positive_candidate_source_filter=positive_candidate_source_filter,
+            negative_candidate_source_filter=negative_candidate_source_filter,
         )
         if triplet is None:
             no_triplet += 1
@@ -221,11 +229,37 @@ def mine_retrieval_triplets(
         "max_negatives": int(max_negatives),
         "max_negative_reuse": int(max_negative_reuse),
         "positive_source": str(positive_source).strip().lower() or "reference",
+        "positive_candidate_source_filter": list(positive_candidate_source_filter),
+        "negative_candidate_source_filter": list(negative_candidate_source_filter),
         "unique_positive_paths": len(positive_paths),
         "unique_negative_paths": len(negative_paths),
         "top_negative_reuse": [{"path": path, "count": count} for path, count in top_negative_reuse],
     }
     return triplets, summary
+
+
+def _filter_candidates_by_source(
+    candidates: Sequence[GeoCandidate],
+    filters: Sequence[str],
+) -> list[GeoCandidate]:
+    needles = [str(item).strip().lower() for item in filters if str(item).strip()]
+    if not needles:
+        return list(candidates)
+    out: list[GeoCandidate] = []
+    for cand in candidates:
+        haystack = " ".join(
+            [
+                str(cand.match_id or ""),
+                str(cand.image_path or ""),
+            ]
+        ).lower()
+        if any(needle in haystack for needle in needles):
+            out.append(cand)
+    return out
+
+
+def _parse_filter_list(raw: str) -> list[str]:
+    return [item.strip() for item in str(raw or "").split(",") if item.strip()]
 
 
 def _nearest_reference_items(
@@ -414,6 +448,16 @@ def main(argv: Optional[list[str]] = None) -> int:
         default=0,
         help="Optional cap on how often the same hard-negative reference chip can appear across the mined set.",
     )
+    parser.add_argument(
+        "--positive-candidate-source-filter",
+        default="",
+        help="Comma-separated substrings that positive retrieval candidates must match in match_id or image_path.",
+    )
+    parser.add_argument(
+        "--negative-candidate-source-filter",
+        default="",
+        help="Comma-separated substrings that negative retrieval candidates must match in match_id or image_path.",
+    )
     args = parser.parse_args(argv)
 
     cfg = load_config(args.config)
@@ -443,6 +487,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         max_negatives=int(args.max_negatives),
         max_negative_reuse=int(args.max_negative_reuse),
         positive_source=str(args.positive_source),
+        positive_candidate_source_filter=_parse_filter_list(args.positive_candidate_source_filter),
+        negative_candidate_source_filter=_parse_filter_list(args.negative_candidate_source_filter),
     )
     out_path = Path(args.output)
     written = write_jsonl(out_path, triplets)
