@@ -166,6 +166,24 @@ def predict_latlon_retrieval(
     return (top.latitude, top.longitude), top.retrieval_score, provider.last_error
 
 
+def candidate_oracle_stats(candidates, gt_lat: float, gt_lon: float) -> dict:
+    if not candidates:
+        return {
+            "candidate_oracle_min_km": None,
+            "candidate_oracle_rank": None,
+            "candidate_count": 0,
+        }
+    ranked = []
+    for rank, cand in enumerate(candidates, start=1):
+        ranked.append((haversine_km(float(gt_lat), float(gt_lon), cand.latitude, cand.longitude), rank))
+    best_dist, best_rank = min(ranked, key=lambda item: item[0])
+    return {
+        "candidate_oracle_min_km": float(best_dist),
+        "candidate_oracle_rank": int(best_rank),
+        "candidate_count": len(candidates),
+    }
+
+
 def build_retrieval_provider(cfg: Optional[HeimdallConfig]) -> Optional[GeoRetrievalProvider]:
     if cfg is None or not has_retrieval_index(cfg.geolocator):
         return None
@@ -539,6 +557,9 @@ def main(argv: Optional[list[str]] = None) -> None:
     missing = 0
     null_pred = 0
     retrieval_scores = []
+    candidate_oracle_distances = []
+    candidate_oracle_ranks = []
+    candidate_counts = []
     diagnostics = []
     progress_path = Path(args.progress) if args.progress else None
     for idx, item in enumerate(records, start=1):
@@ -554,18 +575,36 @@ def main(argv: Optional[list[str]] = None) -> None:
         pred = None
         top_score = None
         provider_error = None
+        candidates_for_oracle = []
         if args.retrieval_only:
-            pred, top_score, provider_error = predict_latlon_retrieval(str(image_path), retrieval_provider)
-            if top_score is not None:
-                retrieval_scores.append(float(top_score))
+            if retrieval_provider is None:
+                provider_error = "index_not_configured"
+            else:
+                candidates_for_oracle = retrieval_provider.candidates(str(image_path)) or []
+                if candidates_for_oracle:
+                    top = candidates_for_oracle[0]
+                    pred = (top.latitude, top.longitude)
+                    top_score = top.retrieval_score
+                    retrieval_scores.append(float(top_score))
+                    provider_error = retrieval_provider.last_error
+                else:
+                    provider_error = retrieval_provider.last_error or "no_candidates"
         else:
             if pipeline is None:
                 pred = None
             else:
                 result = pipeline.run(str(image_path), capture_time=capture_time_from_record(item))
                 pred = predict_latlon(result)
+                candidates_for_oracle = list(getattr(result, "candidates", []) or [])
                 provider = getattr(pipeline, "candidate_provider", None)
                 provider_error = getattr(provider, "last_error", None)
+        gt_lat = float(item["latitude"])
+        gt_lon = float(item["longitude"])
+        oracle = candidate_oracle_stats(candidates_for_oracle, gt_lat, gt_lon)
+        if oracle["candidate_oracle_min_km"] is not None:
+            candidate_oracle_distances.append(float(oracle["candidate_oracle_min_km"]))
+            candidate_oracle_ranks.append(int(oracle["candidate_oracle_rank"]))
+        candidate_counts.append(int(oracle["candidate_count"]))
         if pred is None:
             null_pred += 1
             distances.append(None)
@@ -573,18 +612,17 @@ def main(argv: Optional[list[str]] = None) -> None:
                 diagnostics.append(
                     {
                         "image": str(image_path),
-                        "gt_lat": float(item["latitude"]),
-                        "gt_lon": float(item["longitude"]),
+                        "gt_lat": gt_lat,
+                        "gt_lon": gt_lon,
                         "pred_lat": None,
                         "pred_lon": None,
                         "dist_km": None,
                         "retrieval_score": top_score,
                         "provider_error": provider_error or "null_prediction",
+                        **oracle,
                     }
                 )
             continue
-        gt_lat = float(item["latitude"])
-        gt_lon = float(item["longitude"])
         dist = haversine_km(gt_lat, gt_lon, pred[0], pred[1])
         distances.append(dist)
         if len(diagnostics) < max(0, args.diag_samples):
@@ -598,6 +636,7 @@ def main(argv: Optional[list[str]] = None) -> None:
                     "dist_km": dist,
                     "retrieval_score": top_score,
                     "provider_error": provider_error,
+                    **oracle,
                 }
             )
 
@@ -623,6 +662,27 @@ def main(argv: Optional[list[str]] = None) -> None:
             return None
         k = max(0, min(len(valid) - 1, int(round((p / 100.0) * (len(valid) - 1)))))
         return float(valid[k])
+
+    candidate_oracle_distances.sort()
+    candidate_oracle_count = len(candidate_oracle_distances)
+
+    def oracle_pct_within(km: float) -> Optional[float]:
+        if candidate_oracle_count == 0:
+            return None
+        count = sum(1 for d in candidate_oracle_distances if d <= km)
+        return 100.0 * count / candidate_oracle_count
+
+    def oracle_percentile(p: float) -> Optional[float]:
+        if not candidate_oracle_distances:
+            return None
+        k = max(
+            0,
+            min(
+                len(candidate_oracle_distances) - 1,
+                int(round((p / 100.0) * (len(candidate_oracle_distances) - 1))),
+            ),
+        )
+        return float(candidate_oracle_distances[k])
 
     report = {
         "config": args.config,
@@ -695,6 +755,21 @@ def main(argv: Optional[list[str]] = None) -> None:
         else None,
         "retrieval_score_min": float(min(retrieval_scores)) if retrieval_scores else None,
         "retrieval_score_max": float(max(retrieval_scores)) if retrieval_scores else None,
+        "candidate_count_mean": float(sum(candidate_counts) / len(candidate_counts)) if candidate_counts else None,
+        "candidate_oracle_evaluated": candidate_oracle_count,
+        "candidate_oracle_mean_km": float(sum(candidate_oracle_distances) / candidate_oracle_count)
+        if candidate_oracle_count
+        else None,
+        "candidate_oracle_median_km": float(candidate_oracle_distances[candidate_oracle_count // 2])
+        if candidate_oracle_count
+        else None,
+        "candidate_oracle_p90_km": oracle_percentile(90),
+        "candidate_oracle_within_1km_pct": oracle_pct_within(1.0),
+        "candidate_oracle_within_2km_pct": oracle_pct_within(2.0),
+        "candidate_oracle_within_5km_pct": oracle_pct_within(5.0),
+        "candidate_oracle_best_rank_mean": float(sum(candidate_oracle_ranks) / len(candidate_oracle_ranks))
+        if candidate_oracle_ranks
+        else None,
         "mean_km": float(sum(valid) / evaluated) if evaluated else None,
         "median_km": float(valid[evaluated // 2]) if evaluated else None,
         "p90_km": float(valid[int(evaluated * 0.9) - 1]) if evaluated else None,

@@ -32,8 +32,9 @@ Current hard conclusion:
 - Heuristics helped, but only incrementally.
 - Geometry-lite reranking is real and worth keeping as an experimental branch result.
 - The best close-range gains came from multi-index projection + geo-aware DBA, not from more handcrafted scene cues alone.
-- The current stack is in a data-limited stalemate: the repo now has enough retrieval, projection, and eval machinery to measure progress honestly, but not enough realistic street-to-aerial supervision to unlock a major accuracy jump.
-- The path toward a major jump is model/data work: larger hard-negative sets, realistic street-view versus aerial pairs, and encoder adaptation, not more blind rerank knobs.
+- The full realistic aerial index is now useful in the active Paris profile: it improves top-1 serving error and substantially improves the returned-candidate oracle.
+- The current bottleneck has moved from "not enough diverse positive candidates" to "not enough visual ranking strength to select the best candidate from a much better shortlist."
+- The path toward a major jump is still model/data work: larger diverse realistic positives, stronger shortlist ranking, and encoder adaptation, not more blind rerank knobs.
 
 ## Realistic Paris Data Checkpoint
 
@@ -82,6 +83,34 @@ Interpretation:
 - Expanding the combined probe from the sampled `10k` aerial index to the full `40k` index modestly improved close-range hit rates (`<=1km`, `<=2km`, `<=5km`) but did not improve mean or median error yet.
 - The first query-only street-to-aerial projection run is the first real model-side gain on the harder combined benchmark: `mean_km` improved from `10.97` to `9.75`, `<=2km` improved from `5.83%` to `7.50%`, and `<=5km` improved from `12.50%` to `20.42%`, but `<=1km` regressed from `2.92%` to `2.08%`.
 - The bottleneck has therefore shifted from "insufficient realistic data exists" to "how well we train the cross-view model on the harder combined benchmark."
+
+## May 10, 2026: Realistic Aerial Index in the Active Paris Profile
+
+After the candidate-oracle diagnostic showed that direct oracle-positive training had only `8` unique positive chips, I tested whether the active app profile needed a richer candidate source before another ranking loss. The promoted change adds the full realistic IGN aerial index (`data/paris_realistic_v1_combined/indices/aerial_clip_index.npz`) to `src/config/paris.json`. The SpaceNet indices keep the current hard-negative projection, while the realistic aerial index is queried in raw CLIP space through per-index projection routing.
+
+Fixed strict probe comparison (`80` samples, `seed=42`, full app path):
+
+| Variant | Mean km | Median km | p90 km | <=2 km | <=5 km | Oracle mean km | Oracle <=2 km | Oracle best-rank mean | Decision |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| Previous serving profile | 4.5791 | 4.6367 | 5.9161 | 0.00% | 67.50% | 2.3528 | 43.75% | 15.125 | replaced |
+| Realistic aerial index, RRF | 4.4793 | 4.6127 | 5.7859 | 0.00% | 70.00% | 1.6715 | 66.25% | 18.250 | promoted |
+| Lighter rank-fusion weighting | 4.5026 | 4.6306 | 5.8956 | 3.75% | 66.25% | 1.5891 | 66.25% | 14.538 | kept as diagnostic |
+| Score-based weighted fusion | 5.2260 | 5.3401 | 7.9741 | 8.75% | 45.00% | 1.6658 | 67.50% | 9.588 | rejected |
+
+Decision:
+
+- Promote the realistic aerial index profile because it improves mean, median, p90, `<=5km`, and candidate-oracle coverage.
+- Do not promote lighter weighting yet: it creates the first `<=2km` hits in this branch, but gives up too much broad `<=5km` accuracy.
+- Reject score-based weighted fusion because it over-optimizes close hits and damages the general ranking.
+- The next serious model step is shortlist ranking on this richer candidate pool, not more spatial clustering.
+
+Post-promotion mining check:
+
+- Pre-index oracle-positive mining had `104` triplets but only `8` unique positive chips.
+- With the realistic index active and no positive fallback, mining produced `70` strict near-positive triplets with `46` unique positive paths.
+- `67/70` positives came from the realistic aerial index, mean positive distance was `1.0336 km`, and mean positive rank was `22.3`.
+- A listwise aggregate-feature candidate reranker trained on the improved shortlist still regressed held-out retrieval-only evaluation (`mean 4.5748 -> 4.8177`, `<=5km 66.25% -> 60.00%`), so the next ranker needs visual pair evidence, not only rank/score/source/cluster features.
+- I then added source-filtered mining so positives and negatives can be constrained to `aerial_clip_index`. This produced a coherent realistic-only set (`75` triplets, `45` unique positives, `98` unique negatives), but a source-specific query projection trained on it regressed held-out retrieval-only evaluation (`mean 4.5748 -> 4.6198`, oracle `<=2km 66.25% -> 45.00%`). The source-filtered miner is useful infrastructure; the projection itself is rejected.
 
 ## May 9, 2026: Retrieval-Mistake Hard-Negative Projection
 
@@ -175,6 +204,45 @@ Research recommendation from this checkpoint:
 - The current data is enough to start realistic street-to-aerial training, hard-negative mining, and baseline cross-view evaluation on the full combined dataset.
 - The current frozen CLIP baseline on the combined strict probe is still far from a serious `~3 km` mean result.
 - The next priority should now shift from data collection to model training on this new benchmark root: mine harder triplets from `data/paris_realistic_v1_combined/splits_strict/train_pairs.csv`, train the cross-view projection / encoder path, and compare against the current full-index baseline.
+
+## May 10, 2026: Candidate Oracle Rank Diagnostic
+
+This branch added explicit top-k candidate oracle metrics to `src.tools.run_geo_eval`. The purpose was to separate two different failure modes:
+
+1. The right location is missing from the retrieved candidates.
+2. The right/near location is present but ranked below visually similar wrong candidates.
+
+On the same fixed `80` strict Paris probe samples (`seed=42`) with the promoted diversity-capped hard-negative projection, the full serving path remains:
+
+| Variant | Mean km | Median km | p90 km | <=1 km | <=2 km | <=5 km | <=10 km |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Current serving prediction | 4.5791 | 4.6367 | 5.9161 | 0.00% | 0.00% | 67.50% | 100.00% |
+| Candidate oracle over returned top-25 | 2.3528 | 2.1638 | 4.0063 | 21.25% | 43.75% | 100.00% | 100.00% |
+
+Additional diagnostic:
+
+- Mean returned candidate count: `25.0`.
+- Mean rank of the closest returned candidate: `15.125`.
+- Existing learned candidate reranker retest was rejected: base and reranked metrics were identical (`mean 4.5722 km`, `<=5 km 67.50%`), while the oracle remained much better.
+- Graph-support reranking was also rejected for default serving despite an offline shortlist improvement. The real pipeline run worsened mean and p90 (`mean 4.7027 km`, `p90 6.5027 km`) while only moving `<=2 km` to `2.50%`.
+
+Decision:
+
+- Keep the oracle-rank diagnostics because they expose the remaining bottleneck directly.
+- Do not promote the tested graph-support config or the current learned reranker.
+- The next model work should target a stronger street-to-aerial visual reranker or encoder adaptation objective that can lift the oracle candidate from rank ~15 toward rank 1. Pure spatial clustering is not enough.
+
+Follow-up on the same branch:
+
+- Added an experimental listwise candidate-reranker trainer (`--fit-mode listwise`) with an exponential rank-score activation. It learned a small offline signal but failed in the full fusion path: `mean 5.3499 km`, `p90 6.7075 km`, `<=5 km 42.50%`. Rejected.
+- Added `--positive-source closest_candidate` to `src.tools.mine_retrieval_hard_triplets`, allowing direct oracle-candidate supervision from the returned shortlist.
+- Mined `104` oracle-candidate triplets from `240` train records. The run exposed a severe positive-diversity bottleneck: only `8` unique positive chips.
+- Trained `runs/retrieval_oracle_candidate_projection_v1.npz` from the current projection. It improved closest-candidate mean rank (`15.125` -> `10.375`) but damaged serving accuracy and oracle quality (`mean 5.0353 km`, `<=5 km 50.00%`, oracle `<=2 km 30.00%`). Rejected.
+
+Updated decision:
+
+- Do not train harder on the current oracle-positive pool; it is too concentrated.
+- The next useful work is data/index work: increase positive diversity inside the returned shortlist, then repeat oracle-positive training. The model is not lacking a ranking loss alone; it is lacking enough varied correct candidate examples for that loss to generalize.
 
 ## Timeline
 

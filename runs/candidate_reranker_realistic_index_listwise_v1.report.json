@@ -1,0 +1,51 @@
+{
+  "train": {
+    "metadata": "data\\paris_realistic_v1_combined\\splits_strict\\train_pairs.csv",
+    "images_dir": "data\\paris_realistic_v1\\street_combined",
+    "records_seen": 240,
+    "missing_files": 0,
+    "null_candidates": 0,
+    "candidate_groups": 240,
+    "candidate_rows": 6000,
+    "oracle_mean_km": 3.984945754850713
+  },
+  "fit_mode": "listwise",
+  "target_sigma_km": 1.5,
+  "ridge": 5.0,
+  "listwise_epochs": 60,
+  "listwise_learning_rate": 0.02,
+  "listwise_l2": 0.001,
+  "fusion_weight": 1.5,
+  "temperature": 0.22,
+  "eval": {
+    "evaluated": 80,
+    "null_candidates": 0,
+    "base": {
+      "mean_km": 4.574774892469021,
+      "median_km": 4.620474833306018,
+      "p90_km": 5.908690582922193,
+      "within_1km_pct": 0.0,
+      "within_2km_pct": 0.0,
+      "within_5km_pct": 66.25,
+      "within_10km_pct": 100.0
+    },
+    "reranked": {
+      "mean_km": 4.817652317099133,
+      "median_km": 4.825862502084022,
+      "p90_km": 6.107810499626389,
+      "within_1km_pct": 0.0,
+      "within_2km_pct": 0.0,
+      "within_5km_pct": 60.0,
+      "within_10km_pct": 100.0
+    },
+    "oracle": {
+      "mean_km": 1.6715029329725255,
+      "median_km": 1.3288433667219568,
+      "p90_km": 3.3100708822979663,
+      "within_1km_pct": 37.5,
+      "within_2km_pct": 66.25,
+      "within_5km_pct": 100.0,
+      "within_10km_pct": 100.0
+    }
+  }
+}
