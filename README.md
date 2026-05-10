@@ -507,6 +507,8 @@ The first promoted run changed only `geolocator.retrieval_projection_path` and i
 
 The follow-up compact-stat fusion setting keeps `fusion.top_k=25` so the UI still receives the full candidate set, but computes the displayed estimate from a tighter credible neighborhood. On the same `80` strict probe samples it moved the promoted v1 full pipeline from `mean_km 4.7680` to `4.7288`, `median_km 4.8332` to `4.7759`, and `p90_km 6.0800` to `6.0684`; `<=5km` moved from `57.50%` to `56.25%`, so this is a small center/tail improvement rather than a close-range breakthrough.
 
+The current Paris serving profile also disables GeoSpot/GeoCLIP candidate injection when a retrieval index is active (`geolocator.use_geoclip_with_retrieval=false`). On the same `80` strict probe samples this retrieval-dominant path improved the compact-stat profile from `mean_km 4.7288` to `4.6213`, `median_km 4.7759` to `4.6345`, and `<=5km 56.25%` to `66.25%`; `p90_km` moved slightly from `6.0684` to `6.0913`, so this is promoted as a close-range serving improvement with a negligible tail tradeoff.
+
 ### Run an iterative Paris `180` retrieval fine-tune loop
 
 ```powershell

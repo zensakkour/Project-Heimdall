@@ -2496,3 +2496,20 @@ Do not delete or edit past entries. Append new work at the end.
   - compact-stat fusion with 25 candidates kept: `mean 4.7288`, `median 4.7759`, `p90 6.0684`, `<=2km 1.25%`, `<=5km 56.25%`, `<=10km 100.00%`
   - v2 broad+near hard-negative projection: `mean 4.8302`, `median 4.9400`, `p90 6.0356`, `<=2km 0.00%`, `<=5km 52.50%`, `<=10km 100.00%`
 - Decision: Keep the compact-stat fusion tweak and reject v2. This is a small center/tail gain, not the missing breakthrough; the stronger next step remains richer near-field supervision and candidate distribution improvement.
+
+## 2026-05-10 Retrieval-Dominant Paris Serving Path
+- Hypothesis: After hard-negative projection training, the Paris retrieval provider is stronger than the broad GeoSpot/GeoCLIP provider; injecting GeoCLIP candidates into the Paris retrieval-index path now dilutes close-range accuracy.
+- Change:
+  - Added `geolocator.use_geoclip_with_retrieval` with backwards-compatible default `true`.
+  - Updated CLI, batch, UI server, full-run, and geo-eval pipeline builders so retrieval-index profiles can skip GeoCLIP provider construction and use retrieval candidates directly.
+  - Set `src/config/paris.json` to `use_geoclip_with_retrieval=false`.
+  - Rejected the support-density stats selector experiment after it regressed the fixed strict probe.
+  - Updated `research.md`, `README.md`, and `src/docs/RESEARCH_PAPER.md`.
+- Validation commands:
+  - `$env:TMP='c:\Users\zen\Desktop\Projects\Project-Heimdall\.tmp'; $env:TEMP=$env:TMP; .\.venv\Scripts\python.exe -m pytest src\tests\test_config_loading.py src\tests\test_run_geo_eval_retrieval_provider.py src\tests\test_fusion_geo_quality.py -q`
+  - `.\.venv\Scripts\python.exe -m src.tools.run_geo_eval --config src/config/paris.json --images-dir data/paris_realistic_v1/street_combined --metadata data/paris_realistic_v1_combined/splits_strict/test_pairs_probe240.csv --limit 80 --seed 42 --output runs/geo_eval_hardneg_retrieval_only_provider_80.json --allow-scope-mismatch --diag-samples 5`
+- Metrics on the same `80` strict probe samples:
+  - compact-stat full provider path: `mean 4.7288`, `median 4.7759`, `p90 6.0684`, `<=2km 1.25%`, `<=5km 56.25%`, `<=10km 100.00%`
+  - retrieval-dominant serving path: `mean 4.6213`, `median 4.6345`, `p90 6.0913`, `<=2km 0.00%`, `<=5km 66.25%`, `<=10km 100.00%`
+  - rejected support-density selector: `mean 5.3660`, `median 5.1836`, `p90 7.3209`, `<=5km 42.50%`
+- Decision: Keep and promote. This is a meaningful close-range serving improvement with a negligible p90 tradeoff; it also reduces runtime cost by avoiding unnecessary GeoCLIP inference for Paris retrieval-index runs.

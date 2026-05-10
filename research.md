@@ -1,6 +1,6 @@
 # Project Heimdall Research Ledger
 
-Last updated: May 9, 2026
+Last updated: May 10, 2026
 
 This file is the compact research-facing ledger for the repo. It is not the paper itself; it is the evidence log behind the paper. It is different from:
 
@@ -126,12 +126,15 @@ Follow-up fusion diagnostics on the same `80` strict probe samples separated rep
 | v1 retrieval-only diagnostic | 4.6143 | 4.6345 | 6.0913 | 0.00% | 66.25% | 100.00% | diagnostic only |
 | v2 broad+near hard-negative projection | 4.8302 | 4.9400 | 6.0356 | 0.00% | 52.50% | 100.00% | rejected |
 | v1 compact-stat fusion, 25 candidates kept | 4.7288 | 4.7759 | 6.0684 | 1.25% | 56.25% | 100.00% | promoted as a small tail/center tweak |
+| v1 retrieval-dominant serving path, GeoCLIP gated off when retrieval index exists | 4.6213 | 4.6345 | 6.0913 | 0.00% | 66.25% | 100.00% | promoted as close-range serving improvement |
 
 Interpretation:
 
 - Near-field mixed v2 training was not promoted because it regressed mean, median, and `<=5 km` despite a tiny p90 gain.
 - Retrieval-only v1 is still better on `<=5 km`, which suggests the remaining close-range failure is mostly candidate distribution and candidate ranking rather than late fusion alone.
 - `src/config/paris.json` now keeps all `25` fusion candidates for UI/map inspection, but tightens the fusion estimate statistics with `retrieval_temperature=0.22`, `credible_mass=0.6`, `min_credible_candidates=1`, `credible_cluster_radius_km=6.0`, and `plausibility_radius_km=12.0`.
+- The May 10 serving-path update adds `geolocator.use_geoclip_with_retrieval=false` for the Paris profile. This keeps GeoSpot/GeoCLIP available for profiles without retrieval indices, but prevents the weaker global provider from diluting the hard-negative retrieval model when the Paris index is active.
+- A support-density candidate selector was tested and rejected: `mean 5.3660 km`, `median 5.1836 km`, `p90 7.3209 km`, and `<=5 km 42.50%` on the same `80` strict probe samples. The result confirms that local candidate density alone is not a safe replacement for learned cross-view ranking.
 
 First combined cross-view training workflow used in the repo:
 
