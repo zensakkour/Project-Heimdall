@@ -1,0 +1,71 @@
+{
+  "records_seen": 240,
+  "triplets_written": 75,
+  "missing_files": 0,
+  "no_candidates": 0,
+  "no_triplet": 165,
+  "candidate_count_mean": 25.0,
+  "positive_radius_km": 2.0,
+  "positive_fallback_top_k": 0,
+  "negative_min_gt_distance_km": 2.0,
+  "negative_max_gt_distance_km": 18.0,
+  "max_positives": 1,
+  "max_negatives": 8,
+  "max_negative_reuse": 16,
+  "positive_source": "closest_candidate",
+  "positive_candidate_source_filter": [
+    "aerial_clip_index"
+  ],
+  "negative_candidate_source_filter": [
+    "aerial_clip_index"
+  ],
+  "unique_positive_paths": 45,
+  "unique_negative_paths": 98,
+  "top_negative_reuse": [
+    {
+      "path": "data/paris_realistic_v1_combined/aerial/images/ign_geopf_ortho_1480687175609367.png",
+      "count": 16
+    },
+    {
+      "path": "data/paris_realistic_v1_combined/aerial/images/ign_geopf_ortho_461569254916046.png",
+      "count": 7
+    },
+    {
+      "path": "data/paris_realistic_v1_combined/aerial/images/ign_geopf_ortho_1634324373427130.png",
+      "count": 6
+    },
+    {
+      "path": "data/paris_realistic_v1_combined/aerial/images/ign_geopf_ortho_904450790132994.png",
+      "count": 5
+    },
+    {
+      "path": "data/paris_realistic_v1_combined/aerial/images/ign_geopf_ortho_309420807454642.png",
+      "count": 5
+    },
+    {
+      "path": "data/paris_realistic_v1_combined/aerial/images/ign_geopf_ortho_f68904c7-cdcd-4206-9bff-eb2bd8bc6ed1.png",
+      "count": 5
+    },
+    {
+      "path": "data/paris_realistic_v1_combined/aerial/images/ign_geopf_ortho_f8a9c3b7-2c3a-4d3a-aafc-562549a69230.png",
+      "count": 5
+    },
+    {
+      "path": "data/paris_realistic_v1_combined/aerial/images/ign_geopf_ortho_f96419e9-61b1-4c2a-abec-51ec92cadd1f.png",
+      "count": 5
+    },
+    {
+      "path": "data/paris_realistic_v1_combined/aerial/images/ign_geopf_ortho_c275298a-cd73-4643-a285-2f9689dc2c3c.png",
+      "count": 5
+    },
+    {
+      "path": "data/paris_realistic_v1_combined/aerial/images/ign_geopf_ortho_ebc1d1cf-0a0b-438b-bec5-ed4f9c903d24.png",
+      "count": 4
+    }
+  ],
+  "config": "src/config/paris.json",
+  "metadata": "data\\paris_realistic_v1_combined\\splits_strict\\train_pairs.csv",
+  "images_dir": "data\\paris_realistic_v1\\street_combined",
+  "reference_metadata": "data\\spacenet_paris\\metadata.csv",
+  "output": "runs\\retrieval_oracle_candidate_triplets_realistic_source_train240_v1.jsonl"
+}

@@ -110,6 +110,7 @@ Post-promotion mining check:
 - With the realistic index active and no positive fallback, mining produced `70` strict near-positive triplets with `46` unique positive paths.
 - `67/70` positives came from the realistic aerial index, mean positive distance was `1.0336 km`, and mean positive rank was `22.3`.
 - A listwise aggregate-feature candidate reranker trained on the improved shortlist still regressed held-out retrieval-only evaluation (`mean 4.5748 -> 4.8177`, `<=5km 66.25% -> 60.00%`), so the next ranker needs visual pair evidence, not only rank/score/source/cluster features.
+- I then added source-filtered mining so positives and negatives can be constrained to `aerial_clip_index`. This produced a coherent realistic-only set (`75` triplets, `45` unique positives, `98` unique negatives), but a source-specific query projection trained on it regressed held-out retrieval-only evaluation (`mean 4.5748 -> 4.6198`, oracle `<=2km 66.25% -> 45.00%`). The source-filtered miner is useful infrastructure; the projection itself is rejected.
 
 ## May 9, 2026: Retrieval-Mistake Hard-Negative Projection
 
