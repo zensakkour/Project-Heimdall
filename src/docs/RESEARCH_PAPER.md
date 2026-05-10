@@ -1098,6 +1098,12 @@ The closest returned candidate has mean rank `15.125`, which means the correct l
 
 This changes the research diagnosis. The model is no longer primarily missing Paris candidate coverage on this probe; it is missing a visual ranking function strong enough to identify the correct street-level candidate inside a local cluster. Pure spatial support is insufficient because nearby wrong candidates are also spatially coherent. The next serious improvement should therefore target learned reranking or encoder adaptation with direct supervision over the returned shortlist, not more hand-tuned clustering.
 
+I then tested that hypothesis directly in two ways. First, I replaced the scalar ridge candidate reranker with a listwise softmax trainer and an exponential rank-score activation. This added a more appropriate loss for shortlist ranking, but it still used only aggregate candidate features such as rank, retrieval score, support, and centroid distance. It failed in the full pipeline (`mean 5.3499 km`, `p90 6.7075 km`, `<=5 km 42.50%`), confirming that the aggregate features do not contain enough visual discrimination.
+
+Second, I modified `src.tools.mine_retrieval_hard_triplets` so positives can be mined from the closest returned candidate itself (`--positive-source closest_candidate`). This is a direct attempt to train the projection against the oracle-rank gap. The mined set produced `104` triplets from `240` train records, but only `8` unique positive chips. A conservative projection update from the current serving projection improved the closest-candidate rank diagnostic (`15.125` to `10.375`) but regressed the actual serving result (`mean 5.0353 km`, `<=5 km 50.00%`) and reduced oracle quality (`<=2 km 43.75%` to `30.00%`). This is an important negative result: direct oracle-positive training has the right objective, but the current positive pool is too concentrated to generalize.
+
+The resulting model-improvement plan is therefore more specific. The next bottleneck is not simply "add a ranking loss"; it is "create enough diverse correct visual positives inside the shortlist for a ranking loss to learn from." The retrieval index and training mining path need more local positive variety before another projection or encoder pass is likely to produce a large improvement.
+
 ## Appendix A: Major Algorithmic Knobs (Geo)
 - Retrieval:
   - `retrieval_projection_path`
@@ -1189,6 +1195,11 @@ This changes the research diagnosis. The model is no longer primarily missing Pa
 - `runs/geo_eval_oracle_rank_diagnostics_80.json`
 - `runs/candidate_reranker_current_stack_v1.report.json`
 - `runs/geo_eval_graph_support_v1_80.json`
+- `runs/candidate_reranker_listwise_v1.report.json`
+- `runs/geo_eval_candidate_reranker_listwise_v1_80.json`
+- `runs/retrieval_oracle_candidate_triplets_train240_v1_summary.json`
+- `runs/retrieval_oracle_candidate_projection_v1.report.json`
+- `runs/geo_eval_oracle_candidate_projection_v1_80.json`
 - `runs/geo_impact_latest.json`
 - `runs/geo_impact_latest.md`
 

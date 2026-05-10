@@ -101,6 +101,70 @@ def _collect_rows(
     return rows, targets, sample_best_distances, stats
 
 
+def _collect_groups(
+    *,
+    cfg_path: Path,
+    images_dir: Path,
+    metadata_path: Path,
+    query_metadata_path: Optional[Path],
+    limit: int,
+    seed: int,
+) -> tuple[list[list[list[float]]], list[list[float]], dict]:
+    cfg = load_config(str(cfg_path))
+    provider_cfg = replace(
+        cfg,
+        geolocator=replace(
+            cfg.geolocator,
+            retrieval_top_k=max(25, cfg.geolocator.retrieval_top_k),
+            retrieval_min_keep_topk=max(10, cfg.geolocator.retrieval_min_keep_topk),
+        ),
+    )
+    provider = build_retrieval_provider(provider_cfg)
+    if provider is None:
+        raise ValueError("config has no retrieval index")
+
+    records = load_metadata_records(metadata_path, query_metadata_path=query_metadata_path, images_dir=images_dir)
+    random.Random(seed).shuffle(records)
+    if limit > 0:
+        records = records[:limit]
+
+    feature_groups: list[list[list[float]]] = []
+    distance_groups: list[list[float]] = []
+    sample_best_distances: list[float] = []
+    null_candidates = 0
+    missing_files = 0
+    for item in records:
+        rel_path = str(item["path"])
+        image_path = Path(rel_path) if Path(rel_path).is_absolute() else resolve_image_path(images_dir, rel_path)
+        if not image_path.exists():
+            missing_files += 1
+            continue
+        candidates = provider.candidates(str(image_path))
+        if not candidates:
+            null_candidates += 1
+            continue
+        gt_lat = float(item["latitude"])
+        gt_lon = float(item["longitude"])
+        dists = [haversine_km(gt_lat, gt_lon, cand.latitude, cand.longitude) for cand in candidates]
+        feature_groups.append(candidate_feature_matrix(candidates, FEATURE_NAMES))
+        distance_groups.append(dists)
+        sample_best_distances.append(min(dists))
+
+    stats = {
+        "metadata": str(metadata_path),
+        "images_dir": str(images_dir),
+        "records_seen": len(records),
+        "missing_files": missing_files,
+        "null_candidates": null_candidates,
+        "candidate_groups": len(feature_groups),
+        "candidate_rows": int(sum(len(group) for group in feature_groups)),
+        "oracle_mean_km": float(sum(sample_best_distances) / len(sample_best_distances))
+        if sample_best_distances
+        else None,
+    }
+    return feature_groups, distance_groups, stats
+
+
 def _fit_ridge(rows: list[list[float]], targets: list[float], ridge: float) -> CandidateRerankModel:
     if not rows:
         raise ValueError("no training rows collected")
@@ -124,6 +188,65 @@ def _fit_ridge(rows: list[list[float]], targets: list[float], ridge: float) -> C
         output_floor=0.03,
         output_ceiling=1.0,
     )
+
+
+def _fit_listwise_softmax(
+    feature_groups: list[list[list[float]]],
+    distance_groups: list[list[float]],
+    *,
+    target_sigma_km: float,
+    learning_rate: float,
+    epochs: int,
+    l2: float,
+    seed: int,
+) -> CandidateRerankModel:
+    flat_rows = [row for group in feature_groups for row in group]
+    if not flat_rows:
+        raise ValueError("no training groups collected")
+    x_flat = np.asarray(flat_rows, dtype=np.float64)
+    means = x_flat.mean(axis=0)
+    scales = x_flat.std(axis=0)
+    scales = np.where(scales < 1e-9, 1.0, scales)
+
+    groups = [((np.asarray(rows, dtype=np.float64) - means) / scales, np.asarray(dists, dtype=np.float64)) for rows, dists in zip(feature_groups, distance_groups)]
+    weights = np.zeros(x_flat.shape[1], dtype=np.float64)
+    rng = random.Random(seed)
+    sigma = max(0.1, float(target_sigma_km))
+    lr = max(1e-6, float(learning_rate))
+    reg = max(0.0, float(l2))
+
+    order = list(range(len(groups)))
+    for _epoch in range(max(1, int(epochs))):
+        rng.shuffle(order)
+        for group_idx in order:
+            x, dists = groups[group_idx]
+            logits = np.clip(x @ weights, -60.0, 60.0)
+            pred = _softmax(logits)
+            target = _softmax(-0.5 * (dists / sigma) ** 2)
+            grad = x.T @ (pred - target)
+            if reg > 0.0:
+                grad += reg * weights
+            weights -= lr * grad
+
+    return CandidateRerankModel(
+        feature_names=tuple(FEATURE_NAMES),
+        weights=tuple(float(v) for v in weights),
+        intercept=0.0,
+        means=tuple(float(v) for v in means),
+        scales=tuple(float(v) for v in scales),
+        activation="exp",
+        output_floor=1e-6,
+        output_ceiling=1.0,
+    )
+
+
+def _softmax(values: np.ndarray) -> np.ndarray:
+    shifted = values - float(np.max(values))
+    exp_values = np.exp(np.clip(shifted, -60.0, 60.0))
+    total = float(np.sum(exp_values))
+    if total <= 0.0:
+        return np.full_like(exp_values, 1.0 / max(1, exp_values.size), dtype=np.float64)
+    return exp_values / total
 
 
 def _combined_prediction(candidates: list[GeoCandidate], likes: list[float], weight: float, temperature: float) -> GeoCandidate:
@@ -242,30 +365,57 @@ def main(argv: Optional[list[str]] = None) -> None:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--target-sigma-km", type=float, default=2.0)
     parser.add_argument("--ridge", type=float, default=5.0)
+    parser.add_argument("--fit-mode", choices=["ridge", "listwise"], default="ridge")
+    parser.add_argument("--listwise-epochs", type=int, default=20)
+    parser.add_argument("--listwise-learning-rate", type=float, default=0.02)
+    parser.add_argument("--listwise-l2", type=float, default=0.001)
     parser.add_argument("--fusion-weight", type=float, default=1.2)
     parser.add_argument("--temperature", type=float, default=0.28)
     parser.add_argument("--output", default="runs/candidate_reranker.json")
     parser.add_argument("--report-output", default="")
     args = parser.parse_args(argv)
 
-    rows, targets, _oracle, train_stats = _collect_rows(
-        cfg_path=Path(args.config),
-        images_dir=Path(args.images_dir),
-        metadata_path=Path(args.metadata),
-        query_metadata_path=Path(args.query_metadata) if args.query_metadata else None,
-        limit=args.limit,
-        seed=args.seed,
-        target_sigma_km=args.target_sigma_km,
-    )
-    model = _fit_ridge(rows, targets, ridge=args.ridge)
+    if args.fit_mode == "listwise":
+        feature_groups, distance_groups, train_stats = _collect_groups(
+            cfg_path=Path(args.config),
+            images_dir=Path(args.images_dir),
+            metadata_path=Path(args.metadata),
+            query_metadata_path=Path(args.query_metadata) if args.query_metadata else None,
+            limit=args.limit,
+            seed=args.seed,
+        )
+        model = _fit_listwise_softmax(
+            feature_groups,
+            distance_groups,
+            target_sigma_km=args.target_sigma_km,
+            learning_rate=args.listwise_learning_rate,
+            epochs=args.listwise_epochs,
+            l2=args.listwise_l2,
+            seed=args.seed,
+        )
+    else:
+        rows, targets, _oracle, train_stats = _collect_rows(
+            cfg_path=Path(args.config),
+            images_dir=Path(args.images_dir),
+            metadata_path=Path(args.metadata),
+            query_metadata_path=Path(args.query_metadata) if args.query_metadata else None,
+            limit=args.limit,
+            seed=args.seed,
+            target_sigma_km=args.target_sigma_km,
+        )
+        model = _fit_ridge(rows, targets, ridge=args.ridge)
     eval_path = Path(args.eval_metadata) if args.eval_metadata else Path(args.metadata)
     eval_query_path = Path(args.eval_query_metadata) if args.eval_query_metadata else (
         Path(args.query_metadata) if args.query_metadata else None
     )
     report = {
         "train": train_stats,
+        "fit_mode": args.fit_mode,
         "target_sigma_km": args.target_sigma_km,
         "ridge": args.ridge,
+        "listwise_epochs": args.listwise_epochs,
+        "listwise_learning_rate": args.listwise_learning_rate,
+        "listwise_l2": args.listwise_l2,
         "fusion_weight": args.fusion_weight,
         "temperature": args.temperature,
         "eval": _evaluate_model(

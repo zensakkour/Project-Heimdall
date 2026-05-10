@@ -203,6 +203,18 @@ Decision:
 - Do not promote the tested graph-support config or the current learned reranker.
 - The next model work should target a stronger street-to-aerial visual reranker or encoder adaptation objective that can lift the oracle candidate from rank ~15 toward rank 1. Pure spatial clustering is not enough.
 
+Follow-up on the same branch:
+
+- Added an experimental listwise candidate-reranker trainer (`--fit-mode listwise`) with an exponential rank-score activation. It learned a small offline signal but failed in the full fusion path: `mean 5.3499 km`, `p90 6.7075 km`, `<=5 km 42.50%`. Rejected.
+- Added `--positive-source closest_candidate` to `src.tools.mine_retrieval_hard_triplets`, allowing direct oracle-candidate supervision from the returned shortlist.
+- Mined `104` oracle-candidate triplets from `240` train records. The run exposed a severe positive-diversity bottleneck: only `8` unique positive chips.
+- Trained `runs/retrieval_oracle_candidate_projection_v1.npz` from the current projection. It improved closest-candidate mean rank (`15.125` -> `10.375`) but damaged serving accuracy and oracle quality (`mean 5.0353 km`, `<=5 km 50.00%`, oracle `<=2 km 30.00%`). Rejected.
+
+Updated decision:
+
+- Do not train harder on the current oracle-positive pool; it is too concentrated.
+- The next useful work is data/index work: increase positive diversity inside the returned shortlist, then repeat oracle-positive training. The model is not lacking a ranking loss alone; it is lacking enough varied correct candidate examples for that loss to generalize.
+
 ## Timeline
 
 ## 1. Foundation Phase
