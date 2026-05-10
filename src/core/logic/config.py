@@ -34,6 +34,7 @@ class GeoConfig:
     encoder_name: Optional[str] = None
     use_sidecar: bool = True
     use_exif: bool = True
+    use_geoclip_with_retrieval: bool = True
     top_n: int = 5
     geospot_score_scale: float = 1.0
     retrieval_index_path: Optional[str] = None
@@ -197,6 +198,7 @@ def load_config(path: str) -> HeimdallConfig:
             encoder_name=geo.get("encoder_name"),
             use_sidecar=geo.get("use_sidecar", True),
             use_exif=geo.get("use_exif", True),
+            use_geoclip_with_retrieval=geo.get("use_geoclip_with_retrieval", True),
             top_n=geo.get("top_n", 5),
             geospot_score_scale=geo.get("geospot_score_scale", 1.0),
             retrieval_index_path=geo.get("retrieval_index_path"),

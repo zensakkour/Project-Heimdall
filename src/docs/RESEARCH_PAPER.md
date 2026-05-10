@@ -1,7 +1,7 @@
 ﻿# Project Heimdall: Research Paper Draft
 
 Version: v1.2
-Date: May 9, 2026
+Date: May 10, 2026
 Author: Zein Sakkour
 
 Companion external landscape review: `src/docs/MARKET_RESEARCH.md`.
@@ -1069,8 +1069,11 @@ I then tested two candidate remedies:
 | v1 retrieval-only | 4.6143 | 4.6345 | 6.0913 | 0.00% | 66.25% | 100.00% | diagnostic |
 | v2 broad+near hard-negative projection | 4.8302 | 4.9400 | 6.0356 | 0.00% | 52.50% | 100.00% | rejected |
 | v1 compact-stat fusion, 25 candidates retained | 4.7288 | 4.7759 | 6.0684 | 1.25% | 56.25% | 100.00% | promoted as minor improvement |
+| v1 retrieval-dominant serving path, GeoCLIP gated off when retrieval index exists | 4.6213 | 4.6345 | 6.0913 | 0.00% | 66.25% | 100.00% | promoted as close-range serving improvement |
 
-The near-field mixed v2 projection was rejected. Although it slightly improved p90, it regressed mean, median, `<=2 km`, and `<=5 km`, so it did not provide a credible improvement. The compact-stat fusion setting was kept because it improves mean, median, and p90 while preserving all `25` displayed fusion candidates for inspection; the cost is one fewer sample inside `5 km` on this `n=80` slice. Methodologically, this is only a small aggregation fix. The larger unresolved gap remains the lack of dense, accurate, near-field supervision that can move candidates from "right Paris neighborhood" to "right street block."
+The near-field mixed v2 projection was rejected. Although it slightly improved p90, it regressed mean, median, `<=2 km`, and `<=5 km`, so it did not provide a credible improvement. The compact-stat fusion setting was kept because it improves mean, median, and p90 while preserving all `25` displayed fusion candidates for inspection; the cost is one fewer sample inside `5 km` on this `n=80` slice.
+
+The May 10 serving-path update then tested whether the weaker global GeoSpot/GeoCLIP provider was diluting the now-stronger Paris retrieval index. The result supported that hypothesis. Setting `geolocator.use_geoclip_with_retrieval=false` keeps GeoCLIP available for profiles without retrieval indices, but uses the hard-negative retrieval provider alone when the Paris index is present. Compared with compact-stat fusion, mean error improved from `4.7288 km` to `4.6213 km`, median from `4.7759 km` to `4.6345 km`, and `<=5 km` from `56.25%` to `66.25%`; p90 moved slightly from `6.0684 km` to `6.0913 km`. A support-density selector was also tested and rejected (`mean 5.3660 km`, `<=5 km 42.50%`), showing that candidate clustering alone cannot replace learned cross-view ranking. Methodologically, this is a serving-path correction: once the specialized Paris retrieval model became stronger than the broad global provider, the system needed a way to stop adding lower-quality global hypotheses by default.
 
 ## Appendix A: Major Algorithmic Knobs (Geo)
 - Retrieval:
