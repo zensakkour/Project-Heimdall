@@ -1034,6 +1034,44 @@ The April 30 execution converted the earlier strategy memo into a measured Tier 
 
 Operationally, the main outcome of this execution is that the default Paris serving path improved immediately through Tier 1, while the deeper architecture experiments are now better separated into three categories: measured close-range tradeoffs (Tier 2), mixed complementary fusion (Tier 3), and prepared-but-not-yet-benchmarked encoder adaptation (Tier 4).
 
+### 15.3 May 9, 2026 Retrieval-Mistake Hard-Negative Projection
+
+The next experiment targeted the active application failure mode rather than the offline cross-view benchmark alone. The working hypothesis was that the production Paris profile was not mainly missing another fusion heuristic; it was missing supervised pressure against the retrieval candidates it already confuses with the correct location.
+
+I added `src.tools.mine_retrieval_hard_triplets`, which runs the configured retrieval provider on real street queries, keeps geographically nearby reference chips as positives, and records the provider's own high-ranking wrong chips as hard negatives. This creates triplets from current inference mistakes:
+
+```text
+T_live(q_s) = (q_s, P_near(y_q), N_retrieved_wrong(q_s))
+```
+
+where `N_retrieved_wrong` contains candidates returned by the active retrieval stack whose coordinates are outside the configured ground-truth exclusion radius but still close enough to represent plausible Paris confusions.
+
+The first run mined `160` valid triplets from `160` training queries with no missing files, empty candidate sets, or dropped triplets. Training a query-only cross-view projection for `6` epochs produced `runs/retrieval_hardneg_crossview_projection_v1.npz`. The fair serving-path evaluation used the same `80` strict probe samples, same seed, same full `run_geo_eval.py` path, and changed only the query projection file:
+
+| Projection | Mean km | Median km | p90 km | <=2 km | <=5 km | <=10 km |
+|---|---:|---:|---:|---:|---:|---:|
+| Current master projection | 9.1105 | 7.0931 | 16.7438 | 3.75% | 25.00% | 62.50% |
+| Retrieval-mistake hard-negative projection | 4.7680 | 4.8332 | 6.0800 | 1.25% | 57.50% | 100.00% |
+
+This is a clean medium-range serving-path improvement: mean error fell by approximately `47.7%`, p90 error fell by approximately `63.7%`, and every evaluated sample landed within `10 km`. The remaining regression is exact close-range precision (`<=2 km`), which indicates that the next mining pass should deliberately oversample sub-`3 km` confusions instead of using only the broader `1-25 km` negative window.
+
+The decision from this experiment was to promote `runs/retrieval_hardneg_crossview_projection_v1.npz` in `src/config/paris.json` and keep retrieval-mistake mining as the next main model-improvement loop.
+
+### 15.4 May 9, 2026 Compact Fusion Statistics and Negative Near-Field Result
+
+After promoting the retrieval-mistake projection, I ran a follow-up ablation to test whether the residual error came from the representation or from the final fusion statistic. The relevant diagnostic was retrieval-only v1: on the same `80` strict probe samples it reached `mean 4.6143 km`, `median 4.6345 km`, and `<=5 km 66.25%`, better than the full fused v1 result on mean and `<=5 km`. This indicates that late fusion can still dilute a useful candidate ranking.
+
+I then tested two candidate remedies:
+
+| Variant | Mean km | Median km | p90 km | <=2 km | <=5 km | <=10 km | Outcome |
+|---|---:|---:|---:|---:|---:|---:|---|
+| v1 full pipeline | 4.7680 | 4.8332 | 6.0800 | 1.25% | 57.50% | 100.00% | reference |
+| v1 retrieval-only | 4.6143 | 4.6345 | 6.0913 | 0.00% | 66.25% | 100.00% | diagnostic |
+| v2 broad+near hard-negative projection | 4.8302 | 4.9400 | 6.0356 | 0.00% | 52.50% | 100.00% | rejected |
+| v1 compact-stat fusion, 25 candidates retained | 4.7288 | 4.7759 | 6.0684 | 1.25% | 56.25% | 100.00% | promoted as minor improvement |
+
+The near-field mixed v2 projection was rejected. Although it slightly improved p90, it regressed mean, median, `<=2 km`, and `<=5 km`, so it did not provide a credible improvement. The compact-stat fusion setting was kept because it improves mean, median, and p90 while preserving all `25` displayed fusion candidates for inspection; the cost is one fewer sample inside `5 km` on this `n=80` slice. Methodologically, this is only a small aggregation fix. The larger unresolved gap remains the lack of dense, accurate, near-field supervision that can move candidates from "right Paris neighborhood" to "right street block."
+
 ## Appendix A: Major Algorithmic Knobs (Geo)
 - Retrieval:
   - `retrieval_projection_path`
