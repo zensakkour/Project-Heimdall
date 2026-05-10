@@ -24,6 +24,7 @@
     "model_id": "sdan/geospot-base",
     "model_cache_dir": "data/models/geospot-base",
     "encoder_name": null,
+    "use_geoclip_with_retrieval": false,
     "retrieval_index_path": "data/geo_index/spacenet_paris_chips_openai_clip_vit_large_patch14_proj_trainref_v2_mild.npz",
     "retrieval_index_paths": [
       "data/geo_index/spacenet_paris_chips_openai_clip_vit_large_patch14_proj_trainref_v2_mild_dba_geo2_k5.npz"
