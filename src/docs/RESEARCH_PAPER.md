@@ -1123,6 +1123,8 @@ I then reran oracle-candidate mining with the promoted config to test whether th
 
 This is the first concrete evidence that the system now has enough diverse near positives to learn from. However, a listwise aggregate-feature candidate reranker still failed on the held-out `80`-query evaluation: base retrieval-only performance was `mean 4.5748 km`, `<=5 km 66.25%`, while reranking regressed to `mean 4.8177 km`, `<=5 km 60.00%`. The interpretation is narrow but important: the data bottleneck is improved, but rank/score/source/cluster features are still too weak. The next ranking model must look at visual query-candidate evidence or train source-specific projection heads, not only aggregate candidate metadata.
 
+To test the source-specific projection option, I added candidate-source filters to the hard-triplet miner and constrained both positives and negatives to `aerial_clip_index`. This produced a coherent realistic-only set (`75` triplets, `45` unique positives, `98` unique negatives), and the projection trainer consumed all rows. The held-out retrieval-only result still regressed: promoted raw-CLIP realistic source `mean 4.5748 km`, `<=5 km 66.25%`, oracle `<=2 km 66.25%`; source-specific projection `mean 4.6198 km`, `<=5 km 63.75%`, oracle `<=2 km 45.00%`. This negative result is useful because it separates infrastructure from model quality. The source-filtered miner should stay; the trained projection should not be promoted.
+
 ## Appendix A: Major Algorithmic Knobs (Geo)
 - Retrieval:
   - `retrieval_projection_path`
@@ -1224,6 +1226,9 @@ This is the first concrete evidence that the system now has enough diverse near 
 - `runs/geo_eval_realistic_weighted_w050_top25_retrieval_only_80.json`
 - `runs/retrieval_oracle_candidate_triplets_realistic_index_train240_nearonly_v1_summary.json`
 - `runs/candidate_reranker_realistic_index_listwise_v1.report.json`
+- `runs/retrieval_oracle_candidate_triplets_realistic_source_train240_v1_summary.json`
+- `runs/retrieval_realistic_source_projection_v1.report.json`
+- `runs/geo_eval_realistic_source_projection_v1_retrieval_only_80.json`
 - `runs/geo_impact_latest.json`
 - `runs/geo_impact_latest.md`
 
