@@ -1,0 +1,122 @@
+{
+  "version": 1,
+  "feature_names": [
+    "bias",
+    "rank_frac",
+    "retrieval_unit",
+    "retrieval_gap_top",
+    "retrieval_gap_prev",
+    "support_1km",
+    "support_3km",
+    "support_8km",
+    "support_20km",
+    "dist_top_km",
+    "dist_centroid_km",
+    "source_retrieval",
+    "source_consensus",
+    "source_geoclip"
+  ],
+  "weights": [
+    0.0,
+    -0.12545914655720375,
+    -0.20866158419207068,
+    0.22435047981520154,
+    0.03995379243833744,
+    0.05103422231793467,
+    -0.5112049695720986,
+    0.3671962302359229,
+    1.2196120458524595,
+    -0.8843763731054428,
+    2.282811624686629,
+    -0.0044008916588785816,
+    0.004400891658878749,
+    0.0
+  ],
+  "intercept": 0.0,
+  "means": [
+    1.0,
+    0.5,
+    0.7271975265268071,
+    0.23467258668243535,
+    0.02082039846790508,
+    0.6004037490123448,
+    0.747633154557237,
+    0.9243631998624311,
+    0.9797149924262708,
+    2.950060720178735,
+    2.9346780629986213,
+    0.96,
+    0.04,
+    0.0
+  ],
+  "scales": [
+    1.0,
+    0.30046260628866406,
+    0.17223397618603015,
+    0.1601896031257879,
+    0.026699003635412655,
+    0.2867055431085467,
+    0.22082216526631007,
+    0.10039346441778875,
+    0.023863634119644365,
+    2.1319572378861507,
+    1.9049481239703996,
+    0.1959591794226492,
+    0.1959591794226492,
+    1.0
+  ],
+  "activation": "exp",
+  "output_floor": 1e-06,
+  "output_ceiling": 1.0,
+  "training_report": {
+    "train": {
+      "metadata": "data\\paris_realistic_v1_combined\\splits_strict\\train_pairs.csv",
+      "images_dir": "data\\paris_realistic_v1\\street_combined",
+      "records_seen": 240,
+      "missing_files": 0,
+      "null_candidates": 0,
+      "candidate_groups": 240,
+      "candidate_rows": 6000,
+      "oracle_mean_km": 3.984945754850713
+    },
+    "fit_mode": "listwise",
+    "target_sigma_km": 1.5,
+    "ridge": 5.0,
+    "listwise_epochs": 60,
+    "listwise_learning_rate": 0.02,
+    "listwise_l2": 0.001,
+    "fusion_weight": 1.5,
+    "temperature": 0.22,
+    "eval": {
+      "evaluated": 80,
+      "null_candidates": 0,
+      "base": {
+        "mean_km": 4.574774892469021,
+        "median_km": 4.620474833306018,
+        "p90_km": 5.908690582922193,
+        "within_1km_pct": 0.0,
+        "within_2km_pct": 0.0,
+        "within_5km_pct": 66.25,
+        "within_10km_pct": 100.0
+      },
+      "reranked": {
+        "mean_km": 4.817652317099133,
+        "median_km": 4.825862502084022,
+        "p90_km": 6.107810499626389,
+        "within_1km_pct": 0.0,
+        "within_2km_pct": 0.0,
+        "within_5km_pct": 60.0,
+        "within_10km_pct": 100.0
+      },
+      "oracle": {
+        "mean_km": 1.6715029329725255,
+        "median_km": 1.3288433667219568,
+        "p90_km": 3.3100708822979663,
+        "within_1km_pct": 37.5,
+        "within_2km_pct": 66.25,
+        "within_5km_pct": 100.0,
+        "within_10km_pct": 100.0
+      }
+    }
+  }
+}

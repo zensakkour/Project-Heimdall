@@ -104,6 +104,13 @@ Decision:
 - Reject score-based weighted fusion because it over-optimizes close hits and damages the general ranking.
 - The next serious model step is shortlist ranking on this richer candidate pool, not more spatial clustering.
 
+Post-promotion mining check:
+
+- Pre-index oracle-positive mining had `104` triplets but only `8` unique positive chips.
+- With the realistic index active and no positive fallback, mining produced `70` strict near-positive triplets with `46` unique positive paths.
+- `67/70` positives came from the realistic aerial index, mean positive distance was `1.0336 km`, and mean positive rank was `22.3`.
+- A listwise aggregate-feature candidate reranker trained on the improved shortlist still regressed held-out retrieval-only evaluation (`mean 4.5748 -> 4.8177`, `<=5km 66.25% -> 60.00%`), so the next ranker needs visual pair evidence, not only rank/score/source/cluster features.
+
 ## May 9, 2026: Retrieval-Mistake Hard-Negative Projection
 
 This branch tested a more targeted answer to the "what is the model missing?" question. Instead of adding another heuristic reranker, it mined hard-negative triplets from the current production retrieval stack's own high-scoring wrong candidates. The training examples therefore encode the mistakes the app actually makes at inference time.
