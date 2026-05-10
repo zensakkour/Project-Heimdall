@@ -4,7 +4,13 @@ import json
 import tempfile
 from pathlib import Path
 
-from src.tools.run_geo_eval import build_pipeline, build_retrieval_provider, load_metadata_records, predict_latlon_retrieval
+from src.tools.run_geo_eval import (
+    build_pipeline,
+    build_retrieval_provider,
+    candidate_oracle_stats,
+    load_metadata_records,
+    predict_latlon_retrieval,
+)
 from src.tools.run_geo_eval import capture_time_from_record, normalize_metadata_records
 from src.core.logic.config import DetectorConfig, FusionConfig, GeoConfig, HeimdallConfig, ScoreConfig, VerificationConfig
 from src.core.logic.config import load_config
@@ -70,6 +76,29 @@ def test_predict_latlon_retrieval_uses_provider_output() -> None:
     assert pred == (48.8566, 2.3522)
     assert score == 0.91
     assert err is None
+
+
+def test_candidate_oracle_stats_reports_best_returned_rank() -> None:
+    candidates = [
+        GeoCandidate(latitude=48.9000, longitude=2.3500, retrieval_score=0.99, match_id="far"),
+        GeoCandidate(latitude=48.8567, longitude=2.3522, retrieval_score=0.72, match_id="near"),
+    ]
+
+    stats = candidate_oracle_stats(candidates, gt_lat=48.8566, gt_lon=2.3522)
+
+    assert stats["candidate_count"] == 2
+    assert stats["candidate_oracle_rank"] == 2
+    assert stats["candidate_oracle_min_km"] < 0.02
+
+
+def test_candidate_oracle_stats_handles_empty_candidates() -> None:
+    stats = candidate_oracle_stats([], gt_lat=48.8566, gt_lon=2.3522)
+
+    assert stats == {
+        "candidate_oracle_min_km": None,
+        "candidate_oracle_rank": None,
+        "candidate_count": 0,
+    }
 
 
 def test_normalize_metadata_records_accepts_realistic_pair_columns() -> None:

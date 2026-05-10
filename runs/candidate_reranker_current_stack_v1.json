@@ -1,0 +1,117 @@
+{
+  "version": 1,
+  "feature_names": [
+    "bias",
+    "rank_frac",
+    "retrieval_unit",
+    "retrieval_gap_top",
+    "retrieval_gap_prev",
+    "support_1km",
+    "support_3km",
+    "support_8km",
+    "support_20km",
+    "dist_top_km",
+    "dist_centroid_km",
+    "source_retrieval",
+    "source_consensus",
+    "source_geoclip"
+  ],
+  "weights": [
+    0.0,
+    -0.0016656000674780127,
+    0.0007577652739305283,
+    -0.0035924755258544493,
+    -0.0006177032774956432,
+    -0.004260839833370769,
+    0.007968501223226052,
+    -0.00485848440861605,
+    0.01070288160419991,
+    -0.0174193237290998,
+    0.02500565059638977,
+    0.0016929206568084474,
+    -0.0016929206568086202,
+    0.0
+  ],
+  "intercept": 0.012842849871928337,
+  "means": [
+    1.0,
+    0.5,
+    0.7308863246897888,
+    0.2690054725921886,
+    0.027230951594840003,
+    0.6291188230843887,
+    0.7726389414828958,
+    0.9268689897093887,
+    0.9746978930007005,
+    2.8943304146409203,
+    2.7872443455404383,
+    0.96,
+    0.04,
+    0.0
+  ],
+  "scales": [
+    1.0,
+    0.30046260628866667,
+    0.21401791068335682,
+    0.21401093606367758,
+    0.052765415522310316,
+    0.2730326065533405,
+    0.2206354038801544,
+    0.10887320144946765,
+    0.027555802257142614,
+    2.3122894002510974,
+    1.9685865519525028,
+    0.1959591794226478,
+    0.1959591794226478,
+    1.0
+  ],
+  "activation": "linear_clamp",
+  "output_floor": 0.03,
+  "output_ceiling": 1.0,
+  "training_report": {
+    "train": {
+      "metadata": "data\\paris_realistic_v1_combined\\splits_strict\\train_pairs.csv",
+      "images_dir": "data\\paris_realistic_v1\\street_combined",
+      "records_seen": 480,
+      "missing_files": 0,
+      "null_candidates": 0,
+      "candidate_rows": 12000,
+      "oracle_mean_km": 5.798922029969952
+    },
+    "target_sigma_km": 1.5,
+    "ridge": 10.0,
+    "fusion_weight": 1.2,
+    "temperature": 0.22,
+    "eval": {
+      "evaluated": 80,
+      "null_candidates": 0,
+      "base": {
+        "mean_km": 4.572191930242358,
+        "median_km": 4.636727255388806,
+        "p90_km": 5.9160853242621405,
+        "within_1km_pct": 0.0,
+        "within_2km_pct": 0.0,
+        "within_5km_pct": 67.5,
+        "within_10km_pct": 100.0
+      },
+      "reranked": {
+        "mean_km": 4.572191930242358,
+        "median_km": 4.636727255388806,
+        "p90_km": 5.9160853242621405,
+        "within_1km_pct": 0.0,
+        "within_2km_pct": 0.0,
+        "within_5km_pct": 67.5,
+        "within_10km_pct": 100.0
+      },
+      "oracle": {
+        "mean_km": 2.352768457880365,
+        "median_km": 2.1638482925094125,
+        "p90_km": 4.006325989074528,
+        "within_1km_pct": 21.25,
+        "within_2km_pct": 43.75,
+        "within_5km_pct": 100.0,
+        "within_10km_pct": 100.0
+      }
+    }
+  }
+}
