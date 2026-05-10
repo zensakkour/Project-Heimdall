@@ -265,8 +265,9 @@ The May 2026 runtime branch also tested a second-stage candidate reranker becaus
 
 1. A lightweight learned candidate-feature scorer using rank, normalized score, source type, local support density, and distance-to-centroid features.
 2. A local visual verifier over the top retrieved aerial chips, using the existing dual local feature stack to rescore visually compatible chips before fusion.
+3. A frozen-CLIP visual pair reranker using query/candidate embedding interactions, retrieval rank, retrieval score, and source flags.
 
-The learned feature scorer was kept as infrastructure but not enabled by default because the first leakage-safe probe did not move held-out top-rank metrics. The local visual verifier did improve the full runtime fusion path, so the Paris runtime profile now enables a limited top-12 local match pass.
+The learned feature scorer was kept as infrastructure but not enabled by default because the first leakage-safe probe did not move held-out top-rank metrics. The local visual verifier did improve the full runtime fusion path, so the Paris runtime profile now enables a limited top-12 local match pass. The later frozen-CLIP visual pair reranker is also kept as infrastructure but rejected for serving: on the fixed `80`-sample strict probe, every positive reranker fusion weight regressed the base retrieval metrics, and the best selected weight was `0.0`.
 
 #### 4.6.9 Leakage-Safe Spatial Splitting
 The realistic Paris dataset is split by geographic cells rather than random rows. Let each pair be assigned to a spatial cell:
@@ -355,6 +356,8 @@ The project reports multiple radii because a method can improve medium-range loc
 - A larger 480-query hard-negative pass exposed an overconcentration failure: naive training from identity regressed to `21.6922 km` mean, and v1-initialized training on the full concentrated set regressed to `5.3267 km` mean.
 - The current branch adds diversity-capped hard-negative mining and initialized projection fine-tuning. The best completed cap-16 run (`152` triplets, `49` unique negative chips) improves the retrieval-dominant baseline to `4.5791 km` mean, `5.9161 km` p90, `67.50% <=5 km`, and `100.00% <=10 km`.
 - Interpretation: this is a measured incremental model improvement, not a solved close-range model. The important research finding is that repeated-reference concentration is now a bottleneck; the next step must create broader near-field hard negatives or adapt the visual representation itself.
+- The latest candidate-cloud consensus pass promotes `retrieval_consensus_top_n=25`, `retrieval_consensus_radius_km=2.0`, and `retrieval_consensus_score_power=0.0` after a fixed `80`-sample strict-probe improvement to `3.9904 km` mean, `4.0641 km` median, `5.7860 km` p90, `8.75% <=2 km`, and `76.25% <=5 km`.
+- A frozen-CLIP visual pair reranker and graph-support reranking were both rejected in this same cycle. The visual pair reranker selected `0.0` as its best fusion weight, while the graph-support tuner estimate did not reproduce in the real evaluator path.
 
 ## 6. Experimental Protocol
 ### 6.1 Datasets and Artifacts Used in This Document
@@ -539,6 +542,26 @@ Observation:
   - best `within_1km_pct`: `11.11` (`kde_refine_c_w1_v1`, +0.55 over control),
   - best `within_2km_pct`: `20.00` (`kde_refine_d_w2_v1`, +0.56 over control),
   - best `within_5km_pct`: `38.33` (`kde_refine_d_w2_v1`, +1.11 over control).
+
+### 7.8.1 Candidate-Cloud Consensus Recheck on the Active Realistic Index (n=80)
+Artifacts:
+- `runs/visual_pair_reranker_v1.report.json`
+- `runs/tune_retrieval_geo_cloud_probe80_v1.json`
+- `runs/geo_eval_graph_rerank_probe80_v1.json`
+- `runs/geo_eval_graph_rerank_full_probe80_v1.json`
+- `runs/geo_eval_consensus_probe80_v1.json`
+
+| Variant | mean_km | median_km | p90_km | within_2km_pct | within_5km_pct | Decision |
+|---|---:|---:|---:|---:|---:|---|
+| Previous promoted full profile | 4.4793 | 4.6127 | 5.7859 | 0.00 | 70.00 | replaced |
+| Raw retrieval-only baseline | 4.5748 | 4.6205 | 5.9087 | n/a | 66.25 | diagnostic |
+| Graph-support real evaluator path | 4.5127 | 4.5821 | 5.9781 | 1.25 | 67.50 | rejected |
+| Candidate-cloud consensus (`top_n=25`, `radius=2km`, `score_power=0`) | 3.9904 | 4.0641 | 5.7860 | 8.75 | 76.25 | promoted |
+
+Observation:
+- The visual pair reranker was rejected because the best selected fusion weight was `0.0`; positive reranker weights regressed `within_5km_pct` to `58.75-62.50`.
+- The graph-support tuner estimate (`mean 3.6347`, `within_5km_pct 90.00`) did not reproduce through the real evaluator path, so tuner wins must still be validated end to end before promotion.
+- Candidate-cloud consensus produced the best verified active-profile result in this cycle. It improves top-1 selection without changing the encoder, but the remaining oracle gap means the larger research problem is still visual ranking and representation learning.
 
 ### 7.9 Dual Local Geometric Reranker Upgrade (n=180)
 Artifacts:
@@ -1229,6 +1252,11 @@ To test the source-specific projection option, I added candidate-source filters 
 - `runs/retrieval_oracle_candidate_triplets_realistic_source_train240_v1_summary.json`
 - `runs/retrieval_realistic_source_projection_v1.report.json`
 - `runs/geo_eval_realistic_source_projection_v1_retrieval_only_80.json`
+- `runs/visual_pair_reranker_v1.report.json`
+- `runs/tune_retrieval_geo_cloud_probe80_v1.json`
+- `runs/geo_eval_graph_rerank_probe80_v1.json`
+- `runs/geo_eval_graph_rerank_full_probe80_v1.json`
+- `runs/geo_eval_consensus_probe80_v1.json`
 - `runs/geo_impact_latest.json`
 - `runs/geo_impact_latest.md`
 
