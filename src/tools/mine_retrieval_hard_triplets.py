@@ -57,17 +57,32 @@ def mine_triplets_for_query(
     negative_max_gt_distance_km: float,
     max_positives: int,
     max_negatives: int,
+    positive_source: str = "reference",
+    positive_candidate_source_filter: Sequence[str] = (),
+    negative_candidate_source_filter: Sequence[str] = (),
 ) -> Optional[dict]:
-    positives = _nearest_reference_items(
-        reference_records,
-        gt_latitude,
-        gt_longitude,
-        max_radius_km=max(0.0, float(positive_radius_km)),
-        fallback_top_k=max(0, int(positive_fallback_top_k)),
-        limit=max(1, int(max_positives)),
-    )
+    positive_candidates = _filter_candidates_by_source(candidates, positive_candidate_source_filter)
+    negative_candidates = _filter_candidates_by_source(candidates, negative_candidate_source_filter)
+    if str(positive_source).strip().lower() == "closest_candidate":
+        positives = _retrieval_positive_items(
+            positive_candidates,
+            gt_latitude,
+            gt_longitude,
+            max_radius_km=max(0.0, float(positive_radius_km)),
+            fallback_top_k=max(0, int(positive_fallback_top_k)),
+            limit=max(1, int(max_positives)),
+        )
+    else:
+        positives = _nearest_reference_items(
+            reference_records,
+            gt_latitude,
+            gt_longitude,
+            max_radius_km=max(0.0, float(positive_radius_km)),
+            fallback_top_k=max(0, int(positive_fallback_top_k)),
+            limit=max(1, int(max_positives)),
+        )
     negatives = _retrieval_negative_items(
-        candidates,
+        negative_candidates,
         gt_latitude,
         gt_longitude,
         min_distance_km=max(0.0, float(negative_min_gt_distance_km)),
@@ -92,6 +107,7 @@ def mine_triplets_for_query(
         "max_retrieved_negative_gt_km": farthest_neg,
         "hardest_negative_retrieval_score": hardest_score,
         "mined_from": "retrieval_candidates",
+        "positive_source": str(positive_source).strip().lower() or "reference",
     }
 
 
@@ -110,6 +126,9 @@ def mine_retrieval_triplets(
     max_positives: int,
     max_negatives: int,
     max_negative_reuse: int = 0,
+    positive_source: str = "reference",
+    positive_candidate_source_filter: Sequence[str] = (),
+    negative_candidate_source_filter: Sequence[str] = (),
 ) -> tuple[list[dict], dict]:
     ordered = list(records)
     random.Random(int(seed)).shuffle(ordered)
@@ -150,6 +169,9 @@ def mine_retrieval_triplets(
             negative_max_gt_distance_km=negative_max_gt_distance_km,
             max_positives=max_positives,
             max_negatives=max_negatives,
+            positive_source=positive_source,
+            positive_candidate_source_filter=positive_candidate_source_filter,
+            negative_candidate_source_filter=negative_candidate_source_filter,
         )
         if triplet is None:
             no_triplet += 1
@@ -206,11 +228,38 @@ def mine_retrieval_triplets(
         "max_positives": int(max_positives),
         "max_negatives": int(max_negatives),
         "max_negative_reuse": int(max_negative_reuse),
+        "positive_source": str(positive_source).strip().lower() or "reference",
+        "positive_candidate_source_filter": list(positive_candidate_source_filter),
+        "negative_candidate_source_filter": list(negative_candidate_source_filter),
         "unique_positive_paths": len(positive_paths),
         "unique_negative_paths": len(negative_paths),
         "top_negative_reuse": [{"path": path, "count": count} for path, count in top_negative_reuse],
     }
     return triplets, summary
+
+
+def _filter_candidates_by_source(
+    candidates: Sequence[GeoCandidate],
+    filters: Sequence[str],
+) -> list[GeoCandidate]:
+    needles = [str(item).strip().lower() for item in filters if str(item).strip()]
+    if not needles:
+        return list(candidates)
+    out: list[GeoCandidate] = []
+    for cand in candidates:
+        haystack = " ".join(
+            [
+                str(cand.match_id or ""),
+                str(cand.image_path or ""),
+            ]
+        ).lower()
+        if any(needle in haystack for needle in needles):
+            out.append(cand)
+    return out
+
+
+def _parse_filter_list(raw: str) -> list[str]:
+    return [item.strip() for item in str(raw or "").split(",") if item.strip()]
 
 
 def _nearest_reference_items(
@@ -242,6 +291,48 @@ def _nearest_reference_items(
                 "path": Path(rec.path).as_posix(),
                 "distance_to_gt_km": float(dist),
                 "source": "gt_nearby_reference",
+            }
+        )
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _retrieval_positive_items(
+    candidates: Sequence[GeoCandidate],
+    gt_lat: float,
+    gt_lon: float,
+    *,
+    max_radius_km: float,
+    fallback_top_k: int,
+    limit: int,
+) -> list[dict]:
+    ranked = []
+    for rank, cand in enumerate(candidates, start=1):
+        path = str(cand.image_path or "").strip()
+        if not path:
+            continue
+        dist = haversine_km(gt_lat, gt_lon, cand.latitude, cand.longitude)
+        ranked.append((dist, rank, cand, path))
+    ranked.sort(key=lambda item: item[0])
+    selected = [item for item in ranked if item[0] <= max_radius_km]
+    if not selected and fallback_top_k > 0:
+        selected = ranked[: int(fallback_top_k)]
+    out = []
+    seen = set()
+    for dist, rank, cand, path in selected:
+        key = Path(path).name
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(
+            {
+                "path": _reference_style_path(path),
+                "distance_to_gt_km": float(dist),
+                "retrieval_rank": int(rank),
+                "retrieval_score": float(cand.retrieval_score),
+                "match_id": cand.match_id,
+                "source": "retrieved_closest_candidate",
             }
         )
         if len(out) >= limit:
@@ -346,10 +437,26 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--max-positives", type=int, default=4)
     parser.add_argument("--max-negatives", type=int, default=12)
     parser.add_argument(
+        "--positive-source",
+        choices=["reference", "closest_candidate"],
+        default="reference",
+        help="Use either nearby reference metadata positives or the closest returned retrieval candidate as the positive.",
+    )
+    parser.add_argument(
         "--max-negative-reuse",
         type=int,
         default=0,
         help="Optional cap on how often the same hard-negative reference chip can appear across the mined set.",
+    )
+    parser.add_argument(
+        "--positive-candidate-source-filter",
+        default="",
+        help="Comma-separated substrings that positive retrieval candidates must match in match_id or image_path.",
+    )
+    parser.add_argument(
+        "--negative-candidate-source-filter",
+        default="",
+        help="Comma-separated substrings that negative retrieval candidates must match in match_id or image_path.",
     )
     args = parser.parse_args(argv)
 
@@ -379,6 +486,9 @@ def main(argv: Optional[list[str]] = None) -> int:
         max_positives=int(args.max_positives),
         max_negatives=int(args.max_negatives),
         max_negative_reuse=int(args.max_negative_reuse),
+        positive_source=str(args.positive_source),
+        positive_candidate_source_filter=_parse_filter_list(args.positive_candidate_source_filter),
+        negative_candidate_source_filter=_parse_filter_list(args.negative_candidate_source_filter),
     )
     out_path = Path(args.output)
     written = write_jsonl(out_path, triplets)

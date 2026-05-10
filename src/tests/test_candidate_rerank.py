@@ -12,6 +12,7 @@ from src.core.logic.candidate_rerank import (
 from src.core.logic.config import FusionConfig
 from src.core.logic.fusion import fuse_candidates
 from src.core.logic.types import GeoCandidate
+from src.tools.train_geo_candidate_reranker import _fit_listwise_softmax
 
 
 def test_candidate_features_include_spatial_support() -> None:
@@ -44,6 +45,48 @@ def test_candidate_reranker_can_promote_supported_lower_rank_candidate() -> None
 
     assert likes[1] > likes[0]
     assert likes[2] > likes[0]
+
+
+def test_candidate_reranker_exp_activation_normalizes_peak() -> None:
+    candidates = [
+        GeoCandidate(48.8566, 2.3522, 0.9, match_id="retrieval:a"),
+        GeoCandidate(48.8570, 2.3528, 0.7, match_id="retrieval:b"),
+    ]
+    model = CandidateRerankModel(
+        feature_names=("rank_frac",),
+        weights=(-2.0,),
+        intercept=0.0,
+        activation="exp",
+    )
+
+    likes = candidate_rerank_likelihoods(candidates, model)
+
+    assert likes[0] == 1.0
+    assert 0.0 < likes[1] < likes[0]
+
+
+def test_listwise_reranker_learns_group_winner() -> None:
+    model = _fit_listwise_softmax(
+        [
+            [[1.0, 0.0], [0.0, 1.0]],
+            [[1.0, 0.0], [0.0, 1.0]],
+        ],
+        [[0.1, 5.0], [0.2, 4.0]],
+        target_sigma_km=1.0,
+        learning_rate=0.1,
+        epochs=80,
+        l2=0.0,
+        seed=42,
+    )
+    candidates = [
+        GeoCandidate(48.8566, 2.3522, 0.5, match_id="retrieval:good"),
+        GeoCandidate(48.8600, 2.3600, 0.5, match_id="retrieval:bad"),
+    ]
+
+    likes = candidate_rerank_likelihoods(candidates, model)
+
+    assert model.activation == "exp"
+    assert likes[0] > likes[1]
 
 
 def test_fusion_applies_candidate_reranker_model() -> None:

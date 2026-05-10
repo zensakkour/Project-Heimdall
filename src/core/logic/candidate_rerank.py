@@ -164,6 +164,8 @@ def model_to_json(model: CandidateRerankModel, extra: Optional[Mapping[str, obje
 def _activate(value: float, activation: str, floor: float, ceiling: float) -> float:
     lo = max(1e-6, min(1.0, float(floor)))
     hi = max(lo, min(1.0, float(ceiling)))
+    if activation == "exp":
+        return math.exp(max(-60.0, min(60.0, value)))
     if activation == "linear_clamp":
         return max(lo, min(hi, value))
     prob = 1.0 / (1.0 + math.exp(-max(-60.0, min(60.0, value))))

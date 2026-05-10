@@ -1,0 +1,120 @@
+{
+  "triplets_loaded": 104,
+  "triplets_used": 104,
+  "street_images_dir": "data\\paris_realistic_v1\\street_combined",
+  "aerial_index": "data\\geo_index\\spacenet_paris_chips_openai_clip_vit_large_patch14_proj_trainref_v2_mild.npz",
+  "embedding_model": "openai/clip-vit-large-patch14",
+  "init_projection": "runs/retrieval_hardneg_crossview_projection_v4_cap16_initv1.npz",
+  "dataset_stats": {
+    "triplets_used": 104,
+    "queries_embedded": 104,
+    "references_used": 33,
+    "embedding_dim": 768,
+    "dropped_missing": 0,
+    "triplets_with_explicit_weight": 104,
+    "sample_weight_mean": 1.985704150400694,
+    "sample_weight_max": 2.6306078781677567
+  },
+  "training": {
+    "device": "cpu",
+    "epochs": 8,
+    "batch_size": 16,
+    "learning_rate": 8e-05,
+    "weight_decay": 0.0001,
+    "margin": 0.06,
+    "temperature": 0.07,
+    "ce_weight": 0.3,
+    "initialized_from_projection": true,
+    "elapsed_sec": 0.8052419999148697,
+    "history": [
+      {
+        "epoch": 1,
+        "train_loss_mean": 0.43699322428022114,
+        "eval": {
+          "count": 104,
+          "mean_gap": -0.00020828184026938217,
+          "triplet_satisfied_pct": 0.0,
+          "weighted_triplet_satisfied_pct": 0.0,
+          "weighted_hard_triplet_loss": 0.06089345728017434
+        }
+      },
+      {
+        "epoch": 2,
+        "train_loss_mean": 0.3886646883828299,
+        "eval": {
+          "count": 104,
+          "mean_gap": 0.0067085936092413385,
+          "triplet_satisfied_pct": 0.0,
+          "weighted_triplet_satisfied_pct": 0.0,
+          "weighted_hard_triplet_loss": 0.05411745785572329
+        }
+      },
+      {
+        "epoch": 3,
+        "train_loss_mean": 0.37889398847307476,
+        "eval": {
+          "count": 104,
+          "mean_gap": 0.0128605322769055,
+          "triplet_satisfied_pct": 1.9230769230769231,
+          "weighted_triplet_satisfied_pct": 1.7948852907063741,
+          "weighted_hard_triplet_loss": 0.048212832419776204
+        }
+      },
+      {
+        "epoch": 4,
+        "train_loss_mean": 0.35251613174165997,
+        "eval": {
+          "count": 104,
+          "mean_gap": 0.018302350376661006,
+          "triplet_satisfied_pct": 9.615384615384615,
+          "weighted_triplet_satisfied_pct": 9.180289644308548,
+          "weighted_hard_triplet_loss": 0.043338196699493216
+        }
+      },
+      {
+        "epoch": 5,
+        "train_loss_mean": 0.3454293502228601,
+        "eval": {
+          "count": 104,
+          "mean_gap": 0.023379437911968965,
+          "triplet_satisfied_pct": 17.307692307692307,
+          "weighted_triplet_satisfied_pct": 16.432554266547022,
+          "weighted_hard_triplet_loss": 0.039954301685967974
+        }
+      },
+      {
+        "epoch": 6,
+        "train_loss_mean": 0.31271676293441225,
+        "eval": {
+          "count": 104,
+          "mean_gap": 0.028002904584774606,
+          "triplet_satisfied_pct": 22.115384615384617,
+          "weighted_triplet_satisfied_pct": 21.044869611401733,
+          "weighted_hard_triplet_loss": 0.03708594652665455
+        }
+      },
+      {
+        "epoch": 7,
+        "train_loss_mean": 0.2994035354682377,
+        "eval": {
+          "count": 104,
+          "mean_gap": 0.03214222106796045,
+          "triplet_satisfied_pct": 25.0,
+          "weighted_triplet_satisfied_pct": 23.7537509919992,
+          "weighted_hard_triplet_loss": 0.0347528481472403
+        }
+      },
+      {
+        "epoch": 8,
+        "train_loss_mean": 0.2920075101511819,
+        "eval": {
+          "count": 104,
+          "mean_gap": 0.03599167787111723,
+          "triplet_satisfied_pct": 32.69230769230769,
+          "weighted_triplet_satisfied_pct": 30.846870001119356,
+          "weighted_hard_triplet_loss": 0.032981497369426925
+        }
+      }
+    ]
+  }
+}

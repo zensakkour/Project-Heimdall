@@ -2535,3 +2535,82 @@ Do not delete or edit past entries. Append new work at the end.
   - `runs/geo_eval_hardneg_projection_v4_cap16_initv1_80.json`
   - `runs/retrieval_hard_triplets_train480_diverse_v3_summary.json`
 - Decision: Keep on this branch and push. This is a measured incremental model improvement, not the requested breakthrough. The important finding is that repeated-reference concentration is now a known bottleneck; the next real step should expand diverse near-field mistakes rather than train longer on the same failure chips.
+
+## 2026-05-10 Candidate Oracle Rank Diagnostic
+- Hypothesis: The current hard-negative projection may already retrieve near-correct locations, but rank them below visually similar wrong Paris candidates.
+- Change:
+  - Added candidate-oracle diagnostics to `src.tools.run_geo_eval`, including closest returned candidate distance, closest returned candidate rank, candidate count, and aggregate oracle metrics.
+  - Added focused tests for oracle-rank extraction.
+  - Updated `research.md` and `src/docs/RESEARCH_PAPER.md` with the candidate-oracle conclusion.
+- Validation commands:
+  - `$env:TMP='c:\Users\zen\Desktop\Projects\Project-Heimdall\.tmp'; $env:TEMP=$env:TMP; .\.venv\Scripts\python.exe -m pytest src\tests\test_run_geo_eval_retrieval_provider.py -q`
+  - `.\.venv\Scripts\python.exe -m src.tools.run_geo_eval --config src/config/paris.json --images-dir data/paris_realistic_v1/street_combined --metadata data/paris_realistic_v1_combined/splits_strict/test_pairs_probe240.csv --limit 80 --seed 42 --output runs/geo_eval_oracle_rank_diagnostics_80.json --allow-scope-mismatch --diag-samples 10`
+- Metrics on the same `80` strict probe samples:
+  - current serving prediction: `mean 4.5791`, `median 4.6367`, `p90 5.9161`, `<=2km 0.00%`, `<=5km 67.50%`, `<=10km 100.00%`
+  - returned top-25 oracle: `mean 2.3528`, `median 2.1638`, `p90 4.0063`, `<=1km 21.25%`, `<=2km 43.75%`, `<=5km 100.00%`
+  - mean rank of closest returned candidate: `15.125`
+  - rejected graph-support real pipeline test: `mean 4.7027`, `p90 6.5027`, `<=2km 2.50%`, `<=5km 67.50%`
+- Decision: Keep and push diagnostics, but do not promote graph support or the existing learned candidate reranker. The next bottleneck is visual ranking inside the returned shortlist, not candidate coverage or pure spatial clustering.
+
+## 2026-05-10 Oracle-Candidate Ranking Experiments
+- Hypothesis: If the closest returned candidate is already present, direct listwise ranking or oracle-candidate triplets should move it toward rank 1.
+- Change:
+  - Added `exp` activation support to `CandidateRerankModel`.
+  - Added `--fit-mode listwise` to `src.tools.train_geo_candidate_reranker`.
+  - Added `--positive-source closest_candidate` to `src.tools.mine_retrieval_hard_triplets` so the positive can be the closest returned retrieval candidate instead of only the nearest reference metadata chip.
+  - Added focused tests for listwise reranker training and closest-candidate positive mining.
+- Validation commands:
+  - `New-Item -ItemType Directory -Force .tmp | Out-Null; $env:TMP=(Resolve-Path .tmp).Path; $env:TEMP=$env:TMP; .\.venv\Scripts\python.exe -m pytest src\tests\test_candidate_rerank.py src\tests\test_mine_retrieval_hard_triplets.py -q`
+  - `.\.venv\Scripts\python.exe -m src.tools.train_geo_candidate_reranker --config src/config/paris.json --images-dir data/paris_realistic_v1/street_combined --metadata data/paris_realistic_v1_combined/splits_strict/train_pairs.csv --eval-metadata data/paris_realistic_v1_combined/splits_strict/test_pairs_probe240.csv --limit 240 --eval-limit 80 --seed 42 --fit-mode listwise --target-sigma-km 1.5 --listwise-epochs 40 --listwise-learning-rate 0.02 --listwise-l2 0.001 --fusion-weight 1.5 --temperature 0.22 --output runs/candidate_reranker_listwise_v1.json --report-output runs/candidate_reranker_listwise_v1.report.json`
+  - `.\.venv\Scripts\python.exe -m src.tools.mine_retrieval_hard_triplets --config src/config/paris.json --images-dir data/paris_realistic_v1/street_combined --metadata data/paris_realistic_v1_combined/splits_strict/train_pairs.csv --reference-metadata data/spacenet_paris/metadata.csv --limit 240 --seed 42 --positive-source closest_candidate --positive-radius-km 2.0 --positive-fallback-top-k 1 --negative-min-gt-distance-km 0.75 --negative-max-gt-distance-km 18.0 --max-positives 1 --max-negatives 8 --max-negative-reuse 16 --output runs/retrieval_oracle_candidate_triplets_train240_v1.jsonl --summary-output runs/retrieval_oracle_candidate_triplets_train240_v1_summary.json`
+- Metrics:
+  - listwise reranker full fusion test: `mean 5.3499`, `p90 6.7075`, `<=5km 42.50%`; rejected.
+  - oracle-candidate triplet mining: `104` triplets from `240` records, but only `8` unique positive chips; this is too concentrated.
+  - oracle-candidate projection full serving test: `mean 5.0353`, `median 5.0583`, `p90 6.3590`, `<=5km 50.00%`; rejected.
+  - oracle-candidate projection improved closest-candidate rank (`15.125` -> `10.375`) but worsened oracle `<=2km` (`43.75%` -> `30.00%`), so it damaged candidate coverage while improving one ranking diagnostic.
+- Decision: Keep the tooling and artifacts as research evidence, but do not promote either model. The fix is not more pressure on the same tiny positive pool; the next step is to increase diverse true-positive candidates in the retrieval index/training set.
+
+## 2026-05-10 Realistic Aerial Index Promotion
+- Hypothesis: The oracle-candidate triplets failed because the shortlist positive pool was too concentrated. Adding the full realistic IGN aerial index should increase diverse true positives before another ranking loss is attempted.
+- Change:
+  - Added `data/paris_realistic_v1_combined/indices/aerial_clip_index.npz` to the active Paris retrieval profile.
+  - Kept the SpaceNet retrieval indices on `runs/retrieval_hardneg_crossview_projection_v4_cap16_initv1.npz`.
+  - Routed the realistic aerial index through raw CLIP by setting the third `retrieval_index_projection_paths` entry to `null`.
+  - Set `retrieval_per_index_top_k=25` so the realistic index contributes a full candidate shortlist instead of only competing after global top-k truncation.
+- Validation commands:
+  - `.\.venv\Scripts\python.exe -m src.tools.run_geo_eval --config runs/config_paris_with_realistic_aerial_index_v1.json --images-dir data/paris_realistic_v1/street_combined --metadata data/paris_realistic_v1_combined/splits_strict/test_pairs_probe240.csv --limit 80 --seed 42 --output runs/geo_eval_realistic_aerial_index_v1_80.json --allow-scope-mismatch --diag-samples 10`
+  - `.\.venv\Scripts\python.exe -m src.tools.run_geo_eval --config runs/fusion_sweep_configs/realistic_rrf_w050_top25.json --images-dir data/paris_realistic_v1/street_combined --metadata data/paris_realistic_v1_combined/splits_strict/test_pairs_probe240.csv --limit 80 --seed 42 --output runs/geo_eval_realistic_rrf_w050_top25_full_80.json --allow-scope-mismatch --diag-samples 10`
+  - `.\.venv\Scripts\python.exe -m src.tools.run_geo_eval --config runs/fusion_sweep_configs/realistic_weighted_w050_top25.json --images-dir data/paris_realistic_v1/street_combined --metadata data/paris_realistic_v1_combined/splits_strict/test_pairs_probe240.csv --limit 80 --seed 42 --retrieval-only --output runs/geo_eval_realistic_weighted_w050_top25_retrieval_only_80.json --allow-scope-mismatch --diag-samples 5`
+- Metrics on the same `80` strict probe samples:
+  - previous serving profile: `mean 4.5791`, `median 4.6367`, `p90 5.9161`, `<=2km 0.00%`, `<=5km 67.50%`; oracle `mean 2.3528`, `<=2km 43.75%`, best-rank mean `15.125`
+  - realistic aerial index profile: `mean 4.4793`, `median 4.6127`, `p90 5.7859`, `<=2km 0.00%`, `<=5km 70.00%`; oracle `mean 1.6715`, `<=2km 66.25%`, best-rank mean `18.25`
+  - lighter rank-fusion weighting: `mean 4.5026`, `median 4.6306`, `p90 5.8956`, `<=2km 3.75%`, `<=5km 66.25%`; oracle `mean 1.5891`, `<=2km 66.25%`, best-rank mean `14.5375`
+  - score-based weighted fusion was rejected despite `<=2km 8.75%` in retrieval-only because it regressed broad ranking (`mean 5.2260`, `p90 7.9741`, `<=5km 45.00%`).
+- Decision: Promote the realistic aerial index profile because it improves mean, median, p90, `<=5km`, and oracle coverage. Do not promote the lighter weighting yet; it helps close-range rank but gives up too much `<=5km` on the full pipeline. The new bottleneck is sharper rank selection from a much better shortlist, not candidate availability.
+
+## 2026-05-10 Post-Promotion Positive Pool Check
+- Hypothesis: If the realistic aerial index really fixed candidate diversity, oracle-candidate mining should produce many more unique near positives than the pre-index run.
+- Validation commands:
+  - `.\.venv\Scripts\python.exe -m src.tools.mine_retrieval_hard_triplets --config src/config/paris.json --images-dir data/paris_realistic_v1/street_combined --metadata data/paris_realistic_v1_combined/splits_strict/train_pairs.csv --reference-metadata data/spacenet_paris/metadata.csv --limit 240 --seed 42 --positive-source closest_candidate --positive-radius-km 2.0 --positive-fallback-top-k 0 --negative-min-gt-distance-km 0.75 --negative-max-gt-distance-km 18.0 --max-positives 1 --max-negatives 8 --max-negative-reuse 16 --output runs/retrieval_oracle_candidate_triplets_realistic_index_train240_nearonly_v1.jsonl --summary-output runs/retrieval_oracle_candidate_triplets_realistic_index_train240_nearonly_v1_summary.json`
+  - `.\.venv\Scripts\python.exe -m src.tools.train_geo_candidate_reranker --config src/config/paris.json --images-dir data/paris_realistic_v1/street_combined --metadata data/paris_realistic_v1_combined/splits_strict/train_pairs.csv --eval-metadata data/paris_realistic_v1_combined/splits_strict/test_pairs_probe240.csv --limit 240 --eval-limit 80 --seed 42 --fit-mode listwise --target-sigma-km 1.5 --listwise-epochs 60 --listwise-learning-rate 0.02 --listwise-l2 0.001 --fusion-weight 1.5 --temperature 0.22 --output runs/candidate_reranker_realistic_index_listwise_v1.json --report-output runs/candidate_reranker_realistic_index_listwise_v1.report.json`
+- Results:
+  - pre-index oracle-positive mining: `104` triplets, only `8` unique positive chips
+  - post-index strict near-only mining: `70` triplets, `46` unique positive paths, `67/70` positives from the realistic aerial index, mean positive distance `1.0336 km`, mean positive rank `22.3`
+  - listwise feature reranker on the improved shortlist regressed retrieval-only eval: base `mean 4.5748`, `<=5km 66.25%`; reranked `mean 4.8177`, `<=5km 60.00%`
+- Decision: Keep the mining artifacts and reject the feature-only reranker. The breakthrough is the new diverse near-positive pool; the next model step needs visual candidate-pair learning or source-specific projection training, not another aggregate-feature reranker.
+
+## 2026-05-10 Source-Consistent Realistic Projection Test
+- Hypothesis: The previous oracle-positive projection was invalid for the new mixed shortlist because positives and negatives came from different reference spaces. Training a projection only on realistic aerial-index positives and negatives should be more coherent.
+- Change:
+  - Added `--positive-candidate-source-filter` and `--negative-candidate-source-filter` to `src.tools.mine_retrieval_hard_triplets`.
+  - Added test coverage for candidate-source filtering.
+  - Mined a realistic-only triplet set with both positives and negatives constrained to `aerial_clip_index`.
+- Validation commands:
+  - `.\.venv\Scripts\python.exe -m pytest src\tests\test_mine_retrieval_hard_triplets.py -q`
+  - `.\.venv\Scripts\python.exe -m src.tools.mine_retrieval_hard_triplets --config src/config/paris.json --images-dir data/paris_realistic_v1/street_combined --metadata data/paris_realistic_v1_combined/splits_strict/train_pairs.csv --reference-metadata data/spacenet_paris/metadata.csv --limit 240 --seed 42 --positive-source closest_candidate --positive-radius-km 2.0 --positive-fallback-top-k 0 --positive-candidate-source-filter aerial_clip_index --negative-candidate-source-filter aerial_clip_index --negative-min-gt-distance-km 2.0 --negative-max-gt-distance-km 18.0 --max-positives 1 --max-negatives 8 --max-negative-reuse 16 --output runs/retrieval_oracle_candidate_triplets_realistic_source_train240_v1.jsonl --summary-output runs/retrieval_oracle_candidate_triplets_realistic_source_train240_v1_summary.json`
+  - `.\.venv\Scripts\python.exe -m src.tools.train_crossview_projection --triplets runs/retrieval_oracle_candidate_triplets_realistic_source_train240_v1.jsonl --aerial-index data/paris_realistic_v1_combined/indices/aerial_clip_index.npz --street-images-dir data/paris_realistic_v1/street_combined --output runs/retrieval_realistic_source_projection_v1.npz --report-output runs/retrieval_realistic_source_projection_v1.report.json --embedding-model openai/clip-vit-large-patch14 --max-triplets 0 --epochs 24 --batch-size 16 --learning-rate 3e-4 --weight-decay 1e-4 --margin 0.08 --temperature 0.07 --ce-weight 0.3 --sample-weight-mode triplet_weight --sample-weight-max 3.0 --seed 42 --device auto`
+- Results:
+  - realistic-only mining produced `75` triplets, `45` unique positives, and `98` unique negatives.
+  - projection training used all `75` triplets and `128` realistic aerial references.
+  - held-out retrieval-only eval regressed versus promoted raw-CLIP realistic source: `mean 4.5748 -> 4.6198`, `<=5km 66.25% -> 63.75%`, oracle `<=2km 66.25% -> 45.00%`.
+- Decision: Keep the source-filtered miner; reject `runs/retrieval_realistic_source_projection_v1.npz`. The training set is now coherent, but too small or too biased to replace raw CLIP for the realistic aerial index.
