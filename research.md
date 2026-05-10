@@ -1,6 +1,6 @@
 # Project Heimdall Research Ledger
 
-Last updated: April 30, 2026
+Last updated: May 9, 2026
 
 This file is the compact research-facing ledger for the repo. It is not the paper itself; it is the evidence log behind the paper. It is different from:
 
@@ -82,6 +82,56 @@ Interpretation:
 - Expanding the combined probe from the sampled `10k` aerial index to the full `40k` index modestly improved close-range hit rates (`<=1km`, `<=2km`, `<=5km`) but did not improve mean or median error yet.
 - The first query-only street-to-aerial projection run is the first real model-side gain on the harder combined benchmark: `mean_km` improved from `10.97` to `9.75`, `<=2km` improved from `5.83%` to `7.50%`, and `<=5km` improved from `12.50%` to `20.42%`, but `<=1km` regressed from `2.92%` to `2.08%`.
 - The bottleneck has therefore shifted from "insufficient realistic data exists" to "how well we train the cross-view model on the harder combined benchmark."
+
+## May 9, 2026: Retrieval-Mistake Hard-Negative Projection
+
+This branch tested a more targeted answer to the "what is the model missing?" question. Instead of adding another heuristic reranker, it mined hard-negative triplets from the current production retrieval stack's own high-scoring wrong candidates. The training examples therefore encode the mistakes the app actually makes at inference time.
+
+New tool:
+
+```powershell
+.\.venv\Scripts\python.exe -m src.tools.mine_retrieval_hard_triplets --config src/config/paris.json --images-dir data/paris_realistic_v1/street_combined --metadata data/paris_realistic_v1_combined/splits_strict/train_pairs.csv --reference-metadata data/spacenet_paris/metadata.csv --limit 160 --output runs/retrieval_hard_triplets_train160.jsonl --summary-output runs/retrieval_hard_triplets_train160_summary.json
+```
+
+Mining result:
+
+- `160/160` train records produced valid triplets.
+- No missing query files, no empty candidate sets, no dropped triplets.
+- Each query used nearby SpaceNet Paris reference chips as positives and the retrieval provider's own wrong returned chips as negatives.
+
+Training command:
+
+```powershell
+.\.venv\Scripts\python.exe -m src.tools.train_crossview_projection --triplets runs/retrieval_hard_triplets_train160.jsonl --aerial-index data/geo_index/spacenet_paris_chips_openai_clip_vit_large_patch14_proj_trainref_v2_mild.npz --street-images-dir data/paris_realistic_v1/street_combined --output runs/retrieval_hardneg_crossview_projection_v1.npz --max-triplets 160 --epochs 6 --batch-size 16 --learning-rate 3e-4 --weight-decay 1e-4 --margin 0.08 --temperature 0.07 --ce-weight 0.3 --sample-weight-mode triplet_weight --sample-weight-max 4 --device auto
+```
+
+Fair serving-path comparison on the same `80` strict probe samples (`seed=42`, `run_geo_eval.py`, full app path, same config except projection file):
+
+| Model | Mean km | Median km | p90 km | <=2 km | <=5 km | <=10 km |
+|---|---:|---:|---:|---:|---:|---:|
+| Current master projection | 9.1105 | 7.0931 | 16.7438 | 3.75% | 25.00% | 62.50% |
+| Retrieval-mistake hard-negative projection | 4.7680 | 4.8332 | 6.0800 | 1.25% | 57.50% | 100.00% |
+
+Decision:
+
+- Promote `runs/retrieval_hardneg_crossview_projection_v1.npz` in `src/config/paris.json`.
+- Keep the mining tool because it turns live retrieval failures into supervised training data.
+- The result is a clear runtime serving-path improvement in mean error, p90 error, `<=5km`, and `<=10km`; the only measured regression is `<=2km`, so the next pass should mine more near-field hard negatives below `3 km` to recover close-range precision.
+
+Follow-up fusion diagnostics on the same `80` strict probe samples separated representation quality from estimate aggregation:
+
+| Variant | Mean km | Median km | p90 km | <=2 km | <=5 km | <=10 km | Decision |
+|---|---:|---:|---:|---:|---:|---:|---|
+| Promoted v1 full pipeline | 4.7680 | 4.8332 | 6.0800 | 1.25% | 57.50% | 100.00% | baseline after v1 |
+| v1 retrieval-only diagnostic | 4.6143 | 4.6345 | 6.0913 | 0.00% | 66.25% | 100.00% | diagnostic only |
+| v2 broad+near hard-negative projection | 4.8302 | 4.9400 | 6.0356 | 0.00% | 52.50% | 100.00% | rejected |
+| v1 compact-stat fusion, 25 candidates kept | 4.7288 | 4.7759 | 6.0684 | 1.25% | 56.25% | 100.00% | promoted as a small tail/center tweak |
+
+Interpretation:
+
+- Near-field mixed v2 training was not promoted because it regressed mean, median, and `<=5 km` despite a tiny p90 gain.
+- Retrieval-only v1 is still better on `<=5 km`, which suggests the remaining close-range failure is mostly candidate distribution and candidate ranking rather than late fusion alone.
+- `src/config/paris.json` now keeps all `25` fusion candidates for UI/map inspection, but tightens the fusion estimate statistics with `retrieval_temperature=0.22`, `credible_mass=0.6`, `min_credible_candidates=1`, `credible_cluster_radius_km=6.0`, and `plausibility_radius_km=12.0`.
 
 First combined cross-view training workflow used in the repo:
 
