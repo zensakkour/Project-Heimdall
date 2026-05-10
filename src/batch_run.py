@@ -98,22 +98,33 @@ def build_pipeline(
             geo_prior_sigma_km=geo_cfg.retrieval_geo_prior_sigma_km,
             geo_prior_min_keep=geo_cfg.retrieval_geo_prior_min_keep,
         )
-        geoclip_provider = GeoCLIPProvider(
-            model_path=geo_cfg.model_path,
-            model_id=geo_cfg.model_id,
-            model_cache_dir=geo_cfg.model_cache_dir,
-            top_n=geo_cfg.top_n,
-            use_sidecar=geo_cfg.use_sidecar,
-            use_exif=geo_cfg.use_exif,
-        )
         if has_retrieval_index(geo_cfg):
-            candidate_provider = MultiCandidateProvider(
-                [retrieval_provider, geoclip_provider],
-                dedupe_radius_m=geo_cfg.candidate_dedupe_radius_m,
-                source_balance_beta=geo_cfg.candidate_source_balance_beta,
-                max_candidates=geo_cfg.candidate_max_results,
-            )
+            if geo_cfg.use_geoclip_with_retrieval:
+                geoclip_provider = GeoCLIPProvider(
+                    model_path=geo_cfg.model_path,
+                    model_id=geo_cfg.model_id,
+                    model_cache_dir=geo_cfg.model_cache_dir,
+                    top_n=geo_cfg.top_n,
+                    use_sidecar=geo_cfg.use_sidecar,
+                    use_exif=geo_cfg.use_exif,
+                )
+                candidate_provider = MultiCandidateProvider(
+                    [retrieval_provider, geoclip_provider],
+                    dedupe_radius_m=geo_cfg.candidate_dedupe_radius_m,
+                    source_balance_beta=geo_cfg.candidate_source_balance_beta,
+                    max_candidates=geo_cfg.candidate_max_results,
+                )
+            else:
+                candidate_provider = retrieval_provider
         else:
+            geoclip_provider = GeoCLIPProvider(
+                model_path=geo_cfg.model_path,
+                model_id=geo_cfg.model_id,
+                model_cache_dir=geo_cfg.model_cache_dir,
+                top_n=geo_cfg.top_n,
+                use_sidecar=geo_cfg.use_sidecar,
+                use_exif=geo_cfg.use_exif,
+            )
             candidate_provider = geoclip_provider
     return HeimdallPipeline(
         detector=detector,

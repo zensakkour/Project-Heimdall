@@ -89,24 +89,37 @@ def build_pipeline(cfg: Optional[HeimdallConfig]) -> "HeimdallPipeline":
         geo_prior_sigma_km=cfg.geolocator.retrieval_geo_prior_sigma_km,
         geo_prior_min_keep=cfg.geolocator.retrieval_geo_prior_min_keep,
     )
-    geoclip_provider = GeoCLIPProvider(
-        model_path=cfg.geolocator.model_path,
-        model_id=cfg.geolocator.model_id,
-        model_cache_dir=cfg.geolocator.model_cache_dir,
-        encoder_name=cfg.geolocator.encoder_name,
-        top_n=cfg.geolocator.top_n,
-        use_sidecar=cfg.geolocator.use_sidecar,
-        use_exif=cfg.geolocator.use_exif,
-        score_scale=cfg.geolocator.geospot_score_scale,
-    )
     if has_retrieval_index(cfg.geolocator):
-        candidate_provider = MultiCandidateProvider(
-            [retrieval_provider, geoclip_provider],
-            dedupe_radius_m=cfg.geolocator.candidate_dedupe_radius_m,
-            source_balance_beta=cfg.geolocator.candidate_source_balance_beta,
-            max_candidates=cfg.geolocator.candidate_max_results,
-        )
+        if cfg.geolocator.use_geoclip_with_retrieval:
+            geoclip_provider = GeoCLIPProvider(
+                model_path=cfg.geolocator.model_path,
+                model_id=cfg.geolocator.model_id,
+                model_cache_dir=cfg.geolocator.model_cache_dir,
+                encoder_name=cfg.geolocator.encoder_name,
+                top_n=cfg.geolocator.top_n,
+                use_sidecar=cfg.geolocator.use_sidecar,
+                use_exif=cfg.geolocator.use_exif,
+                score_scale=cfg.geolocator.geospot_score_scale,
+            )
+            candidate_provider = MultiCandidateProvider(
+                [retrieval_provider, geoclip_provider],
+                dedupe_radius_m=cfg.geolocator.candidate_dedupe_radius_m,
+                source_balance_beta=cfg.geolocator.candidate_source_balance_beta,
+                max_candidates=cfg.geolocator.candidate_max_results,
+            )
+        else:
+            candidate_provider = retrieval_provider
     else:
+        geoclip_provider = GeoCLIPProvider(
+            model_path=cfg.geolocator.model_path,
+            model_id=cfg.geolocator.model_id,
+            model_cache_dir=cfg.geolocator.model_cache_dir,
+            encoder_name=cfg.geolocator.encoder_name,
+            top_n=cfg.geolocator.top_n,
+            use_sidecar=cfg.geolocator.use_sidecar,
+            use_exif=cfg.geolocator.use_exif,
+            score_scale=cfg.geolocator.geospot_score_scale,
+        )
         candidate_provider = geoclip_provider
     return HeimdallPipeline(
         detector=detector,

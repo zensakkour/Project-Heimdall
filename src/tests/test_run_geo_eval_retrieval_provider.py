@@ -184,3 +184,46 @@ def test_build_pipeline_unpacks_detector_factory_tuple(monkeypatch) -> None:
 
     assert isinstance(pipeline.detector, StubDetector)
     assert pipeline.detector_backend == "stub"
+
+
+def test_build_pipeline_can_skip_geoclip_when_retrieval_index_exists(monkeypatch) -> None:
+    class StubDetector:
+        def predict(self, _image_path: str):
+            return []
+
+    class StubRetrievalProvider:
+        def __init__(self, **_kwargs) -> None:
+            self.last_error = None
+
+        def candidates(self, _image_path: str):
+            return []
+
+    class StubGeoClipProvider:
+        def __init__(self, **_kwargs) -> None:
+            raise AssertionError("GeoCLIP should not be constructed")
+
+    class StubMultiProvider:
+        def __init__(self, *_args, **_kwargs) -> None:
+            raise AssertionError("Multi provider should not be constructed")
+
+    import src.core.detection.factory as factory
+    import src.tools.run_geo_eval as run_geo_eval
+
+    monkeypatch.setattr(factory, "create_detector", lambda _cfg: (StubDetector(), "stub"))
+    monkeypatch.setattr(run_geo_eval, "GeoRetrievalProvider", StubRetrievalProvider)
+    monkeypatch.setattr(run_geo_eval, "GeoCLIPProvider", StubGeoClipProvider)
+    monkeypatch.setattr(run_geo_eval, "MultiCandidateProvider", StubMultiProvider)
+    cfg = HeimdallConfig(
+        detector=DetectorConfig(),
+        geolocator=GeoConfig(
+            retrieval_index_path="data/geo_index/mock.npz",
+            use_geoclip_with_retrieval=False,
+        ),
+        fusion=FusionConfig(),
+        score=ScoreConfig(),
+        verification=VerificationConfig(),
+    )
+
+    pipeline = build_pipeline(cfg)
+
+    assert isinstance(pipeline.candidate_provider, StubRetrievalProvider)
