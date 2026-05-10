@@ -2614,3 +2614,22 @@ Do not delete or edit past entries. Append new work at the end.
   - projection training used all `75` triplets and `128` realistic aerial references.
   - held-out retrieval-only eval regressed versus promoted raw-CLIP realistic source: `mean 4.5748 -> 4.6198`, `<=5km 66.25% -> 63.75%`, oracle `<=2km 66.25% -> 45.00%`.
 - Decision: Keep the source-filtered miner; reject `runs/retrieval_realistic_source_projection_v1.npz`. The training set is now coherent, but too small or too biased to replace raw CLIP for the realistic aerial index.
+
+## 2026-05-10 Visual Pair Reranker and Consensus Promotion
+- Hypothesis: After the realistic aerial index improved candidate coverage, the next gain should come from better top-1 selection inside the returned candidate cloud.
+- Change:
+  - Added `src/tools/train_visual_pair_reranker.py` to train an offline visual query-candidate reranker from frozen CLIP pair features, rank, score, and source flags.
+  - Extended `src/tools/tune_retrieval_geo.py` so the tuner can sweep graph-support reranking, consensus refinement, and KDE mode refinement directly on realistic pair CSVs.
+  - Updated `src/config/paris.json` to promote the verified candidate-cloud consensus setting: `retrieval_consensus_top_n=25`, `retrieval_consensus_radius_km=2.0`, `retrieval_consensus_score_power=0.0`.
+- Validation commands:
+  - `.\.venv\Scripts\python.exe -m src.tools.train_visual_pair_reranker --config src/config/paris.json --images-dir data/paris_realistic_v1/street_combined --metadata data/paris_realistic_v1_combined/splits_strict/train_pairs.csv --eval-metadata data/paris_realistic_v1_combined/splits_strict/test_pairs_probe240.csv --limit 240 --eval-limit 80 --seed 42 --output runs/visual_pair_reranker_v1.pt --report-output runs/visual_pair_reranker_v1.report.json`
+  - `.\.venv\Scripts\python.exe -m src.tools.tune_retrieval_geo --config src/config/paris.json --images-dir data/paris_realistic_v1/street_combined --metadata data/paris_realistic_v1_combined/splits_strict/test_pairs_probe240.csv --limit 80 --seed 42 --rank-objective within_5km_pct --output runs/tune_retrieval_geo_cloud_probe80_v1.json`
+  - `.\.venv\Scripts\python.exe -m src.tools.run_geo_eval --config src/config/paris.json --images-dir data/paris_realistic_v1/street_combined --metadata data/paris_realistic_v1_combined/splits_strict/test_pairs_probe240.csv --limit 80 --seed 42 --retrieval-only --output runs/geo_eval_consensus_probe80_v1.json --allow-scope-mismatch --diag-samples 5`
+  - `$env:TMP='c:\Users\zen\Desktop\Projects\Project-Heimdall\.tmp'; $env:TEMP=$env:TMP; .\.venv\Scripts\python.exe -m pytest src\tests\test_config_loading.py src\tests\test_retrieval_diversity.py src\tests\test_retrieval_provider_multi_index.py src\tests\test_tune_retrieval_geo.py -q`
+- Metrics on the fixed `80` strict probe samples:
+  - visual pair reranker baseline: `mean 4.5748`, `median 4.6205`, `p90 5.9087`, `<=5km 66.25%`
+  - visual pair reranker best fusion weight was `0.0`; all positive fusion weights regressed `<=5km` to `58.75-62.50%`, so the model is rejected for serving.
+  - graph-support tuner estimate looked strong (`mean 3.6347`, `<=5km 90.00%`), but the real evaluator path reached only `mean 4.5127`, `<=5km 67.50%`; graph-support is rejected for promotion.
+  - promoted consensus config: `mean 3.9904`, `median 4.0641`, `p90 5.7860`, `<=2km 8.75%`, `<=5km 76.25%`
+  - focused tests: `46 passed`
+- Decision: Promote candidate-cloud consensus because it gives a real held-out improvement over the previous full profile (`mean 4.4793`, `<=5km 70.00%`) and the raw retrieval baseline (`mean 4.5748`, `<=5km 66.25%`). Keep the visual pair trainer and expanded tuner as research infrastructure, but do not enable the rejected reranker.
