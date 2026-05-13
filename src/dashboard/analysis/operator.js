@@ -1487,7 +1487,7 @@ function init() {
           tabGeotags.style.borderBottomColor = "var(--accent)";
           tabNotes.style.color = "var(--text-secondary)";
           tabNotes.style.borderBottomColor = "transparent";
-          geotagsView.style.display = "block";
+          geotagsView.style.display = "flex";
           notesView.style.display = "none";
       });
       tabNotes.addEventListener("click", () => {
@@ -1495,7 +1495,7 @@ function init() {
           tabNotes.style.borderBottomColor = "var(--accent)";
           tabGeotags.style.color = "var(--text-secondary)";
           tabGeotags.style.borderBottomColor = "transparent";
-          notesView.style.display = "block";
+          notesView.style.display = "flex";
           geotagsView.style.display = "none";
           renderNotesList();
           renderNoteMarkers();
