@@ -879,10 +879,7 @@ function renderCandidateList(result) {
        <button class="btn-card-action candidate-action" data-action="confirm" type="button">CONFIRM</button>
        <button class="btn-card-action candidate-action" data-action="reject" type="button">REJECT</button>
       </div>
-      <div style="display: flex; gap: 8px; margin-top: 8px;">
-        <button class="btn-card-action open-maps" style="flex: 1;">Open in Google Maps</button>
-        <button class="btn-card-action street-view-btn" data-lat="${lat}" data-lon="${lon}" style="flex: 1; border: 1px solid var(--accent); color: var(--accent);">Street View</button>
-      </div>
+      <button class="btn-card-action open-maps">Open in Google Maps</button>
       <span class="copied-hint">Copied</span>
     `;
 
@@ -940,55 +937,7 @@ function renderCandidateList(result) {
     container.appendChild(card);
   });
   
-  // Attach street view handlers
-  container.querySelectorAll(".street-view-btn").forEach(btn => {
-      btn.addEventListener("click", (e) => {
-          e.stopPropagation();
-          const lat = parseFloat(btn.dataset.lat);
-          const lon = parseFloat(btn.dataset.lon);
-          openStreetView(lat, lon);
-      });
-  });
-
   selectedIndex = -1;
-}
-
-function openStreetView(lat, lon) {
-    const modal = byId("street-view-modal");
-    const img = byId("street-view-img");
-    const err = byId("street-view-error");
-    const info = byId("street-view-info");
-
-    if (!modal || !img || !err || !info) return;
-
-    img.style.display = "none";
-    err.style.display = "none";
-    info.textContent = "Loading...";
-    modal.classList.add("active");
-
-    fetch(`/api/operator/street_view?lat=${lat}&lon=${lon}`)
-        .then(r => {
-            if (!r.ok) throw new Error("Not found");
-            return r.json();
-        })
-        .then(data => {
-            if (data.url) {
-                img.src = data.url;
-                img.style.display = "block";
-                const dateStr = data.captured_at ? ` | Date: ${data.captured_at}` : "";
-                const headStr = data.heading != null ? ` | Heading: ${Math.round(data.heading)}°` : "";
-                const distStr = data.distance_km != null ? ` | Dist: ${(data.distance_km * 1000).toFixed(0)}m` : "";
-                info.textContent = `Provider: ${data.provider}${dateStr}${headStr}${distStr}`;
-            } else {
-                throw new Error("No URL returned");
-            }
-        })
-        .catch(error => {
-            info.textContent = "";
-            err.style.display = "block";
-            err.textContent = "No imagery available here.";
-            console.error("Street view error:", error);
-        });
 }
 
 function renderLiveMap(result, { resetView = false } = {}) {
@@ -1426,27 +1375,6 @@ function setupPanelAccordions() {
   setupCollapsiblePanel("diag-trigger", "diag-accordion");
 }
 
-function loadSessionList() {
-    const select = byId("load-session-select");
-    if (!select) return;
-    fetch("/api/operator/sessions")
-        .then(r => r.json())
-        .then(data => {
-            select.innerHTML = '<option value="">-- Load Session --</option>';
-            if (data.sessions && data.sessions.length > 0) {
-                data.sessions.forEach(session => {
-                    const option = document.createElement("option");
-                    option.value = session.session_id;
-                    const dateStr = session.updated_at ? new Date(session.updated_at).toLocaleString() : "Unknown";
-                    const fileStr = session.source_filename ? ` - ${session.source_filename}` : "";
-                    option.textContent = `${dateStr}${fileStr} [${session.status}]`;
-                    select.appendChild(option);
-                });
-            }
-        })
-        .catch(err => console.error("Failed to load session list:", err));
-}
-
 function init() {
   console.log("LOG: Operator UI Initializing");
   ensureLiveMap();
@@ -1459,7 +1387,6 @@ function init() {
   setupPanelAccordions();
   setupToggles();
   setupOperatorActions();
-  loadSessionList();
   
   const profileSelect = byId("profile-select");
   if (profileSelect) {
@@ -1616,13 +1543,6 @@ function renderLightboxIntel() {
 }
 
 function setupOperatorActions() {
-    const closeStreetViewBtn = byId("close-street-view-modal");
-    if (closeStreetViewBtn) {
-        closeStreetViewBtn.addEventListener("click", () => {
-             byId("street-view-modal")?.classList.remove("active");
-        });
-    }
-
     const confirmBtn = byId("btn-confirm-cand");
     const rejectBtn = byId("btn-reject-cand");
     const noteInput = byId("operator-note-input");
@@ -1658,32 +1578,6 @@ function setupOperatorActions() {
                   document.body.removeChild(a);
                   URL.revokeObjectURL(url);
              });
-        });
-    }
-
-    const sessionSelect = byId("load-session-select");
-    if (sessionSelect) {
-        sessionSelect.addEventListener("change", (e) => {
-            const sid = e.target.value;
-            if (sid) {
-                fetch(`/api/operator/sessions/${sid}`)
-                    .then(r => r.json())
-                    .then(data => {
-                         // Full mock of lastResult structure needed by UI renderers
-                         lastResult = {
-                             geo: data.fused_estimate,
-                             candidates: data.candidates,
-                             clues: data.clues,
-                             detections: data.detections
-                         };
-                         renderSummary(data);
-                         if (data.operator_notes) {
-                             const noteInput = byId("operator-note-input");
-                             if (noteInput) noteInput.value = data.operator_notes;
-                         }
-                    })
-                    .catch(err => console.error("Failed to load session:", err));
-            }
         });
     }
 

@@ -63,27 +63,10 @@ _OPERATOR_SESSION: dict = {
     "timeline": [],
     "operator_notes": "",
     "operator_pins": [],
-    "updated_at": None,
 }
-
-def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-
-def _save_operator_session():
-    global _OPERATOR_SESSION
-    if not _OPERATOR_SESSION.get("session_id"):
-        return
-    _OPERATOR_SESSION["updated_at"] = _utc_now_iso()
-    sessions_dir = APP_ROOT / "operator_sessions"
-    sessions_dir.mkdir(parents=True, exist_ok=True)
-    file_path = sessions_dir / f"session_{_OPERATOR_SESSION['session_id']}.json"
-    with open(file_path, "w", encoding="utf-8") as f:
-        json.dump(_OPERATOR_SESSION, f, indent=2)
 
 def _reset_operator_session():
     global _OPERATOR_SESSION
-    if _OPERATOR_SESSION.get("session_id"):
-        _save_operator_session()
     _OPERATOR_SESSION = {
         "session_id": uuid.uuid4().hex,
         "status": "ready",
@@ -96,9 +79,7 @@ def _reset_operator_session():
         "timeline": [],
         "operator_notes": "",
         "operator_pins": [],
-        "updated_at": _utc_now_iso(),
     }
-    _save_operator_session()
 
 _reset_operator_session()
 
@@ -135,6 +116,10 @@ _GEO_RANDOM_STATE = {
     "config_path": None,
 }
 _BENCHMARK_STATE = {"status": "idle", "stage": None, "last_result": None, "progress": None, "run_id": None}
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def _benchmark_run_id() -> str:
@@ -2205,41 +2190,6 @@ def pick_file() -> JSONResponse:
 def operator_get_session() -> JSONResponse:
     return JSONResponse(_OPERATOR_SESSION)
 
-@app.get("/api/operator/sessions")
-def operator_list_sessions() -> JSONResponse:
-    sessions_dir = APP_ROOT / "operator_sessions"
-    sessions = []
-    if sessions_dir.exists():
-        for file_path in sessions_dir.glob("session_*.json"):
-            try:
-                with open(file_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    sessions.append({
-                        "session_id": data.get("session_id"),
-                        "updated_at": data.get("updated_at"),
-                        "status": data.get("status"),
-                        "source_filename": data.get("source", {}).get("filename") if data.get("source") else None
-                    })
-            except Exception:
-                continue
-    sessions.sort(key=lambda x: x.get("updated_at") or "", reverse=True)
-    return JSONResponse({"sessions": sessions})
-
-@app.get("/api/operator/sessions/{session_id}")
-def operator_get_session_by_id(session_id: str) -> JSONResponse:
-    global _OPERATOR_SESSION
-    sessions_dir = APP_ROOT / "operator_sessions"
-    file_path = sessions_dir / f"session_{session_id}.json"
-    if file_path.exists():
-        try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                _OPERATOR_SESSION = data
-                return JSONResponse(_OPERATOR_SESSION)
-        except Exception as e:
-            return JSONResponse({"error": str(e)}, status_code=500)
-    return JSONResponse({"error": "Session not found"}, status_code=404)
-
 @app.post("/api/operator/reset")
 def operator_reset_session() -> JSONResponse:
     _reset_operator_session()
@@ -2260,7 +2210,6 @@ async def operator_add_pin(request: Request) -> JSONResponse:
                 "added_at": _utc_now_iso()
             })
             _add_timeline_event(f"Operator added pin at {lat:.4f}, {lon:.4f}", "info")
-            _save_operator_session()
             return JSONResponse({"status": "pin_added"})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
@@ -2273,7 +2222,6 @@ async def operator_add_note(request: Request) -> JSONResponse:
         note = data.get("note", "")
         _OPERATOR_SESSION["operator_notes"] = note
         _add_timeline_event("Operator updated notes", "info")
-        _save_operator_session()
         return JSONResponse({"status": "note_updated"})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
@@ -2285,29 +2233,13 @@ async def operator_confirm_candidate(request: Request) -> JSONResponse:
         rank = data.get("rank")
         action = data.get("action") # "confirm" or "reject"
         _add_timeline_event(f"Operator {action}ed candidate rank {rank}", "info")
-        _save_operator_session()
         return JSONResponse({"status": "action_recorded"})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 
 @app.get("/api/operator/export.json")
 def operator_export_session() -> JSONResponse:
-    _save_operator_session()
     return JSONResponse(_OPERATOR_SESSION)
-
-from src.core.geo.street_view import LocalStreetViewProvider
-_STREET_VIEW_PROVIDER = None
-
-@app.get("/api/operator/street_view")
-def operator_street_view(lat: float, lon: float) -> JSONResponse:
-    global _STREET_VIEW_PROVIDER
-    if _STREET_VIEW_PROVIDER is None:
-        _STREET_VIEW_PROVIDER = LocalStreetViewProvider()
-
-    nearest = _STREET_VIEW_PROVIDER.find_nearest(lat, lon)
-    if nearest:
-        return JSONResponse(nearest)
-    return JSONResponse({"error": "No street view imagery found near this location"}, status_code=404)
 
 @app.post("/api/operator/analyze")
 async def operator_analyze(
@@ -2376,7 +2308,6 @@ async def operator_analyze(
         ]
         _OPERATOR_SESSION["status"] = "completed"
         _add_timeline_event("Analysis complete (DEV MODE)", "success")
-        _save_operator_session()
         return JSONResponse(_OPERATOR_SESSION)
 
     try:
@@ -2435,7 +2366,6 @@ async def operator_analyze(
                 _add_timeline_event(f"Pipeline error: {e}", "error")
                 _OPERATOR_SESSION["warnings"].append(f"Pipeline error: {e}")
                 _OPERATOR_SESSION["status"] = "error"
-                _save_operator_session()
                 return JSONResponse(_OPERATOR_SESSION)
 
             # Detect no candidate generation error
@@ -2444,14 +2374,12 @@ async def operator_analyze(
                 _OPERATOR_SESSION["warnings"].append(f"Candidate provider error: {cand_err}")
                 _add_timeline_event(f"Candidate generation failed: {cand_err}", "error")
                 _OPERATOR_SESSION["status"] = "error"
-                _save_operator_session()
                 return JSONResponse(_OPERATOR_SESSION)
 
             if not result.candidates:
                 _OPERATOR_SESSION["warnings"].append("No geo candidates found.")
                 _add_timeline_event("No geo candidates generated.", "warning")
                 _OPERATOR_SESSION["status"] = "error"
-                _save_operator_session()
                 return JSONResponse(_OPERATOR_SESSION)
 
             _add_timeline_event("Fusion complete", "info")
@@ -2492,14 +2420,12 @@ async def operator_analyze(
 
             _OPERATOR_SESSION["status"] = "completed"
             _add_timeline_event("Analysis complete", "success")
-            _save_operator_session()
             return JSONResponse(_OPERATOR_SESSION)
 
     except Exception as e:
         _OPERATOR_SESSION["status"] = "error"
         _OPERATOR_SESSION["warnings"].append(str(e))
         _add_timeline_event(f"Analysis failed: {str(e)}", "error")
-        _save_operator_session()
         return JSONResponse({"error": str(e), "session": _OPERATOR_SESSION}, status_code=500)
 
 # Static mounts come last so API routes are not shadowed.
