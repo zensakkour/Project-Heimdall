@@ -13,6 +13,6 @@ echo Starting Project Heimdall...
 echo Using %PYTHON_EXE%
 echo.
 
-"%PYTHON_EXE%" -m src.tools.dev_app --open-browser %*
+"%PYTHON_EXE%" -m src.tools.dev_app --open-browser --no-reload %*
 
 endlocal
