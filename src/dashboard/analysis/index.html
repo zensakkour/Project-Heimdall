@@ -53,6 +53,16 @@
         <div class="control-sep"></div>
         <button id="map-reset-paris" class="btn-text">Paris</button>
         <button id="map-reset-globe" class="btn-text">Globe</button>
+        <div class="control-sep"></div>
+        <button id="map-street-walk" class="btn-text" title="Street Walk Mode">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="5" r="2"></circle>
+            <path d="M12 7v8"></path>
+            <path d="M8 10h8"></path>
+            <path d="M12 15l-4 5"></path>
+            <path d="M12 15l4 5"></path>
+          </svg>
+        </button>
       </div>
 
       <!-- Top Header Area -->
@@ -62,9 +72,11 @@
           <span class="brand-text">Project Heimdall — Paris</span>
         </div>
         <div style="display: flex; gap: 8px; align-items: center; margin-left: auto; padding-right: 12px;">
+          <button id="btn-save-session" class="primary-btn" style="height: 28px; font-size: 11px; padding: 0 12px;">Save Current Session</button>
           <select id="load-session-select" style="background: rgba(0,0,0,0.6); color: #fff; border: 1px solid var(--glass-border); padding: 4px 8px; border-radius: 4px; font-size: 12px; height: 28px; outline: none; cursor: pointer; max-width: 200px;">
              <option value="">-- Load Session --</option>
           </select>
+          <button id="btn-load-session" class="primary-btn" style="height: 28px; font-size: 11px; padding: 0 12px;">Load Session</button>
           <button id="btn-export-session" class="primary-btn" style="height: 28px; font-size: 11px; padding: 0 12px; margin-right: 0px;">Export Report</button>
         </div>
       </header>
@@ -151,8 +163,14 @@
           <span id="metric-confidence">-</span>
         </section>
 
+        <!-- View Toggle -->
+        <div style="display: flex; gap: 8px; margin: 12px 16px 0 16px;">
+            <button id="tab-geotags" class="btn-text" style="color: var(--accent); border-bottom: 2px solid var(--accent); border-radius: 0; padding-bottom: 4px;">Geotags</button>
+            <button id="tab-notes" class="btn-text" style="color: var(--text-secondary); border-bottom: 2px solid transparent; border-radius: 0; padding-bottom: 4px;">Notes</button>
+        </div>
+
         <!-- Candidate List -->
-        <section class="panel-section list-section">
+        <section id="geotags-view" class="panel-section list-section">
           <div class="section-head-row">
             <div class="section-title">Localized Candidates</div>
             <div class="count-selector">
@@ -167,6 +185,16 @@
           </div>
           <div id="results-list" class="results-scroll" tabindex="0">
             <div class="empty-state">Upload imagery to begin.</div>
+          </div>
+        </section>
+
+        <!-- Notes List -->
+        <section id="notes-view" class="panel-section list-section" style="display: none;">
+          <div class="section-head-row">
+            <div class="section-title">Saved Notes</div>
+          </div>
+          <div id="notes-list" class="results-scroll" tabindex="0">
+            <div class="empty-state">No notes saved.</div>
           </div>
         </section>
 
@@ -190,7 +218,7 @@
              <div id="notes-accordion" class="panel-collapse">
                <textarea id="operator-note-input" rows="3" style="width: 100%; background: rgba(0,0,0,0.4); border: 1px solid var(--glass-border); color: #fff; padding: 8px; border-radius: 8px; font-size: 12px; resize: vertical;"></textarea>
                <div style="display: flex; justify-content: space-between; margin-top: 8px; align-items: center;">
-                   <label style="color: var(--text-secondary); font-size: 11px; display: flex; align-items: center; gap: 4px;"><input type="checkbox" id="manual-pin-mode" /> Enable Manual Map Pin</label>
+                   <button id="btn-drop-pin" class="btn-text" style="font-size: 11px;">📍 Drop Note Pin</button>
                    <button id="btn-save-note" class="primary-btn" style="height: 28px; font-size: 11px; padding: 0 12px;">Save Note</button>
                </div>
              </div>
