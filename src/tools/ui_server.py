@@ -69,21 +69,28 @@ _OPERATOR_SESSION: dict = {
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
-def _save_operator_session():
+def _save_operator_session(custom_name: str = None):
     global _OPERATOR_SESSION
     if not _OPERATOR_SESSION.get("session_id"):
         return
     _OPERATOR_SESSION["updated_at"] = _utc_now_iso()
+    if custom_name:
+        _OPERATOR_SESSION["custom_name"] = custom_name
+
+    from datetime import datetime, timezone
+    dt_str = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    display_name = f"{dt_str}_{custom_name}" if custom_name else f"auto_{dt_str}"
+
+    clean_name = "".join(c for c in display_name if c.isalnum() or c in (' ', '-', '_')).strip().replace(' ', '_')
+
     sessions_dir = APP_ROOT / "operator_sessions"
     sessions_dir.mkdir(parents=True, exist_ok=True)
-    file_path = sessions_dir / f"session_{_OPERATOR_SESSION['session_id']}.json"
+    file_path = sessions_dir / f"session_{clean_name}_{_OPERATOR_SESSION['session_id']}.json"
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(_OPERATOR_SESSION, f, indent=2)
 
 def _reset_operator_session():
     global _OPERATOR_SESSION
-    if _OPERATOR_SESSION.get("session_id"):
-        _save_operator_session()
     _OPERATOR_SESSION = {
         "session_id": uuid.uuid4().hex,
         "status": "ready",
@@ -98,7 +105,6 @@ def _reset_operator_session():
         "operator_pins": [],
         "updated_at": _utc_now_iso(),
     }
-    _save_operator_session()
 
 _reset_operator_session()
 
@@ -2214,8 +2220,12 @@ def operator_list_sessions() -> JSONResponse:
             try:
                 with open(file_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
+                    name = file_path.name.replace("session_", "").replace(f"_{data.get('session_id')}.json", "")
+
                     sessions.append({
                         "session_id": data.get("session_id"),
+                        "custom_name": data.get("custom_name", ""),
+                        "display_name": name,
                         "updated_at": data.get("updated_at"),
                         "status": data.get("status"),
                         "source_filename": data.get("source", {}).get("filename") if data.get("source") else None
@@ -2229,16 +2239,26 @@ def operator_list_sessions() -> JSONResponse:
 def operator_get_session_by_id(session_id: str) -> JSONResponse:
     global _OPERATOR_SESSION
     sessions_dir = APP_ROOT / "operator_sessions"
-    file_path = sessions_dir / f"session_{session_id}.json"
-    if file_path.exists():
-        try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                _OPERATOR_SESSION = data
-                return JSONResponse(_OPERATOR_SESSION)
-        except Exception as e:
-            return JSONResponse({"error": str(e)}, status_code=500)
+    for file_path in sessions_dir.glob(f"session_*{session_id}.json"):
+        if file_path.exists():
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    _OPERATOR_SESSION = data
+                    return JSONResponse(_OPERATOR_SESSION)
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
     return JSONResponse({"error": "Session not found"}, status_code=404)
+
+@app.post("/api/operator/save")
+async def operator_save_session(request: Request) -> JSONResponse:
+    try:
+        data = await request.json()
+        custom_name = data.get("name", "")
+        _save_operator_session(custom_name)
+        return JSONResponse({"status": "session_saved"})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
 
 @app.post("/api/operator/reset")
 def operator_reset_session() -> JSONResponse:
@@ -2260,7 +2280,6 @@ async def operator_add_pin(request: Request) -> JSONResponse:
                 "added_at": _utc_now_iso()
             })
             _add_timeline_event(f"Operator added pin at {lat:.4f}, {lon:.4f}", "info")
-            _save_operator_session()
             return JSONResponse({"status": "pin_added"})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
@@ -2271,9 +2290,28 @@ async def operator_add_note(request: Request) -> JSONResponse:
     try:
         data = await request.json()
         note = data.get("note", "")
-        _OPERATOR_SESSION["operator_notes"] = note
-        _add_timeline_event("Operator updated notes", "info")
-        _save_operator_session()
+
+        if "notes" not in _OPERATOR_SESSION:
+            _OPERATOR_SESSION["notes"] = []
+
+        note_entry = {
+            "note_id": uuid.uuid4().hex,
+            "text": note,
+            "timestamp": _utc_now_iso(),
+            "target_type": data.get("target_type")
+        }
+
+        if data.get("target_type") == "candidate":
+            note_entry["rank"] = data.get("rank")
+            note_entry["source"] = data.get("source")
+        elif data.get("target_type") == "manual_pin":
+            note_entry["lat"] = data.get("lat")
+            note_entry["lon"] = data.get("lon")
+
+        _OPERATOR_SESSION["notes"].append(note_entry)
+        _OPERATOR_SESSION["operator_notes"] = note # Keep for backwards compat
+
+        _add_timeline_event("Operator added a note", "info")
         return JSONResponse({"status": "note_updated"})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
@@ -2285,14 +2323,12 @@ async def operator_confirm_candidate(request: Request) -> JSONResponse:
         rank = data.get("rank")
         action = data.get("action") # "confirm" or "reject"
         _add_timeline_event(f"Operator {action}ed candidate rank {rank}", "info")
-        _save_operator_session()
         return JSONResponse({"status": "action_recorded"})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 
 @app.get("/api/operator/export.json")
 def operator_export_session() -> JSONResponse:
-    _save_operator_session()
     return JSONResponse(_OPERATOR_SESSION)
 
 from src.core.geo.street_view import LocalStreetViewProvider
@@ -2376,7 +2412,6 @@ async def operator_analyze(
         ]
         _OPERATOR_SESSION["status"] = "completed"
         _add_timeline_event("Analysis complete (DEV MODE)", "success")
-        _save_operator_session()
         return JSONResponse(_OPERATOR_SESSION)
 
     try:
@@ -2435,7 +2470,6 @@ async def operator_analyze(
                 _add_timeline_event(f"Pipeline error: {e}", "error")
                 _OPERATOR_SESSION["warnings"].append(f"Pipeline error: {e}")
                 _OPERATOR_SESSION["status"] = "error"
-                _save_operator_session()
                 return JSONResponse(_OPERATOR_SESSION)
 
             # Detect no candidate generation error
@@ -2444,14 +2478,12 @@ async def operator_analyze(
                 _OPERATOR_SESSION["warnings"].append(f"Candidate provider error: {cand_err}")
                 _add_timeline_event(f"Candidate generation failed: {cand_err}", "error")
                 _OPERATOR_SESSION["status"] = "error"
-                _save_operator_session()
                 return JSONResponse(_OPERATOR_SESSION)
 
             if not result.candidates:
                 _OPERATOR_SESSION["warnings"].append("No geo candidates found.")
                 _add_timeline_event("No geo candidates generated.", "warning")
                 _OPERATOR_SESSION["status"] = "error"
-                _save_operator_session()
                 return JSONResponse(_OPERATOR_SESSION)
 
             _add_timeline_event("Fusion complete", "info")
@@ -2492,14 +2524,12 @@ async def operator_analyze(
 
             _OPERATOR_SESSION["status"] = "completed"
             _add_timeline_event("Analysis complete", "success")
-            _save_operator_session()
             return JSONResponse(_OPERATOR_SESSION)
 
     except Exception as e:
         _OPERATOR_SESSION["status"] = "error"
         _OPERATOR_SESSION["warnings"].append(str(e))
         _add_timeline_event(f"Analysis failed: {str(e)}", "error")
-        _save_operator_session()
         return JSONResponse({"error": str(e), "session": _OPERATOR_SESSION}, status_code=500)
 
 # Static mounts come last so API routes are not shadowed.
