@@ -1,6 +1,12 @@
 import { byId, formatUtcNowLabel, normalizeError, postForm } from "./shared.js";
 
 const profileStorageKey = "heimdallProfile";
+let isDroppingPin = false;
+let isStreetWalkMode = false;
+let droppedPinLocation = null;
+let currentManualPinMarker = null;
+
+let noteMarkers = [];
 let activeProfile = "paris";
 let liveMap = null;
 let liveMapReady = null;
@@ -968,7 +974,7 @@ function openStreetView(lat, lon) {
 
     fetch(`/api/operator/street_view?lat=${lat}&lon=${lon}`)
         .then(r => {
-            if (!r.ok) throw new Error("Not found");
+            if (!r.ok) throw new Error("No local street imagery found near this point.");
             return r.json();
         })
         .then(data => {
@@ -1320,6 +1326,15 @@ function setupMapControls() {
     easeToCentered({ center: globeCenter, zoom: globeZoom, pitch: 0, bearing: 0, duration: 1800 });
     window.setTimeout(updateTiltLabel, 1820);
   });
+
+  const streetWalkBtn = byId("map-street-walk");
+  if (streetWalkBtn) {
+      streetWalkBtn.addEventListener("click", () => {
+          isStreetWalkMode = true;
+          streetWalkBtn.style.color = "var(--accent)";
+          liveMap.getCanvas().style.cursor = "crosshair";
+      });
+  }
 }
 
 function setupKeyboardNav() {
@@ -1461,6 +1476,32 @@ function init() {
   setupOperatorActions();
   loadSessionList();
   
+  const tabGeotags = document.getElementById("tab-geotags");
+  const tabNotes = document.getElementById("tab-notes");
+  const geotagsView = document.getElementById("geotags-view");
+  const notesView = document.getElementById("notes-view");
+
+  if (tabGeotags && tabNotes && geotagsView && notesView) {
+      tabGeotags.addEventListener("click", () => {
+          tabGeotags.style.color = "var(--accent)";
+          tabGeotags.style.borderBottomColor = "var(--accent)";
+          tabNotes.style.color = "var(--text-secondary)";
+          tabNotes.style.borderBottomColor = "transparent";
+          geotagsView.style.display = "flex";
+          notesView.style.display = "none";
+      });
+      tabNotes.addEventListener("click", () => {
+          tabNotes.style.color = "var(--accent)";
+          tabNotes.style.borderBottomColor = "var(--accent)";
+          tabGeotags.style.color = "var(--text-secondary)";
+          tabGeotags.style.borderBottomColor = "transparent";
+          notesView.style.display = "flex";
+          geotagsView.style.display = "none";
+          renderNotesList();
+          renderNoteMarkers();
+      });
+  }
+
   const profileSelect = byId("profile-select");
   if (profileSelect) {
     const stored = localStorage.getItem(profileStorageKey);
@@ -1628,6 +1669,28 @@ function setupOperatorActions() {
     const noteInput = byId("operator-note-input");
     const saveNoteBtn = byId("btn-save-note");
     const exportBtn = byId("btn-export-session");
+    const saveSessionBtn = byId("btn-save-session");
+    const dropPinBtn = byId("btn-drop-pin");
+
+    if (saveSessionBtn) {
+        saveSessionBtn.addEventListener("click", () => {
+            const sessionName = prompt("Enter a custom name for this session (optional):");
+            if (sessionName !== null) {
+                postForm("/api/operator/save", JSON.stringify({ name: sessionName.trim() }))
+                    .then(() => {
+                        loadSessionList();
+                    });
+            }
+        });
+    }
+
+    if (dropPinBtn) {
+        dropPinBtn.addEventListener("click", () => {
+            isDroppingPin = true;
+            dropPinBtn.textContent = "Click on map...";
+            dropPinBtn.style.color = "var(--accent)";
+        });
+    }
 
     if (confirmBtn) {
         confirmBtn.addEventListener("click", () => {
@@ -1641,7 +1704,51 @@ function setupOperatorActions() {
     }
     if (saveNoteBtn && noteInput) {
         saveNoteBtn.addEventListener("click", () => {
-             postForm("/api/operator/note", JSON.stringify({note: noteInput.value}));
+             const oldWarn = document.getElementById("note-save-warn");
+             if (oldWarn) oldWarn.remove();
+
+             if (selectedIndex === -1 && !droppedPinLocation) {
+                 const warn = document.createElement("div");
+                 warn.id = "note-save-warn";
+                 warn.style.color = "#ef4444";
+                 warn.style.fontSize = "11px";
+                 warn.style.marginTop = "4px";
+                 warn.textContent = "Select a candidate or drop a note pin to save this note.";
+                 noteInput.parentElement.appendChild(warn);
+                 return;
+             }
+
+             let targetData = {};
+             if (selectedIndex !== -1 && lastResult && lastResult.candidates) {
+                 const cand = lastResult.candidates[selectedIndex];
+                 targetData = {
+                     target_type: "candidate",
+                     rank: cand.rank,
+                     source: cand.source
+                 };
+             } else if (droppedPinLocation) {
+                 targetData = {
+                     target_type: "manual_pin",
+                     lat: droppedPinLocation.lat,
+                     lon: droppedPinLocation.lon
+                 };
+             }
+
+             postForm("/api/operator/note", JSON.stringify({note: noteInput.value, ...targetData}))
+                 .then(() => {
+                     saveNoteBtn.textContent = "Saved";
+                     noteInput.blur();
+
+                     // Reset drop pin location after save
+                     if (droppedPinLocation && dropPinBtn) {
+                         droppedPinLocation = null;
+                         dropPinBtn.textContent = "📍 Drop Note Pin";
+                     }
+
+                     setTimeout(() => {
+                         saveNoteBtn.textContent = "Save Note";
+                     }, 2000);
+                 });
         });
     }
 
@@ -1662,43 +1769,190 @@ function setupOperatorActions() {
     }
 
     const sessionSelect = byId("load-session-select");
-    if (sessionSelect) {
-        sessionSelect.addEventListener("change", (e) => {
-            const sid = e.target.value;
-            if (sid) {
-                fetch(`/api/operator/sessions/${sid}`)
-                    .then(r => r.json())
-                    .then(data => {
-                         // Full mock of lastResult structure needed by UI renderers
-                         lastResult = {
-                             geo: data.fused_estimate,
-                             candidates: data.candidates,
-                             clues: data.clues,
-                             detections: data.detections
-                         };
-                         renderSummary(data);
-                         if (data.operator_notes) {
-                             const noteInput = byId("operator-note-input");
-                             if (noteInput) noteInput.value = data.operator_notes;
-                         }
-                    })
-                    .catch(err => console.error("Failed to load session:", err));
+    const loadSessionBtn = byId("btn-load-session");
+
+    if (loadSessionBtn && sessionSelect) {
+        loadSessionBtn.addEventListener("click", () => {
+            const sid = sessionSelect.value;
+            if (!sid) {
+                const oldWarn = document.getElementById("session-load-warn");
+                if (oldWarn) oldWarn.remove();
+                const warn = document.createElement("span");
+                warn.id = "session-load-warn";
+                warn.style.color = "#ef4444";
+                warn.style.fontSize = "11px";
+                warn.style.marginLeft = "8px";
+                warn.textContent = "Please select a session first.";
+                loadSessionBtn.parentElement.appendChild(warn);
+                setTimeout(() => warn.remove(), 3000);
+                return;
             }
+            fetch(`/api/operator/sessions/${sid}`)
+                .then(r => r.json())
+                .then(data => {
+                     // Full mock of lastResult structure needed by UI renderers
+                     lastResult = {
+                         geo: data.fused_estimate,
+                         candidates: data.candidates,
+                         clues: data.clues,
+                         detections: data.detections
+                     };
+                     renderSummary(data);
+                     renderNoteMarkers();
+                     if (data.operator_notes) {
+                         const noteInput = byId("operator-note-input");
+                         if (noteInput) noteInput.value = data.operator_notes;
+                     }
+                })
+                .catch(err => console.error("Failed to load session:", err));
         });
     }
 
-    // allow manual map pin
     if (liveMap) {
         liveMap.on('click', (e) => {
-             const manualPinMode = byId("manual-pin-mode")?.checked;
-             if (manualPinMode) {
+             if (isStreetWalkMode) {
                   const lat = e.lngLat.lat;
                   const lon = e.lngLat.lng;
-                  postForm("/api/operator/pin", JSON.stringify({lat, lon, label: "Operator Pin"})).then(() => {
-                      // refresh UI
-                      fetch("/api/operator/session").then(r=>r.json()).then(renderSummary);
-                  });
+                  isStreetWalkMode = false;
+
+                  const streetWalkBtn = byId("map-street-walk");
+                  if (streetWalkBtn) {
+                      streetWalkBtn.style.color = "";
+                  }
+                  liveMap.getCanvas().style.cursor = "";
+
+                  openStreetView(lat, lon);
+                  return;
+             }
+
+             if (isDroppingPin) {
+                  const lat = e.lngLat.lat;
+                  const lon = e.lngLat.lng;
+                  droppedPinLocation = { lat, lon };
+                  isDroppingPin = false;
+
+                  if (dropPinBtn) {
+                      dropPinBtn.textContent = "📍 Dropped";
+                      dropPinBtn.style.color = "";
+                  }
+
+                  // Deselect candidate if dropping a manual pin
+                  selectedIndex = -1;
+                  renderCandidates();
+
+                  if (currentManualPinMarker) {
+                      currentManualPinMarker.remove();
+                  }
+
+                  const el = document.createElement("div");
+                  el.className = "manual-pin-marker";
+                  el.style.width = "16px";
+                  el.style.height = "16px";
+                  el.style.backgroundColor = "#ff4444";
+                  el.style.border = "2px solid white";
+                  el.style.borderRadius = "50%";
+                  el.style.boxShadow = "0 0 8px rgba(255, 0, 0, 0.8)";
+
+                  currentManualPinMarker = new maplibregl.Marker({ element: el })
+                      .setLngLat([lon, lat])
+                      .addTo(liveMap);
              }
         });
     }
+}
+
+
+
+
+function renderNoteMarkers() {
+    if (!liveMap) return;
+
+    // Clear old markers
+    noteMarkers.forEach(m => m.remove());
+    noteMarkers = [];
+
+    fetch("/api/operator/session").then(r => r.json()).then(data => {
+        if (!data.notes || data.notes.length === 0) return;
+
+        data.notes.forEach(note => {
+            let lat = null, lon = null;
+            if (note.target_type === "candidate") {
+                if (data.candidates && data.candidates[note.rank - 1]) {
+                    lat = data.candidates[note.rank - 1].lat;
+                    lon = data.candidates[note.rank - 1].lon;
+                }
+            } else if (note.target_type === "manual_pin") {
+                lat = note.lat;
+                lon = note.lon;
+            }
+
+            if (lat !== null && lon !== null) {
+                const el = document.createElement("div");
+                el.className = "note-marker";
+                el.style.width = "18px";
+                el.style.height = "18px";
+                el.style.backgroundColor = "#ffb84d";
+                el.style.border = "2px solid #333";
+                el.style.borderRadius = "50%";
+                el.style.boxShadow = "0 0 8px rgba(255, 184, 77, 0.8)";
+                el.title = note.text;
+
+                const marker = new maplibregl.Marker({ element: el })
+                    .setLngLat([lon, lat])
+                    .addTo(liveMap);
+
+                noteMarkers.push(marker);
+            }
+        });
+    });
+}
+
+function renderNotesList() {
+    const list = document.getElementById("notes-list");
+    if (!list) return;
+
+    fetch("/api/operator/session").then(r => r.json()).then(data => {
+        if (!data.notes || data.notes.length === 0) {
+            list.innerHTML = '<div class="empty-state">No notes saved.</div>';
+            return;
+        }
+
+        list.innerHTML = "";
+        data.notes.forEach(note => {
+            const card = document.createElement("div");
+            card.className = "result-card";
+            card.style.marginBottom = "8px";
+            card.style.cursor = "pointer";
+
+            let targetHtml = "";
+            let lat = 0, lon = 0;
+            if (note.target_type === "candidate") {
+                targetHtml = `<div style="color: var(--accent); font-size: 10px; margin-bottom: 4px;">Candidate Rank ${note.rank} • ${note.source}</div>`;
+                if (data.candidates && data.candidates[note.rank - 1]) {
+                    lat = data.candidates[note.rank - 1].lat;
+                    lon = data.candidates[note.rank - 1].lon;
+                }
+            } else if (note.target_type === "manual_pin") {
+                lat = note.lat;
+                lon = note.lon;
+                targetHtml = `<div style="color: #ff4444; font-size: 10px; margin-bottom: 4px;">Manual Pin • ${lat.toFixed(4)}, ${lon.toFixed(4)}</div>`;
+            }
+
+            const timeStr = note.timestamp ? note.timestamp.split(" ").slice(1).join(" ") : "";
+
+            card.innerHTML = `
+                ${targetHtml}
+                <div style="font-size: 12px; color: #fff; line-height: 1.4; margin-bottom: 6px;">${note.text}</div>
+                <div style="font-size: 9px; color: var(--text-secondary); text-align: right;">${timeStr}</div>
+            `;
+
+            card.addEventListener("click", () => {
+                if (lat && lon && liveMap) {
+                    flyToCentered({ center: [lon, lat], zoom: 16 });
+                }
+            });
+
+            list.appendChild(card);
+        });
+    });
 }
