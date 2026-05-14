@@ -1074,23 +1074,54 @@ function svSetError(msg) {
 
 function svClose() {
     byId("street-view-modal")?.classList.remove("active");
-    svApplyZoom(1);
+    svResetZoom();
     if (svState.minimapMarkers) {
         svState.minimapMarkers.forEach(m => m.remove());
         svState.minimapMarkers = [];
     }
 }
 
-// ── Zoom ─────────────────────────────────────────────────────────
+// ── Zoom + Pan ───────────────────────────────────────────────────
 let svZoom = 1;
+let svPanX = 0; // offset from natural center (in CSS px)
+let svPanY = 0;
+let svIsDragging = false;
+let svDragStartX = 0, svDragStartY = 0, svDragStartPanX = 0, svDragStartPanY = 0;
 const SV_ZOOM_MIN = 0.5, SV_ZOOM_MAX = 5, SV_ZOOM_STEP = 0.25;
 
-function svApplyZoom(z) {
-    svZoom = Math.max(SV_ZOOM_MIN, Math.min(SV_ZOOM_MAX, z));
+function svSetTransform(animated) {
     const img = byId("sv-img");
-    if (img) img.style.transform = `scale(${svZoom})`;
+    if (!img) return;
+    img.style.transition = animated ? "transform 0.12s ease" : "none";
+    img.style.transform = `translate(${svPanX}px, ${svPanY}px) scale(${svZoom})`;
     const lbl = byId("sv-zoom-label");
     if (lbl) lbl.textContent = `${Math.round(svZoom * 100)}%`;
+}
+
+// Zoom toward a point. cursorX/Y are in wrap-relative px; omit to zoom to center.
+function svApplyZoom(newZ, cursorX, cursorY) {
+    const clamped = Math.max(SV_ZOOM_MIN, Math.min(SV_ZOOM_MAX, newZ));
+    if (cursorX !== undefined && cursorY !== undefined) {
+        const wrap = byId("sv-image-wrap");
+        if (wrap) {
+            const wRect = wrap.getBoundingClientRect();
+            // cursor relative to wrap center (= natural image center)
+            const cx = cursorX - wRect.width  / 2;
+            const cy = cursorY - wRect.height / 2;
+            // same content-space point stays under cursor after zoom
+            const contentX = (cx - svPanX) / svZoom;
+            const contentY = (cy - svPanY) / svZoom;
+            svPanX = cx - contentX * clamped;
+            svPanY = cy - contentY * clamped;
+        }
+    }
+    svZoom = clamped;
+    svSetTransform(cursorX === undefined); // animate only for button/key presses
+}
+
+function svResetZoom() {
+    svZoom = 1; svPanX = 0; svPanY = 0;
+    svSetTransform(true);
 }
 
 // ── Street View Core ──────────────────────────────────────────────
@@ -1149,6 +1180,10 @@ function svApplyState(data) {
     svState.sequence = cur.sequence;
     svState.seqPos = data.sequence_position;
     svState.seqTotal = data.sequence_total;
+
+    // Reset zoom/pan on each new image load
+    svZoom = 1; svPanX = 0; svPanY = 0;
+    svSetTransform(false);
 
     // Load image
     const img = byId("sv-img");
@@ -1779,7 +1814,7 @@ function setupKeyboardNav() {
       svApplyZoom(svZoom - SV_ZOOM_STEP);
     } else if (e.key === "r" || e.key === "R") {
       e.preventDefault();
-      svApplyZoom(1);
+      svResetZoom();
     }
   });
 }
@@ -2244,17 +2279,46 @@ function setupOperatorActions() {
         svNavigateTo({ lat: svState.lat, lon: svState.lon, preferHeading: ph });
     });
 
-    // Zoom buttons
+    // Zoom buttons (zoom to center)
     byId("sv-zoom-in")?.addEventListener("click", () => svApplyZoom(svZoom + SV_ZOOM_STEP));
     byId("sv-zoom-out")?.addEventListener("click", () => svApplyZoom(svZoom - SV_ZOOM_STEP));
-    byId("sv-zoom-reset")?.addEventListener("click", () => svApplyZoom(1));
+    byId("sv-zoom-reset")?.addEventListener("click", () => svResetZoom());
 
-    // Mouse wheel zoom on the image area
-    byId("sv-image-wrap")?.addEventListener("wheel", (e) => {
+    // Mouse wheel zoom toward cursor
+    const svWrap = byId("sv-image-wrap");
+    svWrap?.addEventListener("wheel", (e) => {
         if (!byId("street-view-modal")?.classList.contains("active")) return;
         e.preventDefault();
-        svApplyZoom(svZoom + (e.deltaY < 0 ? SV_ZOOM_STEP : -SV_ZOOM_STEP));
+        const rect = svWrap.getBoundingClientRect();
+        svApplyZoom(
+            svZoom + (e.deltaY < 0 ? SV_ZOOM_STEP : -SV_ZOOM_STEP),
+            e.clientX - rect.left,
+            e.clientY - rect.top
+        );
     }, { passive: false });
+
+    // Drag to pan when zoomed in
+    svWrap?.addEventListener("mousedown", (e) => {
+        if (svZoom <= 1 || e.button !== 0) return;
+        svIsDragging = true;
+        svDragStartX = e.clientX;
+        svDragStartY = e.clientY;
+        svDragStartPanX = svPanX;
+        svDragStartPanY = svPanY;
+        svWrap.style.cursor = "grabbing";
+        e.preventDefault();
+    });
+    document.addEventListener("mousemove", (e) => {
+        if (!svIsDragging) return;
+        svPanX = svDragStartPanX + (e.clientX - svDragStartX);
+        svPanY = svDragStartPanY + (e.clientY - svDragStartY);
+        svSetTransform(false);
+    });
+    document.addEventListener("mouseup", () => {
+        if (!svIsDragging) return;
+        svIsDragging = false;
+        if (svWrap) svWrap.style.cursor = "";
+    });
 
     window.addEventListener("resize", () => {
         if (byId("street-view-modal")?.classList.contains("active")) svDrawCandidateOverlays();
@@ -2596,6 +2660,8 @@ function renderNoteMarkers() {
     noteMarkers.forEach(m => m.remove());
     noteMarkers = [];
 
+    if (!loadedSessionId) return;
+
     fetch("/api/operator/session").then(r => r.json()).then(data => {
         if (!data.notes || data.notes.length === 0) return;
 
@@ -2643,6 +2709,11 @@ function renderNoteMarkers() {
 function renderNotesList() {
     const list = document.getElementById("notes-list");
     if (!list) return;
+
+    if (!loadedSessionId) {
+        list.innerHTML = '<div class="empty-state">No notes saved.</div>';
+        return;
+    }
 
     fetch("/api/operator/session").then(r => r.json()).then(data => {
         if (!data.notes || data.notes.length === 0) {
