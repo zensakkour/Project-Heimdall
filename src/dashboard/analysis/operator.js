@@ -316,27 +316,14 @@ function clusterCandidateItems(items) {
     }
 
     target.items.push(item);
-    target.point = averageClusterPoint(target.items);
-    target.coord = averageClusterCoord(target.items);
+    // Keep the cluster pinned to the highest-ranked candidate's exact coordinate.
+    // Averaging produces a midpoint that belongs to no real location, causing
+    // pins to drift to the wrong street when candidates are nearby.
+    target.coord = { ...target.items[0].coord };
+    target.point = liveMap.project([target.coord.lon, target.coord.lat]);
   });
 
   return clusters;
-}
-
-function averageClusterPoint(items) {
-  const sum = items.reduce((acc, item) => {
-    const point = liveMap.project([item.coord.lon, item.coord.lat]);
-    return { x: acc.x + point.x, y: acc.y + point.y };
-  }, { x: 0, y: 0 });
-  return { x: sum.x / items.length, y: sum.y / items.length };
-}
-
-function averageClusterCoord(items) {
-  const sum = items.reduce((acc, item) => ({
-    lat: acc.lat + item.coord.lat,
-    lon: acc.lon + item.coord.lon
-  }), { lat: 0, lon: 0 });
-  return { lat: sum.lat / items.length, lon: sum.lon / items.length };
 }
 
 function markerCandidateIndices(el) {
