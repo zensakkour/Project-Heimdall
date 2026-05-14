@@ -466,7 +466,7 @@ function ensureLiveMap() {
       style: mapStyleUrl,
       center: globeCenter,
       zoom: globeZoom,
-      pitch: 0, 
+      pitch: 0,
       bearing: 0,
       padding: padding,
       projection: { type: "globe" },
@@ -823,10 +823,10 @@ function selectCandidate(index) {
   droppedPinLocation = null;
   const cards = document.querySelectorAll(".candidate-card");
   if (!cards.length) return;
-  
+
   if (index < 0) index = 0;
   if (index >= cards.length) index = cards.length - 1;
-  
+
   const card = cards[index];
   const isAlreadySelected = card.classList.contains("active");
 
@@ -846,18 +846,18 @@ function selectCandidate(index) {
   updateSelectedMarker(index);
   updateHtmlMarkerSelection(index);
   card.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  
+
   const lat = parseFloat(card.dataset.lat);
   const lon = parseFloat(card.dataset.lon);
-  
+
   if (liveMap) {
     console.log(`LOG: Inspecting candidate #${index + 1} at ${lat}, ${lon}`);
     flyToCentered({
-      center: [lon, lat], 
-      zoom: 18, 
+      center: [lon, lat],
+      zoom: 18,
       pitch: 0,
       bearing: 0,
-      duration: 1200 
+      duration: 1200
     });
   }
 
@@ -927,10 +927,10 @@ function renderCandidateList(result) {
     card.dataset.lat = lat;
     card.dataset.lon = lon;
     card.dataset.index = idx;
-    
+
     const coordString = `${Number(lat).toFixed(6)}, ${Number(lon).toFixed(6)}`;
     const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
-    
+
     // Check source
     const sourceId = cand.match_id || cand.source || "N/A";
     const isExif = sourceId === "exif:gps";
@@ -954,9 +954,9 @@ function renderCandidateList(result) {
        <button class="btn-card-action candidate-action" data-action="confirm" type="button">CONFIRM</button>
        <button class="btn-card-action candidate-action" data-action="reject" type="button">REJECT</button>
       </div>
-      <div class="card-action-row">
-        <button class="btn-card-action open-maps">Open in Google Maps</button>
-        <button class="btn-card-action street-view-btn street-view-btn-accent" data-lat="${lat}" data-lon="${lon}">Street View</button>
+      <div style="display: flex; gap: 8px; margin-top: 8px;">
+        <button class="btn-card-action open-maps" style="flex: 1;">Open in Google Maps</button>
+        <button class="btn-card-action street-view-btn" data-lat="${lat}" data-lon="${lon}" style="flex: 1; border: 1px solid var(--accent); color: var(--accent);">Street View</button>
       </div>
       <span class="copied-hint">Copied</span>
     `;
@@ -1014,7 +1014,7 @@ function renderCandidateList(result) {
 
     container.appendChild(card);
   });
-  
+
   // Attach street view handlers
   container.querySelectorAll(".street-view-btn").forEach(btn => {
       btn.addEventListener("click", (e) => {
@@ -1074,54 +1074,23 @@ function svSetError(msg) {
 
 function svClose() {
     byId("street-view-modal")?.classList.remove("active");
-    svResetZoom();
+    svApplyZoom(1);
     if (svState.minimapMarkers) {
         svState.minimapMarkers.forEach(m => m.remove());
         svState.minimapMarkers = [];
     }
 }
 
-// ── Zoom + Pan ───────────────────────────────────────────────────
+// ── Zoom ─────────────────────────────────────────────────────────
 let svZoom = 1;
-let svPanX = 0; // offset from natural center (in CSS px)
-let svPanY = 0;
-let svIsDragging = false;
-let svDragStartX = 0, svDragStartY = 0, svDragStartPanX = 0, svDragStartPanY = 0;
 const SV_ZOOM_MIN = 0.5, SV_ZOOM_MAX = 5, SV_ZOOM_STEP = 0.25;
 
-function svSetTransform(animated) {
+function svApplyZoom(z) {
+    svZoom = Math.max(SV_ZOOM_MIN, Math.min(SV_ZOOM_MAX, z));
     const img = byId("sv-img");
-    if (!img) return;
-    img.style.transition = animated ? "transform 0.12s ease" : "none";
-    img.style.transform = `translate(${svPanX}px, ${svPanY}px) scale(${svZoom})`;
+    if (img) img.style.transform = `scale(${svZoom})`;
     const lbl = byId("sv-zoom-label");
     if (lbl) lbl.textContent = `${Math.round(svZoom * 100)}%`;
-}
-
-// Zoom toward a point. cursorX/Y are in wrap-relative px; omit to zoom to center.
-function svApplyZoom(newZ, cursorX, cursorY) {
-    const clamped = Math.max(SV_ZOOM_MIN, Math.min(SV_ZOOM_MAX, newZ));
-    if (cursorX !== undefined && cursorY !== undefined) {
-        const wrap = byId("sv-image-wrap");
-        if (wrap) {
-            const wRect = wrap.getBoundingClientRect();
-            // cursor relative to wrap center (= natural image center)
-            const cx = cursorX - wRect.width  / 2;
-            const cy = cursorY - wRect.height / 2;
-            // same content-space point stays under cursor after zoom
-            const contentX = (cx - svPanX) / svZoom;
-            const contentY = (cy - svPanY) / svZoom;
-            svPanX = cx - contentX * clamped;
-            svPanY = cy - contentY * clamped;
-        }
-    }
-    svZoom = clamped;
-    svSetTransform(cursorX === undefined); // animate only for button/key presses
-}
-
-function svResetZoom() {
-    svZoom = 1; svPanX = 0; svPanY = 0;
-    svSetTransform(true);
 }
 
 // ── Street View Core ──────────────────────────────────────────────
@@ -1180,10 +1149,6 @@ function svApplyState(data) {
     svState.sequence = cur.sequence;
     svState.seqPos = data.sequence_position;
     svState.seqTotal = data.sequence_total;
-
-    // Reset zoom/pan on each new image load
-    svZoom = 1; svPanX = 0; svPanY = 0;
-    svSetTransform(false);
 
     // Load image
     const img = byId("sv-img");
@@ -1425,15 +1390,6 @@ function svUpdateMinimap() {
 
 function renderLiveMap(result, { resetView = false } = {}) {
   ensureLiveMap();
-
-  // Always clear existing markers and sources first
-  clearCandidateMarkers();
-  liveMapReady.then(() => {
-    liveMap.getSource("candidates")?.setData(emptyFeatureCollection);
-    liveMap.getSource("ring")?.setData({ type: "FeatureCollection", features: [] });
-    liveMap.getSource("mean")?.setData(emptyFeatureCollection);
-  });
-
   const fusion = result?.fused_estimate;
   const candidates = sortedCandidates(result);
 
@@ -1452,8 +1408,10 @@ function renderLiveMap(result, { resetView = false } = {}) {
   } : null;
 
   liveMapReady.then(() => {
+    liveMap.getSource("candidates").setData(emptyFeatureCollection);
     renderHtmlCandidateMarkers(visibleCandidates);
-    liveMap.getSource("ring")?.setData({ type: "FeatureCollection", features: ringFeature ? [ringFeature] : [] });
+    liveMap.getSource("ring").setData({ type: "FeatureCollection", features: ringFeature ? [ringFeature] : [] });
+    liveMap.getSource("mean").setData(emptyFeatureCollection);
     bringCandidateLayersToFront();
     if (resetView) {
       easeToCentered({
@@ -1477,7 +1435,7 @@ function renderSummary(result) {
   setMetric("diag-backend", res.source?.filename || "-");
   setMetric("diag-worker", res.runtime?.worker_mode || "-");
   setMetric("diag-tier", geo.tier || "-");
-  
+
   // Radius: prefer non-zero fusion radius, fallback to geo uncertainty
   let radius = "-";
   if (fusion.radius_km !== undefined && fusion.radius_km > 0) {
@@ -1488,7 +1446,7 @@ function renderSummary(result) {
     radius = `${geo.uncertainty_m}m`;
   }
   setMetric("diag-radius", radius);
-  
+
   // Model Status: Check safe_demo or backend name
   const isDemo = Boolean(res.safe_demo);
   const modelStatus = isDemo ? "DEMO FALLBACK" : "REAL MODEL";
@@ -1505,9 +1463,7 @@ function renderSummary(result) {
   renderTimeline(result);
   renderClues(result);
   selectedLightboxDetectionIndex = 0;
-  // Only draw overlay if image is already decoded; doLoadSession sets onload for the async case
-  const lbImg = byId("lightbox-img");
-  if (lbImg && lbImg.naturalWidth > 0) renderLightboxIntel();
+  renderLightboxIntel();
 }
 
 function showAnalysisAlert(message) {
@@ -1543,7 +1499,7 @@ function setupFilePicker() {
   const removeBtn = byId("remove-image");
   const geolocateBtn = byId("geolocate-image");
   const errorContainer = byId("analysis-error");
-  
+
   if (!input || !trigger) return;
 
   trigger.addEventListener("click", () => input.click());
@@ -1628,12 +1584,12 @@ function setupAnalysis() {
 
     const form = new FormData();
     form.append("image", file);
-    
+
     try {
       if (progress) progress.style.display = "block";
       if (errorContainer) errorContainer.style.display = "none";
       btn.disabled = true;
-      
+
       const startTime = performance.now();
 
       const devMode = byId("dev-mode-toggle")?.checked ? "1" : "";
@@ -1648,7 +1604,7 @@ function setupAnalysis() {
       }
 
       const duration = (performance.now() - startTime) / 1000;
-      
+
       console.log(`LOG: Pipeline finished in ${duration.toFixed(2)}s`);
       if (result.safe_demo) {
         const fallbackReason = result.geo_debug?.fallback_reason || result.fallback_reason || "server returned demo fallback";
@@ -1755,7 +1711,7 @@ function setupMapControls() {
   }
 
   liveMapReady?.then(updateTiltLabel);
-  
+
   byId("map-reset-paris").addEventListener("click", () => {
     easeToCentered({ center: parisCenter, zoom: 11, pitch: 0, bearing: 0, duration: 1400 });
     window.setTimeout(updateTiltLabel, 1420);
@@ -1823,7 +1779,7 @@ function setupKeyboardNav() {
       svApplyZoom(svZoom - SV_ZOOM_STEP);
     } else if (e.key === "r" || e.key === "R") {
       e.preventDefault();
-      svResetZoom();
+      svApplyZoom(1);
     }
   });
 }
@@ -1848,7 +1804,7 @@ function setupDiagnostics() {
   const copySumBtn = byId("copy-diag-all");
   const copyJsonBtn = byId("copy-json");
   const expandJsonBtn = byId("expand-json");
-  
+
   const jsonModal = byId("json-modal");
   const jsonModalText = byId("modal-json-text");
   const closeJsonBtn = byId("close-json-modal");
@@ -1889,17 +1845,14 @@ function setupDiagnostics() {
   if (jsonBackdrop) jsonBackdrop.addEventListener("click", closeJson);
 }
 
-const SVG_CHEVRON_RIGHT = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>`;
-const SVG_CHEVRON_DOWN  = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`;
-
 function setupCollapsiblePanel(triggerId, bodyId) {
   const trigger = byId(triggerId);
   const body = byId(bodyId);
   if (!trigger || !body) return;
 
-  const icon = trigger.querySelector(".toggle-chevron");
+  const icon = trigger.querySelector("span");
   const syncIcon = () => {
-    if (icon) icon.innerHTML = body.classList.contains("active") ? SVG_CHEVRON_DOWN : SVG_CHEVRON_RIGHT;
+    if (icon) icon.textContent = body.classList.contains("active") ? "v" : ">";
   };
 
   trigger.addEventListener("click", () => {
@@ -1918,16 +1871,16 @@ function setupPanelAccordions() {
 
 function loadSessionList() {
     const select = byId("load-session-select");
-    if (!select) return Promise.resolve();
-    return fetch("/api/operator/sessions")
+    if (!select) return;
+    fetch("/api/operator/sessions")
         .then(r => r.json())
         .then(data => {
-            select.innerHTML = '<option value="">— Load Session —</option>';
+            select.innerHTML = '<option value="">-- Load Session --</option>';
             if (data.sessions && data.sessions.length > 0) {
                 data.sessions.forEach(session => {
                     const option = document.createElement("option");
                     option.value = session.session_id;
-                    const fileStr = session.source_filename ? ` — ${session.source_filename}` : "";
+                    const fileStr = session.source_filename ? ` - ${session.source_filename}` : "";
                     option.textContent = `${session.display_name}${fileStr} [${session.status}]`;
                     select.appendChild(option);
                 });
@@ -1937,141 +1890,6 @@ function loadSessionList() {
             }
         })
         .catch(err => console.error("Failed to load session list:", err));
-}
-
-function doLoadSession(sid) {
-    if (!sid) return;
-    fetch(`/api/operator/sessions/${sid}`)
-        .then(r => {
-            if (!r.ok) throw new Error(`Session load failed (HTTP ${r.status})`);
-            return r.json();
-        })
-        .then(data => {
-            if (data.error) throw new Error(data.error);
-
-            loadedSessionId = data.session_id || sid;
-            localStorage.setItem("heimdallSessionId", loadedSessionId);
-
-            lastResult = {
-                fused_estimate: data.fused_estimate,
-                candidates: data.candidates,
-                clues: data.clues,
-                detections: data.detections
-            };
-
-            // Restore source image into the left-panel preview area.
-            // Use the binary image endpoint for reliability instead of base64 data URL.
-            const source = data.source || {};
-            const imgEndpoint = `/api/operator/sessions/${loadedSessionId}/image`;
-            const imgUrl = source.image_data_url
-                || (source.has_session_image || source.image_file ? imgEndpoint : null);
-            const thumb = byId("source-thumb");
-            const filenameLbl = byId("preview-filename");
-            const previewBlock = byId("preview-block");
-            const ingestBlock = byId("ingest-block");
-            const lightboxImg = byId("lightbox-img");
-            const lightboxName = byId("lightbox-filename");
-            const geolocateBtn = byId("geolocate-image");
-
-            if (source.filename || imgUrl) {
-                if (filenameLbl) filenameLbl.textContent = source.filename || "Session image";
-                if (lightboxName) lightboxName.textContent = source.filename || "";
-                if (previewBlock) previewBlock.style.display = "flex";
-                if (ingestBlock) ingestBlock.style.display = "none";
-            }
-
-            if (imgUrl) {
-                if (geolocateBtn) geolocateBtn.disabled = false;
-                if (lightboxImg) {
-                    selectedLightboxDetectionIndex = 0;
-                    lightboxImg.onload = () => renderLightboxIntel();
-                    lightboxImg.src = imgUrl;
-                    if (lightboxImg.complete && lightboxImg.naturalWidth > 0) renderLightboxIntel();
-                }
-                if (thumb) thumb.src = imgUrl;
-            }
-
-            renderSummary(data);
-            renderNoteMarkers();
-            renderNotesList();
-            if (data.operator_notes) {
-                const noteInput = byId("operator-note-input");
-                if (noteInput) noteInput.value = data.operator_notes;
-            }
-        })
-        .catch(err => console.error("Failed to load session:", err));
-}
-
-const SVG_CHEVRON_LEFT  = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>`;
-const SVG_CHEVRON_RIGHT2 = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>`;
-
-function setupPanelResize() {
-  const shell = document.querySelector(".app-shell");
-  if (!shell) return;
-
-  function attachDrag(handle, side) {
-    if (!handle) return;
-    handle.addEventListener("mousedown", (e) => {
-      e.preventDefault();
-      const varName = side === "left" ? "--left-w" : "--right-w";
-      const startX = e.clientX;
-      const startW = parseInt(getComputedStyle(shell).getPropertyValue(varName)) || (side === "left" ? 350 : 380);
-      handle.classList.add("resizing");
-
-      const onMove = (ev) => {
-        const dx = ev.clientX - startX;
-        const newW = Math.max(48, Math.min(640, side === "left" ? startW + dx : startW - dx));
-        shell.style.setProperty(varName, newW + "px");
-        if (liveMap) liveMap.resize();
-      };
-      const onUp = () => {
-        handle.classList.remove("resizing");
-        document.removeEventListener("mousemove", onMove);
-        document.removeEventListener("mouseup", onUp);
-      };
-      document.addEventListener("mousemove", onMove);
-      document.addEventListener("mouseup", onUp);
-    });
-  }
-
-  attachDrag(document.querySelector(".left-resize-handle"), "left");
-  attachDrag(document.querySelector(".right-resize-handle"), "right");
-}
-
-function setupPanelCollapse() {
-  const shell = document.querySelector(".app-shell");
-  if (!shell) return;
-
-  function attachCollapse(panelEl, btn, side) {
-    if (!panelEl || !btn) return;
-    const varName = side === "left" ? "--left-w" : "--right-w";
-    const defaultW = side === "left" ? "350px" : "380px";
-
-    const syncIcon = () => {
-      const collapsed = panelEl.classList.contains("collapsed");
-      btn.innerHTML = side === "left"
-        ? (collapsed ? SVG_CHEVRON_RIGHT2 : SVG_CHEVRON_LEFT)
-        : (collapsed ? SVG_CHEVRON_LEFT  : SVG_CHEVRON_RIGHT2);
-      btn.title = collapsed ? "Expand panel" : "Collapse panel";
-    };
-
-    btn.addEventListener("click", () => {
-      const collapsed = panelEl.classList.toggle("collapsed");
-      if (collapsed) {
-        panelEl.dataset.prevW = getComputedStyle(shell).getPropertyValue(varName).trim();
-        shell.style.setProperty(varName, "48px");
-      } else {
-        shell.style.setProperty(varName, panelEl.dataset.prevW || defaultW);
-      }
-      if (liveMap) liveMap.resize();
-      syncIcon();
-    });
-
-    syncIcon();
-  }
-
-  attachCollapse(document.querySelector(".left-panel"),  byId("left-panel-collapse-btn"),  "left");
-  attachCollapse(document.querySelector(".right-panel"), byId("right-panel-collapse-btn"), "right");
 }
 
 function init() {
@@ -2086,25 +1904,45 @@ function init() {
   setupPanelAccordions();
   setupToggles();
   setupOperatorActions();
-  setupPanelResize();
-  setupPanelCollapse();
 
-  // On every page load: check if a session was queued to auto-load (set before reload).
-  // If yes, load it. If no, reset server so there's no stale state.
-  const pendingSessionId = localStorage.getItem("heimdallPendingLoad");
-  localStorage.removeItem("heimdallPendingLoad");
-  loadedSessionId = null;
-  localStorage.removeItem("heimdallSessionId");
+  const savedSessionId = localStorage.getItem("heimdallSessionId");
+  if (savedSessionId) {
+      loadedSessionId = savedSessionId;
+  }
 
-  if (pendingSessionId) {
-    loadSessionList().then(() => {
-      const sel = byId("load-session-select");
-      if (sel) sel.value = pendingSessionId;
-      doLoadSession(pendingSessionId);
-    });
-  } else {
-    fetch("/api/operator/reset", { method: "POST" }).catch(() => {});
-    loadSessionList();
+  loadSessionList();
+
+  if (loadedSessionId) {
+      fetch(`/api/operator/sessions/${loadedSessionId}`)
+          .then(r => {
+              if (r.ok) return r.json();
+              loadedSessionId = null;
+              localStorage.removeItem("heimdallSessionId");
+              loadSessionList();
+              throw new Error("Session not found");
+          })
+          .then(data => {
+               if (!data.session_id) return;
+               // Full mock of lastResult structure needed by UI renderers
+               lastResult = {
+                   geo: data.fused_estimate,
+                   candidates: data.candidates,
+                   clues: data.clues,
+                   detections: data.detections
+               };
+               renderSummary(data);
+               renderCandidateList(lastResult);
+               renderLiveMap(lastResult);
+               renderTimeline(data);
+               renderClues(data);
+               renderNoteMarkers();
+               renderNotesList();
+               if (data.operator_notes) {
+                   const noteInput = byId("operator-note-input");
+                   if (noteInput) noteInput.value = data.operator_notes;
+               }
+          })
+          .catch(err => console.error("Failed to auto-load session:", err));
   }
 
   const tabGeotags = document.getElementById("tab-geotags");
@@ -2114,8 +1952,10 @@ function init() {
 
   if (tabGeotags && tabNotes && geotagsView && notesView) {
       tabGeotags.addEventListener("click", () => {
-          tabGeotags.classList.add("active");
-          tabNotes.classList.remove("active");
+          tabGeotags.style.color = "var(--accent)";
+          tabGeotags.style.borderBottomColor = "var(--accent)";
+          tabNotes.style.color = "var(--text-secondary)";
+          tabNotes.style.borderBottomColor = "transparent";
           geotagsView.style.display = "flex";
           notesView.style.display = "none";
 
@@ -2133,8 +1973,10 @@ function init() {
           }
       });
       tabNotes.addEventListener("click", () => {
-          tabNotes.classList.add("active");
-          tabGeotags.classList.remove("active");
+          tabNotes.style.color = "var(--accent)";
+          tabNotes.style.borderBottomColor = "var(--accent)";
+          tabGeotags.style.color = "var(--text-secondary)";
+          tabGeotags.style.borderBottomColor = "transparent";
           notesView.style.display = "flex";
           geotagsView.style.display = "none";
 
@@ -2362,46 +2204,17 @@ function setupOperatorActions() {
         svNavigateTo({ lat: svState.lat, lon: svState.lon, preferHeading: ph });
     });
 
-    // Zoom buttons (zoom to center)
+    // Zoom buttons
     byId("sv-zoom-in")?.addEventListener("click", () => svApplyZoom(svZoom + SV_ZOOM_STEP));
     byId("sv-zoom-out")?.addEventListener("click", () => svApplyZoom(svZoom - SV_ZOOM_STEP));
-    byId("sv-zoom-reset")?.addEventListener("click", () => svResetZoom());
+    byId("sv-zoom-reset")?.addEventListener("click", () => svApplyZoom(1));
 
-    // Mouse wheel zoom toward cursor
-    const svWrap = byId("sv-image-wrap");
-    svWrap?.addEventListener("wheel", (e) => {
+    // Mouse wheel zoom on the image area
+    byId("sv-image-wrap")?.addEventListener("wheel", (e) => {
         if (!byId("street-view-modal")?.classList.contains("active")) return;
         e.preventDefault();
-        const rect = svWrap.getBoundingClientRect();
-        svApplyZoom(
-            svZoom + (e.deltaY < 0 ? SV_ZOOM_STEP : -SV_ZOOM_STEP),
-            e.clientX - rect.left,
-            e.clientY - rect.top
-        );
+        svApplyZoom(svZoom + (e.deltaY < 0 ? SV_ZOOM_STEP : -SV_ZOOM_STEP));
     }, { passive: false });
-
-    // Drag to pan when zoomed in
-    svWrap?.addEventListener("mousedown", (e) => {
-        if (svZoom <= 1 || e.button !== 0) return;
-        svIsDragging = true;
-        svDragStartX = e.clientX;
-        svDragStartY = e.clientY;
-        svDragStartPanX = svPanX;
-        svDragStartPanY = svPanY;
-        svWrap.style.cursor = "grabbing";
-        e.preventDefault();
-    });
-    document.addEventListener("mousemove", (e) => {
-        if (!svIsDragging) return;
-        svPanX = svDragStartPanX + (e.clientX - svDragStartX);
-        svPanY = svDragStartPanY + (e.clientY - svDragStartY);
-        svSetTransform(false);
-    });
-    document.addEventListener("mouseup", () => {
-        if (!svIsDragging) return;
-        svIsDragging = false;
-        if (svWrap) svWrap.style.cursor = "";
-    });
 
     window.addEventListener("resize", () => {
         if (byId("street-view-modal")?.classList.contains("active")) svDrawCandidateOverlays();
@@ -2427,39 +2240,78 @@ function setupOperatorActions() {
         });
     }
 
-    function afterSessionSaved(data) {
-        if (data.session_id) {
-            localStorage.setItem("heimdallPendingLoad", data.session_id);
-        }
-        window.location.reload();
-    }
-
     if (btnUpdateSession && sessionSaveModal) {
         btnUpdateSession.addEventListener("click", () => {
             sessionSaveModal.classList.remove("active");
             postForm("/api/operator/save", JSON.stringify({ save_as_new: false }))
-                .then(afterSessionSaved)
-                .catch(err => console.error("Save failed:", err));
+                .then(r => r.json())
+                .then(data => {
+                    if (data.session_id) {
+                        loadedSessionId = data.session_id;
+                        localStorage.setItem("heimdallSessionId", data.session_id);
+                    }
+                    loadSessionList();
+                    alert("Session updated successfully.");
+                });
         });
     }
 
     if (btnSaveNewSession && sessionSaveModal) {
         btnSaveNewSession.addEventListener("click", () => {
             sessionSaveModal.classList.remove("active");
-            const sessionName = prompt("Enter a name for this session (optional):");
+            const sessionName = prompt("Enter a new custom name for this session (optional):");
             if (sessionName !== null) {
                 postForm("/api/operator/save", JSON.stringify({ name: sessionName.trim(), save_as_new: true }))
-                    .then(afterSessionSaved)
-                    .catch(err => console.error("Save failed:", err));
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.session_id) {
+                            loadedSessionId = data.session_id;
+                            localStorage.setItem("heimdallSessionId", data.session_id);
+                        }
+                        loadSessionList();
+                        alert("Session saved as new.");
+                    });
             }
         });
     }
 
     if (newSessionBtn) {
         newSessionBtn.addEventListener("click", () => {
-            localStorage.removeItem("heimdallPendingLoad");
-            localStorage.removeItem("heimdallSessionId");
-            window.location.reload();
+            fetch("/api/operator/reset", { method: "POST" })
+                .then(() => {
+                    loadedSessionId = null;
+                    localStorage.removeItem("heimdallSessionId");
+                    setMetric("diag-backend", "-");
+                    setMetric("diag-worker", "-");
+                    setMetric("diag-tier", "-");
+                    setMetric("diag-radius", "-");
+                    lastResult = null;
+                    selectedIndex = -1;
+                    droppedPinLocation = null;
+
+                    const progress = byId("progress");
+                    const errorContainer = byId("analysis-error");
+                    const previewBlock = byId("preview-block");
+                    const ingestBlock = byId("ingest-block");
+
+                    if (progress) progress.style.display = "none";
+                    if (errorContainer) errorContainer.style.display = "none";
+                    if (previewBlock) previewBlock.style.display = "none";
+                    if (ingestBlock) ingestBlock.style.display = "block";
+
+                    const geolocateBtn = byId("geolocate-image");
+                    if (geolocateBtn) geolocateBtn.disabled = true;
+
+                    renderCandidateList(null);
+                    renderLiveMap(null);
+                    renderTimeline(null);
+                    renderClues(null);
+                    renderNoteMarkers();
+                    renderNotesList();
+
+                    const noteInput = byId("operator-note-input");
+                    if (noteInput) noteInput.value = "";
+                });
         });
     }
 
@@ -2468,11 +2320,18 @@ function setupOperatorActions() {
             if (loadedSessionId && sessionSaveModal) {
                 sessionSaveModal.classList.add("active");
             } else {
-                const sessionName = prompt("Enter a name for this session (optional):");
+                const sessionName = prompt("Enter a custom name for this session (optional):");
                 if (sessionName !== null) {
                     postForm("/api/operator/save", JSON.stringify({ name: sessionName.trim(), save_as_new: true }))
-                        .then(afterSessionSaved)
-                        .catch(err => console.error("Save failed:", err));
+                        .then(r => r.json())
+                        .then(data => {
+                            if (data.session_id) {
+                                loadedSessionId = data.session_id;
+                                localStorage.setItem("heimdallSessionId", data.session_id);
+                            }
+                            loadSessionList();
+                            alert("Session saved as new.");
+                        });
                 }
             }
         });
@@ -2555,10 +2414,6 @@ function setupOperatorActions() {
                          dropPinBtn.textContent = "📍 Drop Note Pin";
                      }
 
-                     // Refresh notes list and map markers immediately
-                     renderNotesList();
-                     renderNoteMarkers();
-
                      setTimeout(() => {
                          saveNoteBtn.textContent = "Save Note";
                      }, 2000);
@@ -2596,13 +2451,38 @@ function setupOperatorActions() {
                 warn.style.color = "#ef4444";
                 warn.style.fontSize = "11px";
                 warn.style.marginLeft = "8px";
-                warn.textContent = "Select a session first.";
+                warn.textContent = "Please select a session first.";
                 loadSessionBtn.parentElement.appendChild(warn);
                 setTimeout(() => warn.remove(), 3000);
                 return;
             }
-            localStorage.setItem("heimdallPendingLoad", sid);
-            window.location.reload();
+            fetch(`/api/operator/sessions/${sid}`)
+                .then(r => r.json())
+                .then(data => {
+                     loadedSessionId = data.session_id || sid;
+                     localStorage.setItem("heimdallSessionId", loadedSessionId);
+
+                     // Full mock of lastResult structure needed by UI renderers
+                     lastResult = {
+                         geo: data.fused_estimate,
+                         candidates: data.candidates,
+                         clues: data.clues,
+                         detections: data.detections
+                     };
+                     renderSummary(data);
+                     renderCandidateList(lastResult);
+                     renderLiveMap(lastResult);
+                     renderTimeline(data);
+                     renderClues(data);
+                     renderNoteMarkers();
+                     renderNotesList();
+                     if (data.operator_notes) {
+                         const noteInput = byId("operator-note-input");
+                         if (noteInput) noteInput.value = data.operator_notes;
+                     }
+                     loadSessionList();
+                })
+                .catch(err => console.error("Failed to load session:", err));
         });
     }
 
@@ -2756,11 +2636,8 @@ function renderNotesList() {
 
             card.innerHTML = `
                 ${targetHtml}
-                <div class="card-sub-wrap note-text-wrap" style="margin-bottom: 6px;">
-                  <div class="card-sub note-text" style="color: #fff; font-size: 12px;">${note.text}</div>
-                  <button class="source-more note-more" type="button" hidden>Show more</button>
-                </div>
-                <div style="font-size: 9px; color: var(--text-secondary); text-align: right; border-top: none;">${timeStr}</div>
+                <div style="font-size: 12px; color: #fff; line-height: 1.4; margin-bottom: 6px;">${note.text}</div>
+                <div style="font-size: 9px; color: var(--text-secondary); text-align: right;">${timeStr}</div>
             `;
             if (note.note_id) card.dataset.noteId = note.note_id;
 
@@ -2777,22 +2654,6 @@ function renderNotesList() {
             });
 
             list.appendChild(card);
-
-            const subEl = card.querySelector(".note-text");
-            const sourceMore = card.querySelector(".note-more");
-            if (subEl && sourceMore) {
-              requestAnimationFrame(() => {
-                const isOverflowing = subEl.scrollHeight > subEl.clientHeight + 1;
-                sourceMore.hidden = !isOverflowing;
-              });
-
-              sourceMore.addEventListener("click", (e) => {
-                e.stopPropagation();
-                const isExp = subEl.classList.toggle("expanded");
-                sourceMore.textContent = isExp ? "Show less" : "Show more";
-              });
-            }
-
         });
     });
 }
