@@ -1,0 +1,245 @@
+INFO:     Will watch for changes in these directories: ['/app/src']
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [284375] using StatReload
+Heimdall App: http://127.0.0.1:8000/analysis/
+INFO:     Started server process [284706]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+{"duration_ms": 12.32, "event": "request.complete", "method": "GET", "path": "/analysis/", "request_id": "cdc48e6ad2c6", "status_code": 200, "ts": "2026-05-13T20:52:49.289141Z"}
+INFO:     127.0.0.1:54400 - "GET /analysis/ HTTP/1.1" 200 OK
+{"duration_ms": 7.32, "event": "request.complete", "method": "GET", "path": "/theme.css", "request_id": "f3f8d1f90b9c", "status_code": 200, "ts": "2026-05-13T20:52:49.419983Z"}
+INFO:     127.0.0.1:54400 - "GET /theme.css?v=7 HTTP/1.1" 200 OK
+{"duration_ms": 2.34, "event": "request.complete", "method": "GET", "path": "/analysis/operator.css", "request_id": "05762ecf7a12", "status_code": 200, "ts": "2026-05-13T20:52:49.425547Z"}
+INFO:     127.0.0.1:54402 - "GET /analysis/operator.css?v=30 HTTP/1.1" 200 OK
+{"duration_ms": 6.11, "event": "request.complete", "method": "GET", "path": "/analysis/operator.js", "request_id": "d9f6e711d6c3", "status_code": 200, "ts": "2026-05-13T20:52:49.431033Z"}
+INFO:     127.0.0.1:54406 - "GET /analysis/operator.js?v=30 HTTP/1.1" 200 OK
+{"duration_ms": 8.29, "event": "request.complete", "method": "GET", "path": "/assets/logo-mark.png", "request_id": "8bc0aa1d4a9e", "status_code": 200, "ts": "2026-05-13T20:52:49.433321Z"}
+INFO:     127.0.0.1:54414 - "GET /assets/logo-mark.png HTTP/1.1" 200 OK
+{"duration_ms": 0.91, "event": "request.complete", "method": "GET", "path": "/analysis/shared.js", "request_id": "d1b40350e1d6", "status_code": 200, "ts": "2026-05-13T20:52:50.028708Z"}
+INFO:     127.0.0.1:54414 - "GET /analysis/shared.js HTTP/1.1" 200 OK
+{"duration_ms": 2.11, "event": "request.complete", "method": "GET", "path": "/api/operator/sessions", "request_id": "dd3b06846567", "status_code": 200, "ts": "2026-05-13T20:52:50.245249Z"}
+INFO:     127.0.0.1:54414 - "GET /api/operator/sessions HTTP/1.1" 200 OK
+{"duration_ms": 4.36, "event": "request.complete", "method": "POST", "path": "/api/operator/save", "request_id": "32667ba91f21", "status_code": 200, "ts": "2026-05-13T20:52:54.398785Z"}
+INFO:     127.0.0.1:54414 - "POST /api/operator/save HTTP/1.1" 200 OK
+{"duration_ms": 2.32, "event": "request.complete", "method": "GET", "path": "/analysis/", "request_id": "dea964c99020", "status_code": 200, "ts": "2026-05-13T20:55:22.271531Z"}
+INFO:     127.0.0.1:55114 - "GET /analysis/ HTTP/1.1" 200 OK
+{"duration_ms": 2.05, "event": "request.complete", "method": "GET", "path": "/theme.css", "request_id": "1f6979db0b89", "status_code": 200, "ts": "2026-05-13T20:55:22.287325Z"}
+INFO:     127.0.0.1:55114 - "GET /theme.css?v=7 HTTP/1.1" 200 OK
+{"duration_ms": 1.67, "event": "request.complete", "method": "GET", "path": "/analysis/operator.css", "request_id": "ce1da5af4489", "status_code": 200, "ts": "2026-05-13T20:55:22.296347Z"}
+INFO:     127.0.0.1:55130 - "GET /analysis/operator.css?v=30 HTTP/1.1" 200 OK
+{"duration_ms": 3.04, "event": "request.complete", "method": "GET", "path": "/assets/logo-mark.png", "request_id": "2b0677dd29cc", "status_code": 200, "ts": "2026-05-13T20:55:22.301320Z"}
+INFO:     127.0.0.1:55146 - "GET /assets/logo-mark.png HTTP/1.1" 200 OK
+{"duration_ms": 6.11, "event": "request.complete", "method": "GET", "path": "/analysis/operator.js", "request_id": "e3a816f41df2", "status_code": 200, "ts": "2026-05-13T20:55:22.301968Z"}
+INFO:     127.0.0.1:55140 - "GET /analysis/operator.js?v=30 HTTP/1.1" 200 OK
+{"duration_ms": 2.68, "event": "request.complete", "method": "GET", "path": "/analysis/shared.js", "request_id": "57a79300ca72", "status_code": 200, "ts": "2026-05-13T20:55:22.530350Z"}
+INFO:     127.0.0.1:55114 - "GET /analysis/shared.js HTTP/1.1" 200 OK
+{"duration_ms": 1.34, "event": "request.complete", "method": "GET", "path": "/api/operator/sessions", "request_id": "57a809976347", "status_code": 200, "ts": "2026-05-13T20:55:22.575888Z"}
+INFO:     127.0.0.1:55114 - "GET /api/operator/sessions HTTP/1.1" 200 OK
+{"duration_ms": 1.72, "event": "request.complete", "method": "POST", "path": "/api/operator/save", "request_id": "c01baf21a6fa", "status_code": 200, "ts": "2026-05-13T20:55:26.340856Z"}
+INFO:     127.0.0.1:55114 - "POST /api/operator/save HTTP/1.1" 200 OK
+{"duration_ms": 2.14, "event": "request.complete", "method": "GET", "path": "/api/operator/sessions/69fdac22ed114190b3bf53e21cb1c08c", "request_id": "b2985cf5c0fc", "status_code": 200, "ts": "2026-05-13T20:55:28.398030Z"}
+INFO:     127.0.0.1:55114 - "GET /api/operator/sessions/69fdac22ed114190b3bf53e21cb1c08c HTTP/1.1" 200 OK
+{"duration_ms": 1.12, "event": "request.complete", "method": "GET", "path": "/api/operator/session", "request_id": "1aa0577c41b0", "status_code": 200, "ts": "2026-05-13T20:55:28.408099Z"}
+INFO:     127.0.0.1:55114 - "GET /api/operator/session HTTP/1.1" 200 OK
+{"duration_ms": 2.08, "event": "request.complete", "method": "GET", "path": "/analysis/", "request_id": "53509d37eb38", "status_code": 200, "ts": "2026-05-13T20:56:25.886280Z"}
+INFO:     127.0.0.1:48976 - "GET /analysis/ HTTP/1.1" 200 OK
+{"duration_ms": 3.06, "event": "request.complete", "method": "GET", "path": "/theme.css", "request_id": "3ee5a6f12406", "status_code": 200, "ts": "2026-05-13T20:56:25.900850Z"}
+INFO:     127.0.0.1:48976 - "GET /theme.css?v=7 HTTP/1.1" 200 OK
+{"duration_ms": 8.9, "event": "request.complete", "method": "GET", "path": "/analysis/operator.css", "request_id": "5a7ba4e091c5", "status_code": 200, "ts": "2026-05-13T20:56:25.915652Z"}
+INFO:     127.0.0.1:48992 - "GET /analysis/operator.css?v=30 HTTP/1.1" 200 OK
+{"duration_ms": 8.02, "event": "request.complete", "method": "GET", "path": "/analysis/operator.js", "request_id": "a0e35eda91e4", "status_code": 200, "ts": "2026-05-13T20:56:25.916421Z"}
+INFO:     127.0.0.1:49000 - "GET /analysis/operator.js?v=30 HTTP/1.1" 200 OK
+{"duration_ms": 5.87, "event": "request.complete", "method": "GET", "path": "/assets/logo-mark.png", "request_id": "60050d96e652", "status_code": 200, "ts": "2026-05-13T20:56:25.918557Z"}
+INFO:     127.0.0.1:49006 - "GET /assets/logo-mark.png HTTP/1.1" 200 OK
+{"duration_ms": 1.52, "event": "request.complete", "method": "GET", "path": "/analysis/shared.js", "request_id": "1719f2b1c9d0", "status_code": 200, "ts": "2026-05-13T20:56:26.123037Z"}
+INFO:     127.0.0.1:48976 - "GET /analysis/shared.js HTTP/1.1" 200 OK
+{"duration_ms": 1.48, "event": "request.complete", "method": "GET", "path": "/api/operator/sessions", "request_id": "076863dfb53e", "status_code": 200, "ts": "2026-05-13T20:56:26.169068Z"}
+INFO:     127.0.0.1:48976 - "GET /api/operator/sessions HTTP/1.1" 200 OK
+{"duration_ms": 1.7, "event": "request.complete", "method": "POST", "path": "/api/operator/save", "request_id": "a404b316478c", "status_code": 200, "ts": "2026-05-13T20:56:29.841971Z"}
+INFO:     127.0.0.1:48976 - "POST /api/operator/save HTTP/1.1" 200 OK
+{"duration_ms": 1.63, "event": "request.complete", "method": "GET", "path": "/api/operator/sessions/db12b90059e14660a4a328e5deb90eab", "request_id": "de537ffb63ee", "status_code": 200, "ts": "2026-05-13T20:56:31.896566Z"}
+INFO:     127.0.0.1:48976 - "GET /api/operator/sessions/db12b90059e14660a4a328e5deb90eab HTTP/1.1" 200 OK
+{"duration_ms": 1.0, "event": "request.complete", "method": "GET", "path": "/api/operator/session", "request_id": "811685a2cc34", "status_code": 200, "ts": "2026-05-13T20:56:31.906060Z"}
+INFO:     127.0.0.1:48976 - "GET /api/operator/session HTTP/1.1" 200 OK
+{"duration_ms": 0.97, "event": "request.complete", "method": "GET", "path": "/api/operator/session", "request_id": "8b695e9a40d4", "status_code": 200, "ts": "2026-05-13T20:56:33.428381Z"}
+INFO:     127.0.0.1:48976 - "GET /api/operator/session HTTP/1.1" 200 OK
+{"duration_ms": 0.67, "event": "request.complete", "method": "GET", "path": "/api/operator/session", "request_id": "677d12a23126", "status_code": 200, "ts": "2026-05-13T20:56:33.433158Z"}
+INFO:     127.0.0.1:35836 - "GET /api/operator/session HTTP/1.1" 200 OK
+{"duration_ms": 1.41, "event": "request.complete", "method": "POST", "path": "/api/operator/save", "request_id": "39ca3121a1f3", "status_code": 200, "ts": "2026-05-13T20:56:37.692996Z"}
+INFO:     127.0.0.1:35836 - "POST /api/operator/save HTTP/1.1" 200 OK
+WARNING:  StatReload detected changes in 'src/tools/ui_server.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [284706]
+INFO:     Started server process [337435]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+WARNING:  StatReload detected changes in 'src/tools/ui_server.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [337435]
+INFO:     Started server process [389634]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+{"duration_ms": 12.33, "event": "request.complete", "method": "GET", "path": "/analysis/", "request_id": "641f32ea0d0d", "status_code": 200, "ts": "2026-05-13T22:59:27.762852Z"}
+INFO:     127.0.0.1:45698 - "GET /analysis/ HTTP/1.1" 200 OK
+{"duration_ms": 15.71, "event": "request.complete", "method": "GET", "path": "/theme.css", "request_id": "fd5d554bd09c", "status_code": 200, "ts": "2026-05-13T22:59:27.818719Z"}
+INFO:     127.0.0.1:45698 - "GET /theme.css?v=7 HTTP/1.1" 200 OK
+{"duration_ms": 9.7, "event": "request.complete", "method": "GET", "path": "/analysis/operator.js", "request_id": "8f8c779a1716", "status_code": 200, "ts": "2026-05-13T22:59:27.820147Z"}
+INFO:     127.0.0.1:45710 - "GET /analysis/operator.js?v=30 HTTP/1.1" 200 OK
+{"duration_ms": 14.2, "event": "request.complete", "method": "GET", "path": "/analysis/operator.css", "request_id": "060c4940b89e", "status_code": 200, "ts": "2026-05-13T22:59:27.823620Z"}
+INFO:     127.0.0.1:45702 - "GET /analysis/operator.css?v=30 HTTP/1.1" 200 OK
+{"duration_ms": 13.67, "event": "request.complete", "method": "GET", "path": "/assets/logo-mark.png", "request_id": "97809f13eb3f", "status_code": 200, "ts": "2026-05-13T22:59:27.824393Z"}
+INFO:     127.0.0.1:45718 - "GET /assets/logo-mark.png HTTP/1.1" 200 OK
+{"duration_ms": 3.58, "event": "request.complete", "method": "GET", "path": "/analysis/shared.js", "request_id": "ff797df6e75b", "status_code": 200, "ts": "2026-05-13T22:59:28.287325Z"}
+INFO:     127.0.0.1:45698 - "GET /analysis/shared.js HTTP/1.1" 200 OK
+{"duration_ms": 4.82, "event": "request.complete", "method": "GET", "path": "/api/operator/sessions", "request_id": "60e374657bb6", "status_code": 200, "ts": "2026-05-13T22:59:28.390615Z"}
+INFO:     127.0.0.1:45698 - "GET /api/operator/sessions HTTP/1.1" 200 OK
+{"duration_ms": 5.47, "event": "request.complete", "method": "POST", "path": "/api/operator/save", "request_id": "d83bdbf56d13", "status_code": 200, "ts": "2026-05-13T22:59:32.679872Z"}
+INFO:     127.0.0.1:45698 - "POST /api/operator/save HTTP/1.1" 200 OK
+{"duration_ms": 2.26, "event": "request.complete", "method": "GET", "path": "/api/operator/sessions/db12b90059e14660a4a328e5deb90eab", "request_id": "e384be69ce26", "status_code": 200, "ts": "2026-05-13T22:59:34.915021Z"}
+INFO:     127.0.0.1:45698 - "GET /api/operator/sessions/db12b90059e14660a4a328e5deb90eab HTTP/1.1" 200 OK
+{"duration_ms": 1.02, "event": "request.complete", "method": "GET", "path": "/api/operator/session", "request_id": "7326db827da6", "status_code": 200, "ts": "2026-05-13T22:59:34.926747Z"}
+INFO:     127.0.0.1:45698 - "GET /api/operator/session HTTP/1.1" 200 OK
+{"duration_ms": 0.97, "event": "request.complete", "method": "GET", "path": "/api/operator/session", "request_id": "1de2b4aaacaf", "status_code": 200, "ts": "2026-05-13T22:59:36.447572Z"}
+INFO:     127.0.0.1:45698 - "GET /api/operator/session HTTP/1.1" 200 OK
+{"duration_ms": 0.72, "event": "request.complete", "method": "GET", "path": "/api/operator/session", "request_id": "e612461b9a26", "status_code": 200, "ts": "2026-05-13T22:59:36.453925Z"}
+INFO:     127.0.0.1:45734 - "GET /api/operator/session HTTP/1.1" 200 OK
+{"duration_ms": 4.02, "event": "request.complete", "method": "POST", "path": "/api/operator/save", "request_id": "584ce3189d18", "status_code": 200, "ts": "2026-05-13T22:59:40.716635Z"}
+INFO:     127.0.0.1:45734 - "POST /api/operator/save HTTP/1.1" 200 OK
+{"duration_ms": 1.5, "event": "request.complete", "method": "GET", "path": "/api/operator/session", "request_id": "1bbdebdce84e", "status_code": 200, "ts": "2026-05-13T22:59:42.247519Z"}
+INFO:     127.0.0.1:45734 - "GET /api/operator/session HTTP/1.1" 200 OK
+{"duration_ms": 0.79, "event": "request.complete", "method": "GET", "path": "/api/operator/session", "request_id": "3d965d2aaa82", "status_code": 200, "ts": "2026-05-13T22:59:42.252087Z"}
+INFO:     127.0.0.1:34940 - "GET /api/operator/session HTTP/1.1" 200 OK
+{"duration_ms": 1.64, "event": "request.complete", "method": "GET", "path": "/analysis/", "request_id": "9ee013ee51c5", "status_code": 200, "ts": "2026-05-13T23:09:27.997720Z"}
+INFO:     127.0.0.1:44918 - "GET /analysis/ HTTP/1.1" 200 OK
+{"duration_ms": 3.64, "event": "request.complete", "method": "GET", "path": "/theme.css", "request_id": "37a2218fc894", "status_code": 200, "ts": "2026-05-13T23:09:28.017777Z"}
+INFO:     127.0.0.1:44918 - "GET /theme.css?v=7 HTTP/1.1" 200 OK
+{"duration_ms": 3.57, "event": "request.complete", "method": "GET", "path": "/analysis/operator.css", "request_id": "22cdf3ed2117", "status_code": 200, "ts": "2026-05-13T23:09:28.018842Z"}
+INFO:     127.0.0.1:44926 - "GET /analysis/operator.css?v=30 HTTP/1.1" 200 OK
+{"duration_ms": 3.95, "event": "request.complete", "method": "GET", "path": "/analysis/operator.js", "request_id": "0ce3855157ea", "status_code": 200, "ts": "2026-05-13T23:09:28.019326Z"}
+INFO:     127.0.0.1:44940 - "GET /analysis/operator.js?v=30 HTTP/1.1" 200 OK
+{"duration_ms": 4.17, "event": "request.complete", "method": "GET", "path": "/assets/logo-mark.png", "request_id": "b70ff4783506", "status_code": 200, "ts": "2026-05-13T23:09:28.020218Z"}
+INFO:     127.0.0.1:44944 - "GET /assets/logo-mark.png HTTP/1.1" 200 OK
+{"duration_ms": 0.93, "event": "request.complete", "method": "GET", "path": "/analysis/shared.js", "request_id": "6a59883ca9c5", "status_code": 200, "ts": "2026-05-13T23:09:28.245505Z"}
+INFO:     127.0.0.1:44918 - "GET /analysis/shared.js HTTP/1.1" 200 OK
+{"duration_ms": 2.46, "event": "request.complete", "method": "GET", "path": "/api/operator/sessions", "request_id": "adb98e76cfc3", "status_code": 200, "ts": "2026-05-13T23:09:28.296099Z"}
+INFO:     127.0.0.1:44918 - "GET /api/operator/sessions HTTP/1.1" 200 OK
+{"duration_ms": 2.29, "event": "request.complete", "method": "POST", "path": "/api/operator/save", "request_id": "183960a90bf3", "status_code": 200, "ts": "2026-05-13T23:09:31.858341Z"}
+INFO:     127.0.0.1:44918 - "POST /api/operator/save HTTP/1.1" 200 OK
+{"duration_ms": 2.18, "event": "request.complete", "method": "GET", "path": "/analysis/", "request_id": "884c2d63fd16", "status_code": 200, "ts": "2026-05-13T23:10:57.832743Z"}
+INFO:     127.0.0.1:47308 - "GET /analysis/ HTTP/1.1" 200 OK
+{"duration_ms": 5.66, "event": "request.complete", "method": "GET", "path": "/theme.css", "request_id": "f610c2f2b847", "status_code": 200, "ts": "2026-05-13T23:10:57.857159Z"}
+INFO:     127.0.0.1:47308 - "GET /theme.css?v=7 HTTP/1.1" 200 OK
+{"duration_ms": 5.86, "event": "request.complete", "method": "GET", "path": "/analysis/operator.css", "request_id": "a6e745321a7b", "status_code": 200, "ts": "2026-05-13T23:10:57.862154Z"}
+INFO:     127.0.0.1:47316 - "GET /analysis/operator.css?v=30 HTTP/1.1" 200 OK
+{"duration_ms": 6.45, "event": "request.complete", "method": "GET", "path": "/analysis/operator.js", "request_id": "e9dc3009fbf3", "status_code": 200, "ts": "2026-05-13T23:10:57.862869Z"}
+INFO:     127.0.0.1:47332 - "GET /analysis/operator.js?v=30 HTTP/1.1" 200 OK
+{"duration_ms": 9.32, "event": "request.complete", "method": "GET", "path": "/assets/logo-mark.png", "request_id": "fec516bdd3a9", "status_code": 200, "ts": "2026-05-13T23:10:57.865822Z"}
+INFO:     127.0.0.1:47348 - "GET /assets/logo-mark.png HTTP/1.1" 200 OK
+{"duration_ms": 0.86, "event": "request.complete", "method": "GET", "path": "/analysis/shared.js", "request_id": "393961c05bae", "status_code": 200, "ts": "2026-05-13T23:10:58.082068Z"}
+INFO:     127.0.0.1:47308 - "GET /analysis/shared.js HTTP/1.1" 200 OK
+{"duration_ms": 1.99, "event": "request.complete", "method": "GET", "path": "/api/operator/sessions", "request_id": "3cb2a4b9ddbf", "status_code": 200, "ts": "2026-05-13T23:10:58.124188Z"}
+INFO:     127.0.0.1:47308 - "GET /api/operator/sessions HTTP/1.1" 200 OK
+{"duration_ms": 1.86, "event": "request.complete", "method": "POST", "path": "/api/operator/save", "request_id": "93dba53d4f52", "status_code": 200, "ts": "2026-05-13T23:11:01.791203Z"}
+INFO:     127.0.0.1:47308 - "POST /api/operator/save HTTP/1.1" 200 OK
+{"duration_ms": 0.96, "event": "request.complete", "method": "GET", "path": "/api/operator/session", "request_id": "e6eb696d7c06", "status_code": 200, "ts": "2026-05-13T23:11:03.319896Z"}
+INFO:     127.0.0.1:47308 - "GET /api/operator/session HTTP/1.1" 200 OK
+{"duration_ms": 0.71, "event": "request.complete", "method": "GET", "path": "/api/operator/session", "request_id": "0dae38bcdb3c", "status_code": 200, "ts": "2026-05-13T23:11:03.324171Z"}
+INFO:     127.0.0.1:47362 - "GET /api/operator/session HTTP/1.1" 200 OK
+{"duration_ms": 2.93, "event": "request.complete", "method": "POST", "path": "/api/operator/save", "request_id": "129463324757", "status_code": 200, "ts": "2026-05-13T23:11:05.390164Z"}
+INFO:     127.0.0.1:47362 - "POST /api/operator/save HTTP/1.1" 200 OK
+{"duration_ms": 1.81, "event": "request.complete", "method": "GET", "path": "/analysis/", "request_id": "8a51f55cd172", "status_code": 200, "ts": "2026-05-13T23:12:11.349761Z"}
+INFO:     127.0.0.1:38110 - "GET /analysis/ HTTP/1.1" 200 OK
+{"duration_ms": 1.01, "event": "request.complete", "method": "GET", "path": "/theme.css", "request_id": "74c9a76253ff", "status_code": 200, "ts": "2026-05-13T23:12:11.375139Z"}
+INFO:     127.0.0.1:38110 - "GET /theme.css?v=7 HTTP/1.1" 200 OK
+{"duration_ms": 6.71, "event": "request.complete", "method": "GET", "path": "/analysis/operator.css", "request_id": "87797ec8715e", "status_code": 200, "ts": "2026-05-13T23:12:11.383147Z"}
+INFO:     127.0.0.1:38120 - "GET /analysis/operator.css?v=30 HTTP/1.1" 200 OK
+{"duration_ms": 7.2, "event": "request.complete", "method": "GET", "path": "/analysis/operator.js", "request_id": "b593d2eb2e63", "status_code": 200, "ts": "2026-05-13T23:12:11.385134Z"}
+INFO:     127.0.0.1:38128 - "GET /analysis/operator.js?v=30 HTTP/1.1" 200 OK
+{"duration_ms": 4.15, "event": "request.complete", "method": "GET", "path": "/assets/logo-mark.png", "request_id": "30a004478367", "status_code": 200, "ts": "2026-05-13T23:12:11.385609Z"}
+INFO:     127.0.0.1:38144 - "GET /assets/logo-mark.png HTTP/1.1" 200 OK
+{"duration_ms": 1.06, "event": "request.complete", "method": "GET", "path": "/analysis/shared.js", "request_id": "f77140de1bf9", "status_code": 200, "ts": "2026-05-13T23:12:11.594599Z"}
+INFO:     127.0.0.1:38110 - "GET /analysis/shared.js HTTP/1.1" 200 OK
+{"duration_ms": 1.66, "event": "request.complete", "method": "GET", "path": "/api/operator/sessions", "request_id": "a843632583fe", "status_code": 200, "ts": "2026-05-13T23:12:11.640326Z"}
+INFO:     127.0.0.1:38110 - "GET /api/operator/sessions HTTP/1.1" 200 OK
+{"duration_ms": 2.28, "event": "request.complete", "method": "POST", "path": "/api/operator/save", "request_id": "061ea0574561", "status_code": 200, "ts": "2026-05-13T23:12:15.536104Z"}
+INFO:     127.0.0.1:38110 - "POST /api/operator/save HTTP/1.1" 200 OK
+{"duration_ms": 2.35, "event": "request.complete", "method": "POST", "path": "/api/operator/save", "request_id": "96dd04620e56", "status_code": 200, "ts": "2026-05-13T23:12:17.072633Z"}
+INFO:     127.0.0.1:38110 - "POST /api/operator/save HTTP/1.1" 200 OK
+{"duration_ms": 3.87, "event": "request.complete", "method": "GET", "path": "/analysis/", "request_id": "f3fd3caed93a", "status_code": 200, "ts": "2026-05-13T23:15:51.402421Z"}
+INFO:     127.0.0.1:44734 - "GET /analysis/ HTTP/1.1" 200 OK
+{"duration_ms": 4.08, "event": "request.complete", "method": "GET", "path": "/theme.css", "request_id": "cdf1097bac30", "status_code": 200, "ts": "2026-05-13T23:15:51.434690Z"}
+INFO:     127.0.0.1:44734 - "GET /theme.css?v=7 HTTP/1.1" 200 OK
+{"duration_ms": 4.44, "event": "request.complete", "method": "GET", "path": "/analysis/operator.css", "request_id": "dd890853db14", "status_code": 200, "ts": "2026-05-13T23:15:51.436903Z"}
+INFO:     127.0.0.1:44736 - "GET /analysis/operator.css?v=30 HTTP/1.1" 200 OK
+{"duration_ms": 4.43, "event": "request.complete", "method": "GET", "path": "/analysis/operator.js", "request_id": "29d8c3043a80", "status_code": 200, "ts": "2026-05-13T23:15:51.437732Z"}
+INFO:     127.0.0.1:44742 - "GET /analysis/operator.js?v=30 HTTP/1.1" 200 OK
+{"duration_ms": 5.42, "event": "request.complete", "method": "GET", "path": "/assets/logo-mark.png", "request_id": "9f3ce8a61a68", "status_code": 200, "ts": "2026-05-13T23:15:51.438837Z"}
+INFO:     127.0.0.1:44756 - "GET /assets/logo-mark.png HTTP/1.1" 200 OK
+{"duration_ms": 1.12, "event": "request.complete", "method": "GET", "path": "/analysis/shared.js", "request_id": "1e767b2211b9", "status_code": 200, "ts": "2026-05-13T23:15:51.664114Z"}
+INFO:     127.0.0.1:44734 - "GET /analysis/shared.js HTTP/1.1" 200 OK
+{"duration_ms": 2.43, "event": "request.complete", "method": "GET", "path": "/api/operator/sessions", "request_id": "c8d2eb722f32", "status_code": 200, "ts": "2026-05-13T23:15:51.716463Z"}
+INFO:     127.0.0.1:44734 - "GET /api/operator/sessions HTTP/1.1" 200 OK
+{"duration_ms": 4.58, "event": "request.complete", "method": "POST", "path": "/api/operator/save", "request_id": "666de0e11cf5", "status_code": 200, "ts": "2026-05-13T23:15:55.364200Z"}
+INFO:     127.0.0.1:44734 - "POST /api/operator/save HTTP/1.1" 200 OK
+{"duration_ms": 2.0, "event": "request.complete", "method": "GET", "path": "/api/operator/sessions/7b9800b52c4448c399daaf7a821d8df3", "request_id": "a2070f6b8a8c", "status_code": 200, "ts": "2026-05-13T23:15:58.086311Z"}
+INFO:     127.0.0.1:44734 - "GET /api/operator/sessions/7b9800b52c4448c399daaf7a821d8df3 HTTP/1.1" 200 OK
+{"duration_ms": 0.88, "event": "request.complete", "method": "GET", "path": "/api/operator/session", "request_id": "b125e69ab855", "status_code": 200, "ts": "2026-05-13T23:15:58.093045Z"}
+INFO:     127.0.0.1:44734 - "GET /api/operator/session HTTP/1.1" 200 OK
+{"duration_ms": 6.39, "event": "request.complete", "method": "POST", "path": "/api/operator/save", "request_id": "7de7ca9e6a06", "status_code": 200, "ts": "2026-05-13T23:16:02.324023Z"}
+INFO:     127.0.0.1:44734 - "POST /api/operator/save HTTP/1.1" 200 OK
+{"duration_ms": 2.15, "event": "request.complete", "method": "GET", "path": "/analysis/", "request_id": "b4cb3fa1bf48", "status_code": 200, "ts": "2026-05-13T23:16:31.946208Z"}
+INFO:     127.0.0.1:47752 - "GET /analysis/ HTTP/1.1" 200 OK
+{"duration_ms": 4.97, "event": "request.complete", "method": "GET", "path": "/theme.css", "request_id": "6325e9cea4d1", "status_code": 200, "ts": "2026-05-13T23:16:31.969984Z"}
+INFO:     127.0.0.1:47752 - "GET /theme.css?v=7 HTTP/1.1" 200 OK
+{"duration_ms": 4.26, "event": "request.complete", "method": "GET", "path": "/analysis/operator.css", "request_id": "88d99181441f", "status_code": 200, "ts": "2026-05-13T23:16:31.970762Z"}
+INFO:     127.0.0.1:47758 - "GET /analysis/operator.css?v=30 HTTP/1.1" 200 OK
+{"duration_ms": 4.76, "event": "request.complete", "method": "GET", "path": "/analysis/operator.js", "request_id": "31944ee302d0", "status_code": 200, "ts": "2026-05-13T23:16:31.971836Z"}
+INFO:     127.0.0.1:47766 - "GET /analysis/operator.js?v=30 HTTP/1.1" 200 OK
+{"duration_ms": 7.14, "event": "request.complete", "method": "GET", "path": "/assets/logo-mark.png", "request_id": "363f5b581abd", "status_code": 200, "ts": "2026-05-13T23:16:31.974301Z"}
+INFO:     127.0.0.1:47774 - "GET /assets/logo-mark.png HTTP/1.1" 200 OK
+{"duration_ms": 1.13, "event": "request.complete", "method": "GET", "path": "/analysis/shared.js", "request_id": "b6b1c8a920c2", "status_code": 200, "ts": "2026-05-13T23:16:32.175830Z"}
+INFO:     127.0.0.1:47752 - "GET /analysis/shared.js HTTP/1.1" 200 OK
+{"duration_ms": 1.45, "event": "request.complete", "method": "GET", "path": "/api/operator/sessions", "request_id": "3166a347d528", "status_code": 200, "ts": "2026-05-13T23:16:32.224212Z"}
+INFO:     127.0.0.1:47752 - "GET /api/operator/sessions HTTP/1.1" 200 OK
+{"duration_ms": 7.43, "event": "request.complete", "method": "GET", "path": "/api/operator/session", "request_id": "8a69fc032b21", "status_code": 200, "ts": "2026-05-13T23:16:35.872640Z"}
+INFO:     127.0.0.1:47752 - "GET /api/operator/session HTTP/1.1" 200 OK
+{"duration_ms": 0.97, "event": "request.complete", "method": "GET", "path": "/api/operator/session", "request_id": "d3d6c978f0e2", "status_code": 200, "ts": "2026-05-13T23:16:35.876275Z"}
+INFO:     127.0.0.1:47774 - "GET /api/operator/session HTTP/1.1" 200 OK
+{"duration_ms": 1.01, "event": "request.complete", "method": "GET", "path": "/api/operator/session", "request_id": "e5203c10f07a", "status_code": 200, "ts": "2026-05-13T23:16:37.939782Z"}
+INFO:     127.0.0.1:47774 - "GET /api/operator/session HTTP/1.1" 200 OK
+{"duration_ms": 0.79, "event": "request.complete", "method": "GET", "path": "/api/operator/session", "request_id": "9623cae15d2e", "status_code": 200, "ts": "2026-05-13T23:16:37.942490Z"}
+INFO:     127.0.0.1:47752 - "GET /api/operator/session HTTP/1.1" 200 OK
+{"duration_ms": 2.28, "event": "request.complete", "method": "GET", "path": "/analysis/", "request_id": "8e02c42340c7", "status_code": 200, "ts": "2026-05-13T23:23:47.334627Z"}
+INFO:     127.0.0.1:60966 - "GET /analysis/ HTTP/1.1" 200 OK
+{"duration_ms": 1.25, "event": "request.complete", "method": "GET", "path": "/theme.css", "request_id": "67ac4b98936b", "status_code": 200, "ts": "2026-05-13T23:23:47.347876Z"}
+INFO:     127.0.0.1:60966 - "GET /theme.css?v=7 HTTP/1.1" 200 OK
+{"duration_ms": 3.21, "event": "request.complete", "method": "GET", "path": "/analysis/operator.css", "request_id": "7789923812e7", "status_code": 200, "ts": "2026-05-13T23:23:47.357469Z"}
+INFO:     127.0.0.1:60970 - "GET /analysis/operator.css?v=30 HTTP/1.1" 200 OK
+{"duration_ms": 2.74, "event": "request.complete", "method": "GET", "path": "/assets/logo-mark.png", "request_id": "8e390efff837", "status_code": 200, "ts": "2026-05-13T23:23:47.358568Z"}
+INFO:     127.0.0.1:60982 - "GET /assets/logo-mark.png HTTP/1.1" 200 OK
+{"duration_ms": 4.83, "event": "request.complete", "method": "GET", "path": "/analysis/operator.js", "request_id": "3b63cf47da26", "status_code": 200, "ts": "2026-05-13T23:23:47.360797Z"}
+INFO:     127.0.0.1:60986 - "GET /analysis/operator.js?v=30 HTTP/1.1" 200 OK
+{"duration_ms": 1.45, "event": "request.complete", "method": "GET", "path": "/analysis/shared.js", "request_id": "3cba14a4254a", "status_code": 200, "ts": "2026-05-13T23:23:47.575776Z"}
+INFO:     127.0.0.1:60966 - "GET /analysis/shared.js HTTP/1.1" 200 OK
+{"duration_ms": 2.62, "event": "request.complete", "method": "GET", "path": "/api/operator/sessions", "request_id": "6b62d6e4f98b", "status_code": 200, "ts": "2026-05-13T23:23:47.623520Z"}
+INFO:     127.0.0.1:60966 - "GET /api/operator/sessions HTTP/1.1" 200 OK
+{"duration_ms": 1.82, "event": "request.complete", "method": "POST", "path": "/api/operator/save", "request_id": "89b2b208e34f", "status_code": 200, "ts": "2026-05-13T23:23:48.701855Z"}
+INFO:     127.0.0.1:60966 - "POST /api/operator/save HTTP/1.1" 200 OK
+{"duration_ms": 1.6, "event": "request.complete", "method": "GET", "path": "/api/operator/sessions/7b9800b52c4448c399daaf7a821d8df3", "request_id": "6c5db86cc997", "status_code": 200, "ts": "2026-05-13T23:23:52.839833Z"}
+INFO:     127.0.0.1:60966 - "GET /api/operator/sessions/7b9800b52c4448c399daaf7a821d8df3 HTTP/1.1" 200 OK
+{"duration_ms": 0.77, "event": "request.complete", "method": "GET", "path": "/api/operator/session", "request_id": "be01af57c0ad", "status_code": 200, "ts": "2026-05-13T23:23:52.846235Z"}
+INFO:     127.0.0.1:60966 - "GET /api/operator/session HTTP/1.1" 200 OK
+{"duration_ms": 0.96, "event": "request.complete", "method": "GET", "path": "/api/operator/session", "request_id": "31b0a2c9a81b", "status_code": 200, "ts": "2026-05-13T23:23:54.372275Z"}
+INFO:     127.0.0.1:60966 - "GET /api/operator/session HTTP/1.1" 200 OK
+{"duration_ms": 0.83, "event": "request.complete", "method": "GET", "path": "/api/operator/session", "request_id": "d559ec3d26d8", "status_code": 200, "ts": "2026-05-13T23:23:54.375530Z"}
+INFO:     127.0.0.1:60988 - "GET /api/operator/session HTTP/1.1" 200 OK
+{"duration_ms": 1.81, "event": "request.complete", "method": "POST", "path": "/api/operator/save", "request_id": "cba9f9c030d6", "status_code": 200, "ts": "2026-05-13T23:23:58.622303Z"}
+INFO:     127.0.0.1:60988 - "POST /api/operator/save HTTP/1.1" 200 OK
+{"duration_ms": 1.47, "event": "request.complete", "method": "GET", "path": "/api/operator/session", "request_id": "c92185156ef2", "status_code": 200, "ts": "2026-05-13T23:24:00.155913Z"}
+INFO:     127.0.0.1:60988 - "GET /api/operator/session HTTP/1.1" 200 OK
+{"duration_ms": 0.84, "event": "request.complete", "method": "GET", "path": "/api/operator/session", "request_id": "17070af077bf", "status_code": 200, "ts": "2026-05-13T23:24:00.159952Z"}
+INFO:     127.0.0.1:59370 - "GET /api/operator/session HTTP/1.1" 200 OK

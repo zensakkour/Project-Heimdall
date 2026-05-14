@@ -6,6 +6,8 @@ let isStreetWalkMode = false;
 let droppedPinLocation = null;
 let currentManualPinMarker = null;
 
+let loadedSessionId = null;
+
 let noteMarkers = [];
 let activeProfile = "paris";
 let liveMap = null;
@@ -764,17 +766,58 @@ function updateSelectedMarker(index) {
   }
 }
 
+function loadNoteForTarget(targetType, rankOrLat, lon) {
+    const noteInput = byId("operator-note-input");
+    if (!noteInput) return;
+
+    noteInput.value = ""; // Clear by default
+
+    // We can avoid a fetch if we already have the notes loaded via lastResult or another state variable
+    // but the session API is lightweight enough. However, let's try to grab it efficiently
+    fetch("/api/operator/session").then(r => r.json()).then(data => {
+        if (!data.notes) return;
+
+        const note = data.notes.find(n => {
+            if (targetType === "candidate" && n.target_type === "candidate") {
+                return n.rank === rankOrLat;
+            } else if (targetType === "manual_pin" && n.target_type === "manual_pin") {
+                // approximate matching for lat/lon floats
+                return Math.abs(n.lat - rankOrLat) < 0.0001 && Math.abs(n.lon - lon) < 0.0001;
+            } else if (targetType === "note_id") {
+                return n.note_id === rankOrLat;
+            }
+            return false;
+        });
+
+        if (note) {
+            noteInput.value = note.text;
+        }
+    }).catch(err => console.error("Failed to fetch session for notes:", err));
+}
+
 function selectCandidate(index) {
+  droppedPinLocation = null;
   const cards = document.querySelectorAll(".candidate-card");
   if (!cards.length) return;
   
   if (index < 0) index = 0;
   if (index >= cards.length) index = cards.length - 1;
   
-  selectedIndex = index;
   const card = cards[index];
-  
+  const isAlreadySelected = card.classList.contains("active");
+
   cards.forEach(c => c.classList.remove("active"));
+
+  if (isAlreadySelected) {
+      selectedIndex = -1;
+      updateSelectedMarker(-1);
+      updateHtmlMarkerSelection(-1);
+      const noteInput = byId("operator-note-input");
+      if (noteInput) noteInput.value = "";
+      return;
+  }
+
+  selectedIndex = index;
   card.classList.add("active");
   updateSelectedMarker(index);
   updateHtmlMarkerSelection(index);
@@ -793,6 +836,8 @@ function selectCandidate(index) {
       duration: 1200 
     });
   }
+
+  loadNoteForTarget("candidate", index + 1);
 }
 
 function recordCandidateAction(action, index = selectedIndex) {
@@ -957,6 +1002,8 @@ function renderCandidateList(result) {
   });
 
   selectedIndex = -1;
+  const noteInput = byId("operator-note-input");
+  if (noteInput) noteInput.value = "";
 }
 
 function openStreetView(lat, lon) {
@@ -1184,6 +1231,8 @@ function setupAnalysis() {
   btn.addEventListener("click", async () => {
     const file = input.files?.[0];
     if (!file) return;
+
+    loadedSessionId = null;
 
     const profile = byId("profile-select").value || "paris";
     console.log("LOG: Starting pipeline...", { profile, filename: file.name });
@@ -1489,6 +1538,19 @@ function init() {
           tabNotes.style.borderBottomColor = "transparent";
           geotagsView.style.display = "flex";
           notesView.style.display = "none";
+
+          // Clear Notes tab selection when switching back to Geotags
+          const notesList = document.getElementById("notes-list");
+          if (notesList) {
+              notesList.querySelectorAll(".result-card").forEach(c => c.classList.remove("active"));
+          }
+
+          if (selectedIndex === -1) {
+              const noteInput = byId("operator-note-input");
+              if (noteInput) noteInput.value = "";
+          } else {
+              loadNoteForTarget("candidate", selectedIndex + 1);
+          }
       });
       tabNotes.addEventListener("click", () => {
           tabNotes.style.color = "var(--accent)";
@@ -1497,6 +1559,15 @@ function init() {
           tabGeotags.style.borderBottomColor = "transparent";
           notesView.style.display = "flex";
           geotagsView.style.display = "none";
+
+          // Clear Geotags selection when switching to Notes
+          selectedIndex = -1;
+          const cards = document.querySelectorAll(".candidate-card");
+          cards.forEach(c => c.classList.remove("active"));
+
+          const noteInput = byId("operator-note-input");
+          if (noteInput) noteInput.value = "";
+
           renderNotesList();
           renderNoteMarkers();
       });
@@ -1672,14 +1743,61 @@ function setupOperatorActions() {
     const saveSessionBtn = byId("btn-save-session");
     const dropPinBtn = byId("btn-drop-pin");
 
+    const sessionSaveModal = byId("session-save-modal");
+    const btnUpdateSession = byId("btn-modal-update-session");
+    const btnSaveNewSession = byId("btn-modal-save-new-session");
+    const btnCancelSession = byId("btn-modal-cancel-session");
+
+    if (btnCancelSession && sessionSaveModal) {
+        btnCancelSession.addEventListener("click", () => {
+            sessionSaveModal.classList.remove("active");
+        });
+    }
+
+    if (btnUpdateSession && sessionSaveModal) {
+        btnUpdateSession.addEventListener("click", () => {
+            sessionSaveModal.classList.remove("active");
+            postForm("/api/operator/save", JSON.stringify({ save_as_new: false }))
+                .then(r => r.json())
+                .then(data => {
+                    if (data.session_id) loadedSessionId = data.session_id;
+                    loadSessionList();
+                    alert("Session updated successfully.");
+                });
+        });
+    }
+
+    if (btnSaveNewSession && sessionSaveModal) {
+        btnSaveNewSession.addEventListener("click", () => {
+            sessionSaveModal.classList.remove("active");
+            const sessionName = prompt("Enter a new custom name for this session (optional):");
+            if (sessionName !== null) {
+                postForm("/api/operator/save", JSON.stringify({ name: sessionName.trim(), save_as_new: true }))
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.session_id) loadedSessionId = data.session_id;
+                        loadSessionList();
+                        alert("Session saved as new.");
+                    });
+            }
+        });
+    }
+
     if (saveSessionBtn) {
         saveSessionBtn.addEventListener("click", () => {
-            const sessionName = prompt("Enter a custom name for this session (optional):");
-            if (sessionName !== null) {
-                postForm("/api/operator/save", JSON.stringify({ name: sessionName.trim() }))
-                    .then(() => {
-                        loadSessionList();
-                    });
+            if (loadedSessionId && sessionSaveModal) {
+                sessionSaveModal.classList.add("active");
+            } else {
+                const sessionName = prompt("Enter a custom name for this session (optional):");
+                if (sessionName !== null) {
+                    postForm("/api/operator/save", JSON.stringify({ name: sessionName.trim(), save_as_new: true }))
+                        .then(r => r.json())
+                        .then(data => {
+                            if (data.session_id) loadedSessionId = data.session_id;
+                            loadSessionList();
+                            alert("Session saved as new.");
+                        });
+                }
             }
         });
     }
@@ -1707,19 +1825,35 @@ function setupOperatorActions() {
              const oldWarn = document.getElementById("note-save-warn");
              if (oldWarn) oldWarn.remove();
 
-             if (selectedIndex === -1 && !droppedPinLocation) {
+             // Wait, what if we selected a note from the notes list?
+             // It's allowed to update the selected note or candidate. Let's rely on checking if there's any active selection.
+             // The prompt logic: "Select a candidate or drop/select a note pin to save this note."
+             const isNoteSelected = document.querySelector("#notes-list .result-card.active") !== null;
+
+             if (selectedIndex === -1 && !droppedPinLocation && !isNoteSelected) {
                  const warn = document.createElement("div");
                  warn.id = "note-save-warn";
                  warn.style.color = "#ef4444";
                  warn.style.fontSize = "11px";
                  warn.style.marginTop = "4px";
-                 warn.textContent = "Select a candidate or drop a note pin to save this note.";
+                 warn.textContent = "Select a candidate or drop/select a note pin to save this note.";
                  noteInput.parentElement.appendChild(warn);
                  return;
              }
 
              let targetData = {};
-             if (selectedIndex !== -1 && lastResult && lastResult.candidates) {
+             // We can check which tab is active to determine precedence
+             const isNotesTabActive = document.getElementById("notes-view")?.style.display === "flex";
+
+             if (isNotesTabActive && isNoteSelected) {
+                 const activeCard = document.querySelector("#notes-list .result-card.active");
+                 if (activeCard && activeCard.dataset.noteId) {
+                     targetData = {
+                         target_type: "note_id",
+                         note_id: activeCard.dataset.noteId
+                     };
+                 }
+             } else if (selectedIndex !== -1 && lastResult && lastResult.candidates) {
                  const cand = lastResult.candidates[selectedIndex];
                  targetData = {
                      target_type: "candidate",
@@ -1790,6 +1924,7 @@ function setupOperatorActions() {
             fetch(`/api/operator/sessions/${sid}`)
                 .then(r => r.json())
                 .then(data => {
+                     loadedSessionId = data.session_id || sid;
                      // Full mock of lastResult structure needed by UI renderers
                      lastResult = {
                          geo: data.fused_estimate,
@@ -1840,6 +1975,9 @@ function setupOperatorActions() {
                   selectedIndex = -1;
                   renderCandidates();
 
+                  const noteInput = byId("operator-note-input");
+                  if (noteInput) noteInput.value = "";
+
                   if (currentManualPinMarker) {
                       currentManualPinMarker.remove();
                   }
@@ -1852,6 +1990,11 @@ function setupOperatorActions() {
                   el.style.border = "2px solid white";
                   el.style.borderRadius = "50%";
                   el.style.boxShadow = "0 0 8px rgba(255, 0, 0, 0.8)";
+
+                  el.addEventListener("click", (evt) => {
+                      evt.stopPropagation();
+                      loadNoteForTarget("manual_pin", lat, lon);
+                  });
 
                   currentManualPinMarker = new maplibregl.Marker({ element: el })
                       .setLngLat([lon, lat])
@@ -1896,6 +2039,14 @@ function renderNoteMarkers() {
                 el.style.borderRadius = "50%";
                 el.style.boxShadow = "0 0 8px rgba(255, 184, 77, 0.8)";
                 el.title = note.text;
+
+                el.addEventListener("click", (evt) => {
+                    evt.stopPropagation();
+                    const noteInput = byId("operator-note-input");
+                    if (noteInput) {
+                        noteInput.value = note.text;
+                    }
+                });
 
                 const marker = new maplibregl.Marker({ element: el })
                     .setLngLat([lon, lat])
@@ -1945,10 +2096,17 @@ function renderNotesList() {
                 <div style="font-size: 12px; color: #fff; line-height: 1.4; margin-bottom: 6px;">${note.text}</div>
                 <div style="font-size: 9px; color: var(--text-secondary); text-align: right;">${timeStr}</div>
             `;
+            if (note.note_id) card.dataset.noteId = note.note_id;
 
             card.addEventListener("click", () => {
+                list.querySelectorAll(".result-card").forEach(c => c.classList.remove("active"));
+                card.classList.add("active");
                 if (lat && lon && liveMap) {
                     flyToCentered({ center: [lon, lat], zoom: 16 });
+                }
+                const noteInput = byId("operator-note-input");
+                if (noteInput) {
+                    noteInput.value = note.text;
                 }
             });
 
