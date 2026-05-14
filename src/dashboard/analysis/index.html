@@ -307,6 +307,21 @@
       </div>
     </div>
 
+    <!-- Save Session Modal -->
+    <div id="session-save-modal" class="lightbox">
+      <div class="lightbox-backdrop" id="session-save-backdrop"></div>
+      <div class="lightbox-content" style="width: 400px; padding: 20px; background: var(--glass-bg); border: 1px solid var(--glass-border);">
+        <div class="modal-header" style="margin-bottom: 16px; border-bottom: 1px solid var(--glass-border); padding-bottom: 12px;">
+           <span class="brand-text" style="font-size: 16px;">Save Session</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+           <button id="btn-modal-update-session" class="primary-btn" style="height: 36px; font-size: 13px;">Update Current Session</button>
+           <button id="btn-modal-save-new-session" class="primary-btn" style="height: 36px; font-size: 13px;">Save As New Session</button>
+           <button id="btn-modal-cancel-session" class="btn-text" style="height: 36px; font-size: 13px;">Cancel</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Hidden elements for legacy script compatibility -->
     <div style="display: none;">
         <div id="summary"></div>
