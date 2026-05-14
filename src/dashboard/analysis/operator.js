@@ -636,14 +636,13 @@ function ensureLiveMap() {
         liveMap.on("mouseleave", `candidate-rank-dot-${i}`, clearPointer);
         liveMap.on("mouseleave", `candidate-rank-hit-${i}`, clearPointer);
       }
-      liveMap.on("zoom", refreshCandidateMarkers);
-      liveMap.on("move", refreshCandidateMarkers);
       liveMap.on("zoomend", () => {
         if (liveMap.getZoom() <= globePitchResetZoom && liveMap.getPitch() !== 0) {
           easeToCentered({ center: liveMap.getCenter(), pitch: 0, duration: 180 });
         }
         refreshCandidateMarkers();
       });
+      liveMap.on("moveend", refreshCandidateMarkers);
 
       bringCandidateLayersToFront();
 
