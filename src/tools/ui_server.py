@@ -2381,16 +2381,63 @@ def operator_export_session() -> JSONResponse:
 from src.core.geo.street_view import LocalStreetViewProvider
 _STREET_VIEW_PROVIDER = None
 
-@app.get("/api/operator/street_view")
-def operator_street_view(lat: float, lon: float) -> JSONResponse:
+def _get_sv_provider() -> "LocalStreetViewProvider":
     global _STREET_VIEW_PROVIDER
     if _STREET_VIEW_PROVIDER is None:
-        _STREET_VIEW_PROVIDER = LocalStreetViewProvider()
+        data_dir = str(APP_ROOT / "data" / "paris_realistic_v1" / "street_combined")
+        _STREET_VIEW_PROVIDER = LocalStreetViewProvider(data_dir=data_dir)
+    return _STREET_VIEW_PROVIDER
 
-    nearest = _STREET_VIEW_PROVIDER.find_nearest(lat, lon)
+@app.get("/api/operator/street_view")
+def operator_street_view(lat: float, lon: float) -> JSONResponse:
+    nearest = _get_sv_provider().find_nearest(lat, lon)
     if nearest:
         return JSONResponse(nearest)
     return JSONResponse({"error": "No street view imagery found near this location"}, status_code=404)
+
+@app.get("/api/operator/street_view/image/{image_id}")
+def operator_sv_image(image_id: str):
+    provider = _get_sv_provider()
+    point = provider._by_id.get(image_id)
+    if not point:
+        return JSONResponse({"error": "Image not found"}, status_code=404)
+    img_path = provider.data_dir / point["path"]
+    if not img_path.exists():
+        return JSONResponse({"error": "Image file not found on disk"}, status_code=404)
+    return FileResponse(str(img_path), media_type="image/jpeg")
+
+@app.get("/api/operator/street_view/neighbors")
+def operator_sv_neighbors(
+    image_id: Optional[str] = None,
+    lat: Optional[float] = None,
+    lon: Optional[float] = None,
+    prefer_heading: Optional[float] = None,
+) -> JSONResponse:
+    provider = _get_sv_provider()
+
+    # Resolve the current image
+    current = None
+    if image_id:
+        point = provider._by_id.get(image_id)
+        if point:
+            current = provider._point_to_response(point, 0.0)
+    if current is None and lat is not None and lon is not None:
+        if prefer_heading is not None:
+            current = provider.find_nearest_by_heading(lat, lon, prefer_heading)
+        else:
+            current = provider.find_nearest(lat, lon)
+
+    if not current:
+        return JSONResponse({"error": "No imagery found near this location"}, status_code=404)
+
+    neighbors = provider.get_sequence_neighbors(current["image_id"])
+    return JSONResponse({
+        "current": current,
+        "prev": neighbors["prev"],
+        "next": neighbors["next"],
+        "sequence_position": neighbors["position"],
+        "sequence_total": neighbors["total"],
+    })
 
 @app.post("/api/operator/analyze")
 async def operator_analyze(

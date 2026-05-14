@@ -20,7 +20,8 @@ def test_local_street_view_provider_with_data(tmp_path):
     # Very close coordinate
     res = provider.find_nearest(48.8566, 2.3522)
     assert res is not None
-    assert res["url"] == "/data/paris_realistic_v1/street_combined/images/test_img.jpg"
+    assert res["url"] == "/api/operator/street_view/image/1"
+    assert res["image_id"] == "1"
     assert res["heading"] == 90.0
     assert res["provider"] == "test_provider"
     assert math.isclose(res["distance_km"], 0.0, abs_tol=0.01)
