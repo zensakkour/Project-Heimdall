@@ -122,3 +122,42 @@ def test_street_walk_provider_no_data(monkeypatch):
     resp = client.get("/api/operator/street_view?lat=48.8&lon=2.3")
     assert resp.status_code == 404
     assert "error" in resp.json()
+
+def test_operator_session_image_serving():
+    import base64
+    # 1. Reset and simulate an analysis with an image
+    client.post("/api/operator/reset")
+    
+    # Mock some image data
+    pixel_b64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+    data_url = f"data:image/png;base64,{pixel_b64}"
+    
+    # We need to manually inject it into the global state for the save test
+    from src.tools import ui_server
+    ui_server._OPERATOR_SESSION["source"] = {
+        "filename": "test.png",
+        "image_data_url": data_url
+    }
+    
+    # 2. Save session
+    resp = client.post("/api/operator/save", json={"name": "image session"})
+    assert resp.status_code == 200
+    session_id = resp.json()["session_id"]
+    
+    # 3. Verify session.json has image_file and has_session_image is set when loading
+    resp = client.get(f"/api/operator/sessions/{session_id}")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["source"]["image_file"] == "source.png"
+    assert data["source"]["has_session_image"] is True
+    
+    # 4. Verify image serving
+    resp = client.get(f"/api/operator/sessions/{session_id}/image")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "image/png"
+    assert len(resp.content) > 0
+    
+    # Verify base64 content matches
+    expected_bytes = base64.b64decode(pixel_b64)
+    assert resp.content == expected_bytes
+
