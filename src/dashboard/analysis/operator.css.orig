@@ -384,23 +384,6 @@ html, body {
   box-shadow: inset 3px 0 0 var(--text-primary), 0 0 0 1px rgba(255, 255, 255, 0.16);
 }
 
-.result-card {
-  padding: 16px;
-  background: rgba(255,255,255,0.03);
-  border: none;
-  border-radius: 16px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-  cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  opacity: 0.6;
-}
-
-.result-card.active {
-  opacity: 1;
-  background: rgba(255, 255, 255, 0.075);
-  box-shadow: inset 3px 0 0 var(--text-primary), 0 0 0 1px rgba(255, 255, 255, 0.16);
-}
-
 .card-top {
   display: flex;
   justify-content: space-between;
