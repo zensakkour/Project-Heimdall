@@ -2433,10 +2433,21 @@ function setupOperatorActions() {
                 .then(() => {
                     loadedSessionId = null;
                     localStorage.removeItem("heimdallSessionId");
+
+                    // Deselect the dropdown
+                    const sessionSelectEl = byId("load-session-select");
+                    if (sessionSelectEl) sessionSelectEl.value = "";
+
                     setMetric("diag-backend", "-");
                     setMetric("diag-worker", "-");
                     setMetric("diag-tier", "-");
                     setMetric("diag-radius", "-");
+                    setMetric("diag-model-status", "-");
+                    const rawJson = byId("raw-json");
+                    if (rawJson) rawJson.textContent = "{}";
+                    const modalJson = byId("modal-json-text");
+                    if (modalJson) modalJson.textContent = "{}";
+
                     lastResult = null;
                     selectedIndex = -1;
                     droppedPinLocation = null;
