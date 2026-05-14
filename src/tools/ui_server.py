@@ -148,6 +148,15 @@ def _add_timeline_event(message: str, level: str = "info"):
 
 app = FastAPI()
 
+from fastapi.middleware.cors import CORSMiddleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 _EVAL_STATE = {"status": "idle", "last_result": None}
 _GEO_EVAL_STATE = {
     "status": "idle",
@@ -2292,9 +2301,10 @@ def operator_get_session_by_id(session_id: str) -> JSONResponse:
             with open(json_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
             # Signal the frontend that an image is available via the image endpoint
-            source = data.get("source") or {}
-            if source.get("image_file") and not source.get("image_data_url"):
-                data["source"]["has_session_image"] = True
+            source = data.get("source")
+            if isinstance(source, dict):
+                if source.get("image_file") and not source.get("image_data_url"):
+                    data["source"]["has_session_image"] = True
             _OPERATOR_SESSION = data
             return JSONResponse(_OPERATOR_SESSION)
         except Exception as e:
@@ -2305,6 +2315,13 @@ def operator_get_session_by_id(session_id: str) -> JSONResponse:
         try:
             with open(file_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
+            
+            # Also check for image_file in legacy sessions just in case
+            source = data.get("source")
+            if isinstance(source, dict):
+                if source.get("image_file") and not source.get("image_data_url"):
+                    data["source"]["has_session_image"] = True
+
             _OPERATOR_SESSION = data
             return JSONResponse(_OPERATOR_SESSION)
         except Exception as e:
@@ -2315,14 +2332,66 @@ def operator_get_session_by_id(session_id: str) -> JSONResponse:
 
 @app.get("/api/operator/sessions/{session_id}/image")
 def operator_get_session_image(session_id: str):
-    sessions_dir = APP_ROOT / "operator_sessions"
-    session_dir = sessions_dir / session_id
+    session_id = session_id.strip()
+    
+    # Try multiple potential base directories for sessions
+    potential_bases = [
+        APP_ROOT / "operator_sessions",
+        Path.cwd() / "operator_sessions",
+        Path(__file__).resolve().parents[2] / "operator_sessions"
+    ]
+    
+    session_dir = None
+    for base in potential_bases:
+        test_dir = (base / session_id).resolve()
+        if test_dir.exists() and test_dir.is_dir():
+            session_dir = test_dir
+            break
+            
+    if not session_dir:
+        logging.error(f"Session directory for {session_id} not found in any potential base.")
+        # Final desperate search in any 'operator_sessions' folder nearby
+        return JSONResponse({"error": f"Session {session_id} directory not found"}, status_code=404)
+
+    logging.info(f"Serving image for session {session_id} from {session_dir}")
+
+    def _get_ct(p: Path) -> str:
+        s = p.suffix.lower()
+        if s in [".jpg", ".jpeg"]: return "image/jpeg"
+        if s == ".png": return "image/png"
+        if s == ".webp": return "image/webp"
+        if s == ".gif": return "image/gif"
+        return "application/octet-stream"
+
+    # 1. Try metadata-based lookup
+    json_path = session_dir / "session.json"
+    if json_path.exists():
+        try:
+            with open(json_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            image_file = (data.get("source") or {}).get("image_file")
+            if image_file:
+                img_path = (session_dir / image_file).resolve()
+                if img_path.exists():
+                    logging.info(f"Serving session image (metadata): {img_path}")
+                    return FileResponse(str(img_path), media_type=_get_ct(img_path))
+        except Exception as e:
+            logging.warning(f"Metadata image lookup failed: {e}")
+
+    # 2. Search for any image-like file
     for ext in ["jpg", "jpeg", "png", "webp", "gif"]:
-        img_path = session_dir / f"source.{ext}"
+        img_path = (session_dir / f"source.{ext}").resolve()
         if img_path.exists():
-            ct = f"image/{'jpeg' if ext in ('jpg', 'jpeg') else ext}"
-            return Response(content=img_path.read_bytes(), media_type=ct)
-    return JSONResponse({"error": "Image not found"}, status_code=404)
+            logging.info(f"Serving session image (default): {img_path}")
+            return FileResponse(str(img_path), media_type=_get_ct(img_path))
+            
+    for file in session_dir.iterdir():
+        if file.suffix.lower() in [".jpg", ".jpeg", ".png", ".webp", ".gif"]:
+            file_abs = file.resolve()
+            logging.info(f"Serving session image (fallback): {file_abs}")
+            return FileResponse(str(file_abs), media_type=_get_ct(file_abs))
+    
+    return JSONResponse({"error": "No image file found in session directory"}, status_code=404)
 
 @app.post("/api/operator/save")
 async def operator_save_session(request: Request) -> JSONResponse:
