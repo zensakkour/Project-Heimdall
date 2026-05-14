@@ -11,19 +11,8 @@
       crossorigin=""
     />
     <link rel="stylesheet" href="../theme.css?v=7" />
-    <link rel="stylesheet" href="operator.css?v=31" />
+    <link rel="stylesheet" href="operator.css?v=32" />
 
-<style>
-.session-timeline { font-size: 11px; color: var(--text-secondary); max-height: 150px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
-.timeline-item { display: flex; gap: 8px; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
-.timeline-time { font-family: monospace; color: #888; }
-.timeline-item.error .timeline-msg { color: #ef4444; }
-.timeline-item.warning .timeline-msg { color: #ffc864; }
-.timeline-item.success .timeline-msg { color: #10b981; }
-.clues-list { display: flex; flex-direction: column; gap: 4px; max-height: 150px; overflow-y: auto; }
-.clue-chip { background: rgba(255,255,255,0.05); padding: 6px 10px; border-radius: 6px; font-size: 11px; color: #ccc; border: 1px solid rgba(255,255,255,0.1); }
-.clue-chip strong { color: #fff; }
-</style>
 
   </head>
   <body>
@@ -71,14 +60,14 @@
           <img src="../assets/logo-mark.png" alt="Heimdall" />
           <span class="brand-text">Project Heimdall — Paris</span>
         </div>
-        <div style="display: flex; gap: 8px; align-items: center; margin-left: auto; padding-right: 12px;">
-          <button id="btn-new-session" class="btn-text" style="height: 28px; font-size: 11px; padding: 0 12px;">Start New Session</button>
-          <button id="btn-save-session" class="primary-btn" style="height: 28px; font-size: 11px; padding: 0 12px;">Save Current Session</button>
-          <select id="load-session-select" style="background: rgba(0,0,0,0.6); color: #fff; border: 1px solid var(--glass-border); padding: 4px 8px; border-radius: 4px; font-size: 12px; height: 28px; outline: none; cursor: pointer; max-width: 200px;">
-             <option value="">-- Load Session --</option>
+        <div class="header-actions">
+          <button id="btn-new-session" class="btn-text header-btn">New Session</button>
+          <button id="btn-save-session" class="primary-btn header-btn">Save Session</button>
+          <select id="load-session-select" class="header-select">
+             <option value="">— Load Session —</option>
           </select>
-          <button id="btn-load-session" class="primary-btn" style="height: 28px; font-size: 11px; padding: 0 12px;">Load Session</button>
-          <button id="btn-export-session" class="primary-btn" style="height: 28px; font-size: 11px; padding: 0 12px; margin-right: 0px;">Export Report</button>
+          <button id="btn-load-session" class="primary-btn header-btn">Load</button>
+          <button id="btn-export-session" class="primary-btn header-btn">Export</button>
         </div>
       </header>
 
@@ -89,7 +78,13 @@
            <div id="ingest-block" class="sci-fi-ingest">
               <input type="file" id="image-file" accept="image/*" style="display: none;" />
               <div id="ingest-trigger" class="ingest-trigger">
-                <span class="ingest-icon">📤</span>
+                <span class="ingest-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                  </svg>
+                </span>
                 <span class="ingest-label">Select source image</span>
               </div>
             </div>
@@ -165,16 +160,16 @@
         </section>
 
         <!-- View Toggle -->
-        <div style="display: flex; gap: 8px; margin: 12px 16px 0 16px; flex-shrink: 0;">
-            <button id="tab-geotags" class="btn-text" style="color: var(--accent); border-bottom: 2px solid var(--accent); border-radius: 0; padding-bottom: 4px;">Geotags</button>
-            <button id="tab-notes" class="btn-text" style="color: var(--text-secondary); border-bottom: 2px solid transparent; border-radius: 0; padding-bottom: 4px;">Notes</button>
+        <div class="view-tabs">
+            <button id="tab-geotags" class="view-tab active">Geotags</button>
+            <button id="tab-notes" class="view-tab">Notes</button>
         </div>
 
         <!-- Lists Container -->
-        <div id="lists-container" style="flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; border-bottom: 1px solid var(--glass-border);">
+        <div id="lists-container" class="lists-container">
 
             <!-- Candidate List -->
-            <section id="geotags-view" class="list-section" style="padding: var(--panel-inset); padding-bottom: 0;">
+            <section id="geotags-view" class="list-section list-section-padded">
               <div class="section-head-row">
                 <div class="section-title">Localized Candidates</div>
                 <div class="count-selector">
@@ -193,7 +188,7 @@
             </section>
 
             <!-- Notes List -->
-            <section id="notes-view" class="list-section" style="display: none; padding: var(--panel-inset); padding-bottom: 0;">
+            <section id="notes-view" class="list-section list-section-padded" style="display: none;">
               <div class="section-head-row">
                 <div class="section-title">Saved Notes</div>
               </div>
@@ -222,10 +217,13 @@
                Operator Notes <span>></span>
              </div>
              <div id="notes-accordion" class="panel-collapse">
-               <textarea id="operator-note-input" rows="3" style="width: 100%; background: rgba(0,0,0,0.4); border: 1px solid var(--glass-border); color: #fff; padding: 8px; border-radius: 8px; font-size: 12px; resize: vertical;"></textarea>
-               <div style="display: flex; justify-content: space-between; margin-top: 8px; align-items: center;">
-                   <button id="btn-drop-pin" class="btn-text" style="font-size: 11px;">📍 Drop Note Pin</button>
-                   <button id="btn-save-note" class="primary-btn" style="height: 28px; font-size: 11px; padding: 0 12px;">Save Note</button>
+               <textarea id="operator-note-input" rows="3"></textarea>
+               <div class="note-actions-row">
+                   <button id="btn-drop-pin" class="btn-text note-pin-btn">
+                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                     Drop Pin
+                   </button>
+                   <button id="btn-save-note" class="primary-btn note-save-btn">Save Note</button>
                </div>
              </div>
         </section>
@@ -237,7 +235,7 @@
             System Diagnostics <span>></span>
           </div>
           <div id="diag-accordion" class="diag-body">
-             <div style="display: flex; justify-content: flex-end; margin-bottom: 12px;">
+             <div class="diag-copy-row">
                 <button id="copy-diag-all" class="btn-icon-small" title="Copy summary text">COPY SUMMARY</button>
              </div>
              <div class="diag-grid" id="diag-summary-grid">
@@ -247,11 +245,10 @@
                <span>Tier:</span> <strong id="diag-tier">-</strong>
                <span>Radius:</span> <strong id="diag-radius">-</strong>
              </div>
-             
-             <div class="json-container" style="position: relative; margin-top: 16px;">
-                <div class="json-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                   <span class="section-title" style="font-size: 9px; margin: 0;">Raw JSON Response</span>
-                   <div style="display: flex; gap: 8px;">
+             <div class="diag-json-block">
+                <div class="diag-json-header">
+                   <span class="diag-json-label">Raw JSON Response</span>
+                   <div class="diag-json-actions">
                       <button id="copy-json" class="btn-icon-small">COPY</button>
                       <button id="expand-json" class="btn-icon-small">EXPAND</button>
                    </div>
@@ -282,12 +279,12 @@
     <!-- JSON Modal (Large Inspection) -->
     <div id="json-modal" class="lightbox">
       <div class="lightbox-backdrop" id="json-modal-backdrop"></div>
-      <div class="lightbox-content" style="width: 85vw; max-width: 1100px;">
-        <div class="modal-header" style="width: 100%; display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid var(--glass-border); padding-bottom: 12px;">
-           <span class="brand-text" style="font-size: 16px;">Raw Backend Payload</span>
-           <button id="copy-json-modal" class="primary-btn" style="height: 28px; font-size: 11px; padding: 0 16px;">COPY JSON</button>
+      <div class="lightbox-content json-modal-content">
+        <div class="modal-header-bar">
+           <span class="modal-title">Raw Backend Payload</span>
+           <button id="copy-json-modal" class="primary-btn header-btn">COPY JSON</button>
         </div>
-        <pre id="modal-json-text" class="raw-json" style="max-height: 70vh; width: 100%; font-size: 12px; line-height: 1.5; color: #eaeaea; background: #000; border: 1px solid var(--glass-border); padding: 20px; overflow: auto;"></pre>
+        <pre id="modal-json-text" class="raw-json json-modal-pre"></pre>
         <button id="close-json-modal" class="lightbox-close">✕</button>
       </div>
     </div>
@@ -363,14 +360,14 @@
     <!-- Save Session Modal -->
     <div id="session-save-modal" class="lightbox">
       <div class="lightbox-backdrop" id="session-save-backdrop"></div>
-      <div class="lightbox-content" style="width: 400px; padding: 20px; background: var(--glass-bg); border: 1px solid var(--glass-border);">
-        <div class="modal-header" style="margin-bottom: 16px; border-bottom: 1px solid var(--glass-border); padding-bottom: 12px;">
-           <span class="brand-text" style="font-size: 16px;">Save Session</span>
+      <div class="lightbox-content modal-card">
+        <div class="modal-header-bar">
+           <span class="modal-title">Save Session</span>
         </div>
-        <div style="display: flex; flex-direction: column; gap: 12px;">
-           <button id="btn-modal-update-session" class="primary-btn" style="height: 36px; font-size: 13px;">Update Current Session</button>
-           <button id="btn-modal-save-new-session" class="primary-btn" style="height: 36px; font-size: 13px;">Save As New Session</button>
-           <button id="btn-modal-cancel-session" class="btn-text" style="height: 36px; font-size: 13px;">Cancel</button>
+        <div class="modal-body-stack">
+           <button id="btn-modal-update-session" class="primary-btn modal-action-btn">Update Current Session</button>
+           <button id="btn-modal-save-new-session" class="primary-btn modal-action-btn">Save As New Session</button>
+           <button id="btn-modal-cancel-session" class="btn-text modal-action-btn">Cancel</button>
         </div>
       </div>
     </div>
@@ -388,7 +385,7 @@
     </div>
 
     <script src="https://unpkg.com/maplibre-gl@5.0.0/dist/maplibre-gl.js" crossorigin=""></script>
-    <script type="module" src="operator.js?v=31"></script>
+    <script type="module" src="operator.js?v=32"></script>
 
         <button id="btn-confirm-cand" style="display:none;"></button>
         <button id="btn-reject-cand" style="display:none;"></button>

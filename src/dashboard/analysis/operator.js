@@ -954,9 +954,9 @@ function renderCandidateList(result) {
        <button class="btn-card-action candidate-action" data-action="confirm" type="button">CONFIRM</button>
        <button class="btn-card-action candidate-action" data-action="reject" type="button">REJECT</button>
       </div>
-      <div style="display: flex; gap: 8px; margin-top: 8px;">
-        <button class="btn-card-action open-maps" style="flex: 1;">Open in Google Maps</button>
-        <button class="btn-card-action street-view-btn" data-lat="${lat}" data-lon="${lon}" style="flex: 1; border: 1px solid var(--accent); color: var(--accent);">Street View</button>
+      <div class="card-action-row">
+        <button class="btn-card-action open-maps">Open in Google Maps</button>
+        <button class="btn-card-action street-view-btn street-view-btn-accent" data-lat="${lat}" data-lon="${lon}">Street View</button>
       </div>
       <span class="copied-hint">Copied</span>
     `;
@@ -1952,10 +1952,8 @@ function init() {
 
   if (tabGeotags && tabNotes && geotagsView && notesView) {
       tabGeotags.addEventListener("click", () => {
-          tabGeotags.style.color = "var(--accent)";
-          tabGeotags.style.borderBottomColor = "var(--accent)";
-          tabNotes.style.color = "var(--text-secondary)";
-          tabNotes.style.borderBottomColor = "transparent";
+          tabGeotags.classList.add("active");
+          tabNotes.classList.remove("active");
           geotagsView.style.display = "flex";
           notesView.style.display = "none";
 
@@ -1973,10 +1971,8 @@ function init() {
           }
       });
       tabNotes.addEventListener("click", () => {
-          tabNotes.style.color = "var(--accent)";
-          tabNotes.style.borderBottomColor = "var(--accent)";
-          tabGeotags.style.color = "var(--text-secondary)";
-          tabGeotags.style.borderBottomColor = "transparent";
+          tabNotes.classList.add("active");
+          tabGeotags.classList.remove("active");
           notesView.style.display = "flex";
           geotagsView.style.display = "none";
 
