@@ -954,9 +954,9 @@ function renderCandidateList(result) {
        <button class="btn-card-action candidate-action" data-action="confirm" type="button">CONFIRM</button>
        <button class="btn-card-action candidate-action" data-action="reject" type="button">REJECT</button>
       </div>
-      <div style="display: flex; gap: 8px; margin-top: 8px;">
-        <button class="btn-card-action open-maps" style="flex: 1;">Open in Google Maps</button>
-        <button class="btn-card-action street-view-btn" data-lat="${lat}" data-lon="${lon}" style="flex: 1; border: 1px solid var(--accent); color: var(--accent);">Street View</button>
+      <div class="card-action-row">
+        <button class="btn-card-action open-maps">Open in Google Maps</button>
+        <button class="btn-card-action street-view-btn street-view-btn-accent" data-lat="${lat}" data-lon="${lon}">Street View</button>
       </div>
       <span class="copied-hint">Copied</span>
     `;
@@ -1074,23 +1074,54 @@ function svSetError(msg) {
 
 function svClose() {
     byId("street-view-modal")?.classList.remove("active");
-    svApplyZoom(1);
+    svResetZoom();
     if (svState.minimapMarkers) {
         svState.minimapMarkers.forEach(m => m.remove());
         svState.minimapMarkers = [];
     }
 }
 
-// ── Zoom ─────────────────────────────────────────────────────────
+// ── Zoom + Pan ───────────────────────────────────────────────────
 let svZoom = 1;
+let svPanX = 0; // offset from natural center (in CSS px)
+let svPanY = 0;
+let svIsDragging = false;
+let svDragStartX = 0, svDragStartY = 0, svDragStartPanX = 0, svDragStartPanY = 0;
 const SV_ZOOM_MIN = 0.5, SV_ZOOM_MAX = 5, SV_ZOOM_STEP = 0.25;
 
-function svApplyZoom(z) {
-    svZoom = Math.max(SV_ZOOM_MIN, Math.min(SV_ZOOM_MAX, z));
+function svSetTransform(animated) {
     const img = byId("sv-img");
-    if (img) img.style.transform = `scale(${svZoom})`;
+    if (!img) return;
+    img.style.transition = animated ? "transform 0.12s ease" : "none";
+    img.style.transform = `translate(${svPanX}px, ${svPanY}px) scale(${svZoom})`;
     const lbl = byId("sv-zoom-label");
     if (lbl) lbl.textContent = `${Math.round(svZoom * 100)}%`;
+}
+
+// Zoom toward a point. cursorX/Y are in wrap-relative px; omit to zoom to center.
+function svApplyZoom(newZ, cursorX, cursorY) {
+    const clamped = Math.max(SV_ZOOM_MIN, Math.min(SV_ZOOM_MAX, newZ));
+    if (cursorX !== undefined && cursorY !== undefined) {
+        const wrap = byId("sv-image-wrap");
+        if (wrap) {
+            const wRect = wrap.getBoundingClientRect();
+            // cursor relative to wrap center (= natural image center)
+            const cx = cursorX - wRect.width  / 2;
+            const cy = cursorY - wRect.height / 2;
+            // same content-space point stays under cursor after zoom
+            const contentX = (cx - svPanX) / svZoom;
+            const contentY = (cy - svPanY) / svZoom;
+            svPanX = cx - contentX * clamped;
+            svPanY = cy - contentY * clamped;
+        }
+    }
+    svZoom = clamped;
+    svSetTransform(cursorX === undefined); // animate only for button/key presses
+}
+
+function svResetZoom() {
+    svZoom = 1; svPanX = 0; svPanY = 0;
+    svSetTransform(true);
 }
 
 // ── Street View Core ──────────────────────────────────────────────
@@ -1149,6 +1180,10 @@ function svApplyState(data) {
     svState.sequence = cur.sequence;
     svState.seqPos = data.sequence_position;
     svState.seqTotal = data.sequence_total;
+
+    // Reset zoom/pan on each new image load
+    svZoom = 1; svPanX = 0; svPanY = 0;
+    svSetTransform(false);
 
     // Load image
     const img = byId("sv-img");
@@ -1390,9 +1425,18 @@ function svUpdateMinimap() {
 
 function renderLiveMap(result, { resetView = false } = {}) {
   ensureLiveMap();
+
+  // Always clear existing markers and sources first
+  clearCandidateMarkers();
+  liveMapReady.then(() => {
+    liveMap.getSource("candidates")?.setData(emptyFeatureCollection);
+    liveMap.getSource("ring")?.setData({ type: "FeatureCollection", features: [] });
+    liveMap.getSource("mean")?.setData(emptyFeatureCollection);
+  });
+
   const fusion = result?.fused_estimate;
   const candidates = sortedCandidates(result);
-  
+
   if (!fusion || candidates.length === 0) return;
 
   const visibleCandidates = candidates.slice(0, topLimit);
@@ -1408,10 +1452,8 @@ function renderLiveMap(result, { resetView = false } = {}) {
   } : null;
 
   liveMapReady.then(() => {
-    liveMap.getSource("candidates").setData(emptyFeatureCollection);
     renderHtmlCandidateMarkers(visibleCandidates);
-    liveMap.getSource("ring").setData({ type: "FeatureCollection", features: ringFeature ? [ringFeature] : [] });
-    liveMap.getSource("mean").setData(emptyFeatureCollection);
+    liveMap.getSource("ring")?.setData({ type: "FeatureCollection", features: ringFeature ? [ringFeature] : [] });
     bringCandidateLayersToFront();
     if (resetView) {
       easeToCentered({
@@ -1463,7 +1505,9 @@ function renderSummary(result) {
   renderTimeline(result);
   renderClues(result);
   selectedLightboxDetectionIndex = 0;
-  renderLightboxIntel();
+  // Only draw overlay if image is already decoded; doLoadSession sets onload for the async case
+  const lbImg = byId("lightbox-img");
+  if (lbImg && lbImg.naturalWidth > 0) renderLightboxIntel();
 }
 
 function showAnalysisAlert(message) {
@@ -1779,7 +1823,7 @@ function setupKeyboardNav() {
       svApplyZoom(svZoom - SV_ZOOM_STEP);
     } else if (e.key === "r" || e.key === "R") {
       e.preventDefault();
-      svApplyZoom(1);
+      svResetZoom();
     }
   });
 }
@@ -1845,14 +1889,17 @@ function setupDiagnostics() {
   if (jsonBackdrop) jsonBackdrop.addEventListener("click", closeJson);
 }
 
+const SVG_CHEVRON_RIGHT = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>`;
+const SVG_CHEVRON_DOWN  = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`;
+
 function setupCollapsiblePanel(triggerId, bodyId) {
   const trigger = byId(triggerId);
   const body = byId(bodyId);
   if (!trigger || !body) return;
 
-  const icon = trigger.querySelector("span");
+  const icon = trigger.querySelector(".toggle-chevron");
   const syncIcon = () => {
-    if (icon) icon.textContent = body.classList.contains("active") ? "v" : ">";
+    if (icon) icon.innerHTML = body.classList.contains("active") ? SVG_CHEVRON_DOWN : SVG_CHEVRON_RIGHT;
   };
 
   trigger.addEventListener("click", () => {
@@ -1871,16 +1918,16 @@ function setupPanelAccordions() {
 
 function loadSessionList() {
     const select = byId("load-session-select");
-    if (!select) return;
-    fetch("/api/operator/sessions")
+    if (!select) return Promise.resolve();
+    return fetch("/api/operator/sessions")
         .then(r => r.json())
         .then(data => {
-            select.innerHTML = '<option value="">-- Load Session --</option>';
+            select.innerHTML = '<option value="">— Load Session —</option>';
             if (data.sessions && data.sessions.length > 0) {
                 data.sessions.forEach(session => {
                     const option = document.createElement("option");
                     option.value = session.session_id;
-                    const fileStr = session.source_filename ? ` - ${session.source_filename}` : "";
+                    const fileStr = session.source_filename ? ` — ${session.source_filename}` : "";
                     option.textContent = `${session.display_name}${fileStr} [${session.status}]`;
                     select.appendChild(option);
                 });
@@ -1890,6 +1937,141 @@ function loadSessionList() {
             }
         })
         .catch(err => console.error("Failed to load session list:", err));
+}
+
+function doLoadSession(sid) {
+    if (!sid) return;
+    fetch(`/api/operator/sessions/${sid}`)
+        .then(r => {
+            if (!r.ok) throw new Error(`Session load failed (HTTP ${r.status})`);
+            return r.json();
+        })
+        .then(data => {
+            if (data.error) throw new Error(data.error);
+
+            loadedSessionId = data.session_id || sid;
+            localStorage.setItem("heimdallSessionId", loadedSessionId);
+
+            lastResult = {
+                fused_estimate: data.fused_estimate,
+                candidates: data.candidates,
+                clues: data.clues,
+                detections: data.detections
+            };
+
+            // Restore source image into the left-panel preview area.
+            // Use the binary image endpoint for reliability instead of base64 data URL.
+            const source = data.source || {};
+            const imgEndpoint = `/api/operator/sessions/${loadedSessionId}/image`;
+            const imgUrl = source.image_data_url
+                || (source.has_session_image || source.image_file ? imgEndpoint : null);
+            const thumb = byId("source-thumb");
+            const filenameLbl = byId("preview-filename");
+            const previewBlock = byId("preview-block");
+            const ingestBlock = byId("ingest-block");
+            const lightboxImg = byId("lightbox-img");
+            const lightboxName = byId("lightbox-filename");
+            const geolocateBtn = byId("geolocate-image");
+
+            if (source.filename || imgUrl) {
+                if (filenameLbl) filenameLbl.textContent = source.filename || "Session image";
+                if (lightboxName) lightboxName.textContent = source.filename || "";
+                if (previewBlock) previewBlock.style.display = "flex";
+                if (ingestBlock) ingestBlock.style.display = "none";
+            }
+
+            if (imgUrl) {
+                if (geolocateBtn) geolocateBtn.disabled = false;
+                if (lightboxImg) {
+                    selectedLightboxDetectionIndex = 0;
+                    lightboxImg.onload = () => renderLightboxIntel();
+                    lightboxImg.src = imgUrl;
+                    if (lightboxImg.complete && lightboxImg.naturalWidth > 0) renderLightboxIntel();
+                }
+                if (thumb) thumb.src = imgUrl;
+            }
+
+            renderSummary(data);
+            renderNoteMarkers();
+            renderNotesList();
+            if (data.operator_notes) {
+                const noteInput = byId("operator-note-input");
+                if (noteInput) noteInput.value = data.operator_notes;
+            }
+        })
+        .catch(err => console.error("Failed to load session:", err));
+}
+
+const SVG_CHEVRON_LEFT  = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>`;
+const SVG_CHEVRON_RIGHT2 = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>`;
+
+function setupPanelResize() {
+  const shell = document.querySelector(".app-shell");
+  if (!shell) return;
+
+  function attachDrag(handle, side) {
+    if (!handle) return;
+    handle.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      const varName = side === "left" ? "--left-w" : "--right-w";
+      const startX = e.clientX;
+      const startW = parseInt(getComputedStyle(shell).getPropertyValue(varName)) || (side === "left" ? 350 : 380);
+      handle.classList.add("resizing");
+
+      const onMove = (ev) => {
+        const dx = ev.clientX - startX;
+        const newW = Math.max(48, Math.min(640, side === "left" ? startW + dx : startW - dx));
+        shell.style.setProperty(varName, newW + "px");
+        if (liveMap) liveMap.resize();
+      };
+      const onUp = () => {
+        handle.classList.remove("resizing");
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+      };
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    });
+  }
+
+  attachDrag(document.querySelector(".left-resize-handle"), "left");
+  attachDrag(document.querySelector(".right-resize-handle"), "right");
+}
+
+function setupPanelCollapse() {
+  const shell = document.querySelector(".app-shell");
+  if (!shell) return;
+
+  function attachCollapse(panelEl, btn, side) {
+    if (!panelEl || !btn) return;
+    const varName = side === "left" ? "--left-w" : "--right-w";
+    const defaultW = side === "left" ? "350px" : "380px";
+
+    const syncIcon = () => {
+      const collapsed = panelEl.classList.contains("collapsed");
+      btn.innerHTML = side === "left"
+        ? (collapsed ? SVG_CHEVRON_RIGHT2 : SVG_CHEVRON_LEFT)
+        : (collapsed ? SVG_CHEVRON_LEFT  : SVG_CHEVRON_RIGHT2);
+      btn.title = collapsed ? "Expand panel" : "Collapse panel";
+    };
+
+    btn.addEventListener("click", () => {
+      const collapsed = panelEl.classList.toggle("collapsed");
+      if (collapsed) {
+        panelEl.dataset.prevW = getComputedStyle(shell).getPropertyValue(varName).trim();
+        shell.style.setProperty(varName, "48px");
+      } else {
+        shell.style.setProperty(varName, panelEl.dataset.prevW || defaultW);
+      }
+      if (liveMap) liveMap.resize();
+      syncIcon();
+    });
+
+    syncIcon();
+  }
+
+  attachCollapse(document.querySelector(".left-panel"),  byId("left-panel-collapse-btn"),  "left");
+  attachCollapse(document.querySelector(".right-panel"), byId("right-panel-collapse-btn"), "right");
 }
 
 function init() {
@@ -1904,45 +2086,25 @@ function init() {
   setupPanelAccordions();
   setupToggles();
   setupOperatorActions();
+  setupPanelResize();
+  setupPanelCollapse();
 
-  const savedSessionId = localStorage.getItem("heimdallSessionId");
-  if (savedSessionId) {
-      loadedSessionId = savedSessionId;
-  }
+  // On every page load: check if a session was queued to auto-load (set before reload).
+  // If yes, load it. If no, reset server so there's no stale state.
+  const pendingSessionId = localStorage.getItem("heimdallPendingLoad");
+  localStorage.removeItem("heimdallPendingLoad");
+  loadedSessionId = null;
+  localStorage.removeItem("heimdallSessionId");
 
-  loadSessionList();
-  
-  if (loadedSessionId) {
-      fetch(`/api/operator/sessions/${loadedSessionId}`)
-          .then(r => {
-              if (r.ok) return r.json();
-              loadedSessionId = null;
-              localStorage.removeItem("heimdallSessionId");
-              loadSessionList();
-              throw new Error("Session not found");
-          })
-          .then(data => {
-               if (!data.session_id) return;
-               // Full mock of lastResult structure needed by UI renderers
-               lastResult = {
-                   geo: data.fused_estimate,
-                   candidates: data.candidates,
-                   clues: data.clues,
-                   detections: data.detections
-               };
-               renderSummary(data);
-               renderCandidateList(lastResult);
-               renderLiveMap(lastResult);
-               renderTimeline(data);
-               renderClues(data);
-               renderNoteMarkers();
-               renderNotesList();
-               if (data.operator_notes) {
-                   const noteInput = byId("operator-note-input");
-                   if (noteInput) noteInput.value = data.operator_notes;
-               }
-          })
-          .catch(err => console.error("Failed to auto-load session:", err));
+  if (pendingSessionId) {
+    loadSessionList().then(() => {
+      const sel = byId("load-session-select");
+      if (sel) sel.value = pendingSessionId;
+      doLoadSession(pendingSessionId);
+    });
+  } else {
+    fetch("/api/operator/reset", { method: "POST" }).catch(() => {});
+    loadSessionList();
   }
 
   const tabGeotags = document.getElementById("tab-geotags");
@@ -1952,10 +2114,8 @@ function init() {
 
   if (tabGeotags && tabNotes && geotagsView && notesView) {
       tabGeotags.addEventListener("click", () => {
-          tabGeotags.style.color = "var(--accent)";
-          tabGeotags.style.borderBottomColor = "var(--accent)";
-          tabNotes.style.color = "var(--text-secondary)";
-          tabNotes.style.borderBottomColor = "transparent";
+          tabGeotags.classList.add("active");
+          tabNotes.classList.remove("active");
           geotagsView.style.display = "flex";
           notesView.style.display = "none";
 
@@ -1973,10 +2133,8 @@ function init() {
           }
       });
       tabNotes.addEventListener("click", () => {
-          tabNotes.style.color = "var(--accent)";
-          tabNotes.style.borderBottomColor = "var(--accent)";
-          tabGeotags.style.color = "var(--text-secondary)";
-          tabGeotags.style.borderBottomColor = "transparent";
+          tabNotes.classList.add("active");
+          tabGeotags.classList.remove("active");
           notesView.style.display = "flex";
           geotagsView.style.display = "none";
 
@@ -2204,17 +2362,46 @@ function setupOperatorActions() {
         svNavigateTo({ lat: svState.lat, lon: svState.lon, preferHeading: ph });
     });
 
-    // Zoom buttons
+    // Zoom buttons (zoom to center)
     byId("sv-zoom-in")?.addEventListener("click", () => svApplyZoom(svZoom + SV_ZOOM_STEP));
     byId("sv-zoom-out")?.addEventListener("click", () => svApplyZoom(svZoom - SV_ZOOM_STEP));
-    byId("sv-zoom-reset")?.addEventListener("click", () => svApplyZoom(1));
+    byId("sv-zoom-reset")?.addEventListener("click", () => svResetZoom());
 
-    // Mouse wheel zoom on the image area
-    byId("sv-image-wrap")?.addEventListener("wheel", (e) => {
+    // Mouse wheel zoom toward cursor
+    const svWrap = byId("sv-image-wrap");
+    svWrap?.addEventListener("wheel", (e) => {
         if (!byId("street-view-modal")?.classList.contains("active")) return;
         e.preventDefault();
-        svApplyZoom(svZoom + (e.deltaY < 0 ? SV_ZOOM_STEP : -SV_ZOOM_STEP));
+        const rect = svWrap.getBoundingClientRect();
+        svApplyZoom(
+            svZoom + (e.deltaY < 0 ? SV_ZOOM_STEP : -SV_ZOOM_STEP),
+            e.clientX - rect.left,
+            e.clientY - rect.top
+        );
     }, { passive: false });
+
+    // Drag to pan when zoomed in
+    svWrap?.addEventListener("mousedown", (e) => {
+        if (svZoom <= 1 || e.button !== 0) return;
+        svIsDragging = true;
+        svDragStartX = e.clientX;
+        svDragStartY = e.clientY;
+        svDragStartPanX = svPanX;
+        svDragStartPanY = svPanY;
+        svWrap.style.cursor = "grabbing";
+        e.preventDefault();
+    });
+    document.addEventListener("mousemove", (e) => {
+        if (!svIsDragging) return;
+        svPanX = svDragStartPanX + (e.clientX - svDragStartX);
+        svPanY = svDragStartPanY + (e.clientY - svDragStartY);
+        svSetTransform(false);
+    });
+    document.addEventListener("mouseup", () => {
+        if (!svIsDragging) return;
+        svIsDragging = false;
+        if (svWrap) svWrap.style.cursor = "";
+    });
 
     window.addEventListener("resize", () => {
         if (byId("street-view-modal")?.classList.contains("active")) svDrawCandidateOverlays();
@@ -2240,78 +2427,39 @@ function setupOperatorActions() {
         });
     }
 
+    function afterSessionSaved(data) {
+        if (data.session_id) {
+            localStorage.setItem("heimdallPendingLoad", data.session_id);
+        }
+        window.location.reload();
+    }
+
     if (btnUpdateSession && sessionSaveModal) {
         btnUpdateSession.addEventListener("click", () => {
             sessionSaveModal.classList.remove("active");
             postForm("/api/operator/save", JSON.stringify({ save_as_new: false }))
-                .then(r => r.json())
-                .then(data => {
-                    if (data.session_id) {
-                        loadedSessionId = data.session_id;
-                        localStorage.setItem("heimdallSessionId", data.session_id);
-                    }
-                    loadSessionList();
-                    alert("Session updated successfully.");
-                });
+                .then(afterSessionSaved)
+                .catch(err => console.error("Save failed:", err));
         });
     }
 
     if (btnSaveNewSession && sessionSaveModal) {
         btnSaveNewSession.addEventListener("click", () => {
             sessionSaveModal.classList.remove("active");
-            const sessionName = prompt("Enter a new custom name for this session (optional):");
+            const sessionName = prompt("Enter a name for this session (optional):");
             if (sessionName !== null) {
                 postForm("/api/operator/save", JSON.stringify({ name: sessionName.trim(), save_as_new: true }))
-                    .then(r => r.json())
-                    .then(data => {
-                        if (data.session_id) {
-                            loadedSessionId = data.session_id;
-                            localStorage.setItem("heimdallSessionId", data.session_id);
-                        }
-                        loadSessionList();
-                        alert("Session saved as new.");
-                    });
+                    .then(afterSessionSaved)
+                    .catch(err => console.error("Save failed:", err));
             }
         });
     }
 
     if (newSessionBtn) {
         newSessionBtn.addEventListener("click", () => {
-            fetch("/api/operator/reset", { method: "POST" })
-                .then(() => {
-                    loadedSessionId = null;
-                    localStorage.removeItem("heimdallSessionId");
-                    setMetric("diag-backend", "-");
-                    setMetric("diag-worker", "-");
-                    setMetric("diag-tier", "-");
-                    setMetric("diag-radius", "-");
-                    lastResult = null;
-                    selectedIndex = -1;
-                    droppedPinLocation = null;
-
-                    const progress = byId("progress");
-                    const errorContainer = byId("analysis-error");
-                    const previewBlock = byId("preview-block");
-                    const ingestBlock = byId("ingest-block");
-
-                    if (progress) progress.style.display = "none";
-                    if (errorContainer) errorContainer.style.display = "none";
-                    if (previewBlock) previewBlock.style.display = "none";
-                    if (ingestBlock) ingestBlock.style.display = "block";
-
-                    const geolocateBtn = byId("geolocate-image");
-                    if (geolocateBtn) geolocateBtn.disabled = true;
-
-                    renderCandidateList(null);
-                    renderLiveMap(null);
-                    renderTimeline(null);
-                    renderClues(null);
-                    renderNoteMarkers();
-                    renderNotesList();
-
-                    const noteInput = byId("operator-note-input");
-                    if (noteInput) noteInput.value = "";
-                });
+            localStorage.removeItem("heimdallPendingLoad");
+            localStorage.removeItem("heimdallSessionId");
+            window.location.reload();
         });
     }
 
@@ -2320,18 +2468,11 @@ function setupOperatorActions() {
             if (loadedSessionId && sessionSaveModal) {
                 sessionSaveModal.classList.add("active");
             } else {
-                const sessionName = prompt("Enter a custom name for this session (optional):");
+                const sessionName = prompt("Enter a name for this session (optional):");
                 if (sessionName !== null) {
                     postForm("/api/operator/save", JSON.stringify({ name: sessionName.trim(), save_as_new: true }))
-                        .then(r => r.json())
-                        .then(data => {
-                            if (data.session_id) {
-                                loadedSessionId = data.session_id;
-                                localStorage.setItem("heimdallSessionId", data.session_id);
-                            }
-                            loadSessionList();
-                            alert("Session saved as new.");
-                        });
+                        .then(afterSessionSaved)
+                        .catch(err => console.error("Save failed:", err));
                 }
             }
         });
@@ -2414,6 +2555,10 @@ function setupOperatorActions() {
                          dropPinBtn.textContent = "📍 Drop Note Pin";
                      }
 
+                     // Refresh notes list and map markers immediately
+                     renderNotesList();
+                     renderNoteMarkers();
+
                      setTimeout(() => {
                          saveNoteBtn.textContent = "Save Note";
                      }, 2000);
@@ -2451,37 +2596,13 @@ function setupOperatorActions() {
                 warn.style.color = "#ef4444";
                 warn.style.fontSize = "11px";
                 warn.style.marginLeft = "8px";
-                warn.textContent = "Please select a session first.";
+                warn.textContent = "Select a session first.";
                 loadSessionBtn.parentElement.appendChild(warn);
                 setTimeout(() => warn.remove(), 3000);
                 return;
             }
-            fetch(`/api/operator/sessions/${sid}`)
-                .then(r => r.json())
-                .then(data => {
-                     loadedSessionId = data.session_id || sid;
-                     localStorage.setItem("heimdallSessionId", loadedSessionId);
-
-                     // Full mock of lastResult structure needed by UI renderers
-                     lastResult = {
-                         geo: data.fused_estimate,
-                         candidates: data.candidates,
-                         clues: data.clues,
-                         detections: data.detections
-                     };
-                     renderSummary(data);
-                     renderCandidateList(lastResult);
-                     renderLiveMap(lastResult);
-                     renderTimeline(data);
-                     renderClues(data);
-                     renderNoteMarkers();
-                     renderNotesList();
-                     if (data.operator_notes) {
-                         const noteInput = byId("operator-note-input");
-                         if (noteInput) noteInput.value = data.operator_notes;
-                     }
-                })
-                .catch(err => console.error("Failed to load session:", err));
+            localStorage.setItem("heimdallPendingLoad", sid);
+            window.location.reload();
         });
     }
 
