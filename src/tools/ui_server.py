@@ -2289,15 +2289,6 @@ def operator_list_sessions() -> JSONResponse:
     sessions.sort(key=lambda x: x.get("updated_at") or "", reverse=True)
     return JSONResponse({"sessions": sessions})
 
-@app.get("/api/operator/sessions/{session_id}/image")
-def operator_get_session_image(session_id: str):
-    sessions_dir = APP_ROOT / "operator_sessions"
-    for folder_path in sessions_dir.glob(f"session_*{session_id}"):
-        if folder_path.is_dir():
-            img_file = folder_path / "image.jpg"
-            if img_file.exists():
-                return FileResponse(str(img_file), media_type="image/jpeg")
-    return JSONResponse({"error": "Image not found"}, status_code=404)
 
 @app.get("/api/operator/sessions/{session_id}")
 def operator_get_session_by_id(session_id: str) -> JSONResponse:

@@ -233,12 +233,11 @@ def test_download_mapillary_dataset_reads_token_from_dotenv(tmp_path: Path, monk
             "data": [
                 {
                     "id": "img-1",
-                    "computed_geometry": {"type": "Point", "coordinates": [2.3001, 48.8001]},
+                    "computed_geometry": {"type": "Point", "coordinates": [2.30005, 48.80005]},
                     "thumb_2048_url": "https://example.com/img-1.jpg",
                 }
             ]
         }
-
     summary = download_mapillary_dataset(
         bbox=(48.80, 2.30, 48.8005, 2.3005),
         out_dir=tmp_path / "street",
