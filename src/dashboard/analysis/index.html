@@ -11,7 +11,7 @@
       crossorigin=""
     />
     <link rel="stylesheet" href="../theme.css?v=7" />
-    <link rel="stylesheet" href="operator.css?v=33" />
+    <link rel="stylesheet" href="operator.css?v=34" />
 
 
   </head>
@@ -77,8 +77,16 @@
         </div>
       </header>
 
+      <!-- Panel Resize Handles -->
+      <div class="left-resize-handle"></div>
+      <div class="right-resize-handle"></div>
+
       <!-- Right Analysis Panel -->
       <aside class="left-panel">
+        <div class="panel-header-bar">
+          <span class="panel-header-title">Intelligence</span>
+          <button id="left-panel-collapse-btn" class="panel-collapse-btn" title="Collapse panel" aria-label="Collapse left panel"></button>
+        </div>
         <!-- Preview / Ingest Header -->
         <section class="panel-section preview-header" id="panel-header">
            <div id="ingest-block" class="sci-fi-ingest">
@@ -148,7 +156,7 @@
           <!-- Session Timeline -->
           <section class="panel-section timeline-section collapsible-section">
               <div id="timeline-trigger" class="panel-toggle">
-                Session Timeline <span>></span>
+                Session Timeline <span class="toggle-chevron"></span>
               </div>
               <div id="timeline-accordion" class="panel-collapse">
                 <div id="session-timeline" class="session-timeline"></div>
@@ -158,6 +166,10 @@
 
         <!-- Right Analysis Panel -->
         <aside class="right-panel">
+        <div class="panel-header-bar">
+          <span class="panel-header-title">Analysis</span>
+          <button id="right-panel-collapse-btn" class="panel-collapse-btn" title="Collapse panel" aria-label="Collapse right panel"></button>
+        </div>
 
         <!-- Result Status Section (Hidden, legacy compatibility) -->
         <section id="result-status" style="display: none;">
@@ -208,7 +220,7 @@
         <!-- Clues List -->
         <section class="panel-section clues-section collapsible-section">
             <div id="clues-trigger" class="panel-toggle">
-              Extracted Intelligence <span>></span>
+              Extracted Intelligence <span class="toggle-chevron"></span>
             </div>
             <div id="clues-accordion" class="panel-collapse">
               <div id="clues-list" class="clues-list"></div>
@@ -220,7 +232,7 @@
         <!-- Operator Notes -->
         <section class="panel-section notes-section collapsible-section">
              <div id="notes-trigger" class="panel-toggle">
-               Operator Notes <span>></span>
+               Operator Notes <span class="toggle-chevron"></span>
              </div>
              <div id="notes-accordion" class="panel-collapse">
                <textarea id="operator-note-input" rows="3"></textarea>
@@ -238,7 +250,7 @@
         <!-- Diagnostics (Hidden/Collapsible) -->
         <footer class="panel-footer">
           <div id="diag-trigger" class="diag-toggle">
-            System Diagnostics <span>></span>
+            System Diagnostics <span class="toggle-chevron"></span>
           </div>
           <div id="diag-accordion" class="diag-body">
              <div class="diag-copy-row">
@@ -395,7 +407,7 @@
     </div>
 
     <script src="https://unpkg.com/maplibre-gl@5.0.0/dist/maplibre-gl.js" crossorigin=""></script>
-    <script type="module" src="operator.js?v=33"></script>
+    <script type="module" src="operator.js?v=34"></script>
 
         <button id="btn-confirm-cand" style="display:none;"></button>
         <button id="btn-reject-cand" style="display:none;"></button>
