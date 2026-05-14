@@ -1845,14 +1845,17 @@ function setupDiagnostics() {
   if (jsonBackdrop) jsonBackdrop.addEventListener("click", closeJson);
 }
 
+const SVG_CHEVRON_RIGHT = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>`;
+const SVG_CHEVRON_DOWN  = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`;
+
 function setupCollapsiblePanel(triggerId, bodyId) {
   const trigger = byId(triggerId);
   const body = byId(bodyId);
   if (!trigger || !body) return;
 
-  const icon = trigger.querySelector("span");
+  const icon = trigger.querySelector(".toggle-chevron");
   const syncIcon = () => {
-    if (icon) icon.textContent = body.classList.contains("active") ? "v" : ">";
+    if (icon) icon.innerHTML = body.classList.contains("active") ? SVG_CHEVRON_DOWN : SVG_CHEVRON_RIGHT;
   };
 
   trigger.addEventListener("click", () => {
@@ -1892,6 +1895,78 @@ function loadSessionList() {
         .catch(err => console.error("Failed to load session list:", err));
 }
 
+const SVG_CHEVRON_LEFT  = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>`;
+const SVG_CHEVRON_RIGHT2 = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>`;
+
+function setupPanelResize() {
+  const shell = document.querySelector(".app-shell");
+  if (!shell) return;
+
+  function attachDrag(handle, side) {
+    if (!handle) return;
+    handle.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      const varName = side === "left" ? "--left-w" : "--right-w";
+      const startX = e.clientX;
+      const startW = parseInt(getComputedStyle(shell).getPropertyValue(varName)) || (side === "left" ? 350 : 380);
+      handle.classList.add("resizing");
+
+      const onMove = (ev) => {
+        const dx = ev.clientX - startX;
+        const newW = Math.max(48, Math.min(640, side === "left" ? startW + dx : startW - dx));
+        shell.style.setProperty(varName, newW + "px");
+        if (liveMap) liveMap.resize();
+      };
+      const onUp = () => {
+        handle.classList.remove("resizing");
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+      };
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    });
+  }
+
+  attachDrag(document.querySelector(".left-resize-handle"), "left");
+  attachDrag(document.querySelector(".right-resize-handle"), "right");
+}
+
+function setupPanelCollapse() {
+  const shell = document.querySelector(".app-shell");
+  if (!shell) return;
+
+  function attachCollapse(panelEl, btn, side) {
+    if (!panelEl || !btn) return;
+    const varName = side === "left" ? "--left-w" : "--right-w";
+    const defaultW = side === "left" ? "350px" : "380px";
+
+    const syncIcon = () => {
+      const collapsed = panelEl.classList.contains("collapsed");
+      btn.innerHTML = side === "left"
+        ? (collapsed ? SVG_CHEVRON_RIGHT2 : SVG_CHEVRON_LEFT)
+        : (collapsed ? SVG_CHEVRON_LEFT  : SVG_CHEVRON_RIGHT2);
+      btn.title = collapsed ? "Expand panel" : "Collapse panel";
+    };
+
+    btn.addEventListener("click", () => {
+      const collapsed = panelEl.classList.toggle("collapsed");
+      if (collapsed) {
+        panelEl.dataset.prevW = getComputedStyle(shell).getPropertyValue(varName).trim();
+        shell.style.setProperty(varName, "48px");
+      } else {
+        shell.style.setProperty(varName, panelEl.dataset.prevW || defaultW);
+      }
+      if (liveMap) liveMap.resize();
+      syncIcon();
+    });
+
+    syncIcon();
+  }
+
+  attachCollapse(document.querySelector(".left-panel"),  byId("left-panel-collapse-btn"),  "left");
+  attachCollapse(document.querySelector(".right-panel"), byId("right-panel-collapse-btn"), "right");
+}
+
 function init() {
   console.log("LOG: Operator UI Initializing");
   ensureLiveMap();
@@ -1904,46 +1979,15 @@ function init() {
   setupPanelAccordions();
   setupToggles();
   setupOperatorActions();
+  setupPanelResize();
+  setupPanelCollapse();
 
-  const savedSessionId = localStorage.getItem("heimdallSessionId");
-  if (savedSessionId) {
-      loadedSessionId = savedSessionId;
-  }
+  // Do not auto-load session on page load — pins and notes only appear
+  // when a session is explicitly selected and loaded by the operator.
+  localStorage.removeItem("heimdallSessionId");
+  loadedSessionId = null;
 
   loadSessionList();
-  
-  if (loadedSessionId) {
-      fetch(`/api/operator/sessions/${loadedSessionId}`)
-          .then(r => {
-              if (r.ok) return r.json();
-              loadedSessionId = null;
-              localStorage.removeItem("heimdallSessionId");
-              loadSessionList();
-              throw new Error("Session not found");
-          })
-          .then(data => {
-               if (!data.session_id) return;
-               // Full mock of lastResult structure needed by UI renderers
-               lastResult = {
-                   geo: data.fused_estimate,
-                   candidates: data.candidates,
-                   clues: data.clues,
-                   detections: data.detections
-               };
-               renderSummary(data);
-               renderCandidateList(lastResult);
-               renderLiveMap(lastResult);
-               renderTimeline(data);
-               renderClues(data);
-               renderNoteMarkers();
-               renderNotesList();
-               if (data.operator_notes) {
-                   const noteInput = byId("operator-note-input");
-                   if (noteInput) noteInput.value = data.operator_notes;
-               }
-          })
-          .catch(err => console.error("Failed to auto-load session:", err));
-  }
 
   const tabGeotags = document.getElementById("tab-geotags");
   const tabNotes = document.getElementById("tab-notes");
