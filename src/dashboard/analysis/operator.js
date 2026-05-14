@@ -25,6 +25,7 @@ let lastResult = null;
 let selectedIndex = -1;
 let candidateMarkers = [];
 let activeCandidateItems = [];
+let candidatePinsPopulated = false;
 let selectedLightboxDetectionIndex = 0;
 
 const parisCenter = [2.3522, 48.8566];
@@ -189,27 +190,15 @@ function bringCandidateLayersToFront() {
 function clearCandidateMarkers() {
   candidateMarkers.forEach((marker) => marker.remove());
   candidateMarkers = [];
+  candidatePinsPopulated = false;
 }
 
 function updateHtmlMarkerSelection(_index) {
-  candidateMarkers.forEach((marker) => {
-    const el = marker.getElement();
-    const idx = Number(el.dataset.index);
-    el.classList.toggle("selected", idx === selectedIndex);
-  });
+  // Selection is driven by updateSelectedMarker via GeoJSON paint properties — no-op here.
 }
 
 function updatePinScale() {
-  if (!liveMap) return;
-  const zoom = liveMap.getZoom();
-  const t = Math.max(0, Math.min(1, (zoom - 2) / 12));
-  const eased = t * t * (3 - 2 * t);
-  const scale = 0.72 + eased * 0.42;
-  candidateMarkers.forEach((marker) => {
-    const el = marker.getElement();
-    el.style.setProperty("--pin-scale", scale.toFixed(2));
-    el.classList.remove("pin-hidden", "pin-dot");
-  });
+  // No HTML markers — GeoJSON layers handle all rendering. No-op.
 }
 
 function fusedMapCoord(result) {
@@ -225,81 +214,23 @@ function operatorMapCoord(item) {
   return numericCandidateCoord(item);
 }
 
-function renderHtmlCandidateMarkers(candidates) {
-  clearCandidateMarkers();
+function renderCandidatePins(candidates) {
   if (!liveMap) return;
-  activeCandidateItems = buildCandidateMarkerItems(candidates);
-
-  // One permanent marker per candidate, placed once at its exact coordinate.
-  // Nothing ever moves or recreates these on zoom — MapLibre handles projection.
-  activeCandidateItems.forEach(({ index, coord }) => {
-    const el = document.createElement("button");
-    el.type = "button";
-    el.className = `geo-pin compact${index === 0 ? " top" : ""}`;
-    el.dataset.index = String(index);
-    el.setAttribute("aria-label", `Select geo candidate ${index + 1}`);
-    el.innerHTML = `<span class="geo-pin-head">${index + 1}</span>`;
-    el.addEventListener("click", (event) => {
-      event.stopPropagation();
-      selectCandidate(index);
-    });
-
-    const marker = new maplibregl.Marker({ element: el, anchor: "center", offset: [0, 0] })
-      .setLngLat([coord.lon, coord.lat])
-      .addTo(liveMap);
-    candidateMarkers.push(marker);
-  });
-
-  updatePinScale();
-}
-
-function buildCandidateMarkerItems(candidates) {
-  return candidates.slice(0, topLimit).flatMap((item, idx) => {
-    const coord = operatorMapCoord(item);
+  const features = candidates.slice(0, topLimit).flatMap((item, idx) => {
+    const coord = numericCandidateCoord(item);
     if (!coord) return [];
-    return [{ item, index: idx, coord }];
+    return [{
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [coord.lon, coord.lat] },
+      properties: { index: idx, rank: idx + 1 }
+    }];
   });
+  liveMap.getSource("candidates")?.setData({ type: "FeatureCollection", features });
+  candidatePinsPopulated = features.length > 0;
 }
 
 function refreshCandidateMarkers() {
-  updatePinScale();
-}
-
-function clusterCandidateItems(items) {
-  if (!liveMap) return [];
-  const clusters = [];
-
-  items.forEach((item) => {
-    const point = liveMap.project([item.coord.lon, item.coord.lat]);
-    let target = null;
-    let targetDistance = Infinity;
-
-    clusters.forEach((cluster) => {
-      const distance = Math.hypot(point.x - cluster.point.x, point.y - cluster.point.y);
-      if (distance < candidateClusterRadiusPx && distance < targetDistance) {
-        target = cluster;
-        targetDistance = distance;
-      }
-    });
-
-    if (!target) {
-      clusters.push({
-        items: [item],
-        point,
-        coord: { ...item.coord }
-      });
-      return;
-    }
-
-    target.items.push(item);
-    // Keep the cluster pinned to the highest-ranked candidate's exact coordinate.
-    // Averaging produces a midpoint that belongs to no real location, causing
-    // pins to drift to the wrong street when candidates are nearby.
-    target.coord = { ...target.items[0].coord };
-    target.point = liveMap.project([target.coord.lon, target.coord.lat]);
-  });
-
-  return clusters;
+  // No-op — GeoJSON layers update automatically.
 }
 
 function markerCandidateIndices(el) {
@@ -603,7 +534,6 @@ function ensureLiveMap() {
         if (liveMap.getZoom() <= globePitchResetZoom && liveMap.getPitch() !== 0) {
           easeToCentered({ center: liveMap.getCenter(), pitch: 0, duration: 180 });
         }
-        refreshCandidateMarkers();
       });
 
       bringCandidateLayersToFront();
@@ -1413,7 +1343,7 @@ function renderLiveMap(result, { resetView = false } = {}) {
   } : null;
 
   liveMapReady.then(() => {
-    renderHtmlCandidateMarkers(visibleCandidates);
+    renderCandidatePins(visibleCandidates);
     liveMap.getSource("ring")?.setData({ type: "FeatureCollection", features: ringFeature ? [ringFeature] : [] });
     bringCandidateLayersToFront();
     if (resetView) {
@@ -1487,6 +1417,7 @@ function clearAnalysisResults() {
   if (rawJson) rawJson.textContent = "{}";
   clearCandidateMarkers();
   activeCandidateItems = [];
+  candidatePinsPopulated = false;
   lastResult = null;
 }
 
