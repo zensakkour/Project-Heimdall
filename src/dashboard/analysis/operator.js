@@ -191,12 +191,11 @@ function clearCandidateMarkers() {
   candidateMarkers = [];
 }
 
-function updateHtmlMarkerSelection(index) {
+function updateHtmlMarkerSelection(_index) {
   candidateMarkers.forEach((marker) => {
     const el = marker.getElement();
-    const indices = markerCandidateIndices(el);
-    el.classList.toggle("selected", indices.includes(index));
-    el.classList.toggle("top", indices.includes(0));
+    const idx = Number(el.dataset.index);
+    el.classList.toggle("selected", idx === selectedIndex);
   });
 }
 
@@ -227,8 +226,31 @@ function operatorMapCoord(item) {
 }
 
 function renderHtmlCandidateMarkers(candidates) {
+  clearCandidateMarkers();
+  if (!liveMap) return;
   activeCandidateItems = buildCandidateMarkerItems(candidates);
-  refreshCandidateMarkers();
+
+  // One permanent marker per candidate, placed once at its exact coordinate.
+  // Nothing ever moves or recreates these on zoom — MapLibre handles projection.
+  activeCandidateItems.forEach(({ index, coord }) => {
+    const el = document.createElement("button");
+    el.type = "button";
+    el.className = `geo-pin compact${index === 0 ? " top" : ""}`;
+    el.dataset.index = String(index);
+    el.setAttribute("aria-label", `Select geo candidate ${index + 1}`);
+    el.innerHTML = `<span class="geo-pin-head">${index + 1}</span>`;
+    el.addEventListener("click", (event) => {
+      event.stopPropagation();
+      selectCandidate(index);
+    });
+
+    const marker = new maplibregl.Marker({ element: el, anchor: "center", offset: [0, 0] })
+      .setLngLat([coord.lon, coord.lat])
+      .addTo(liveMap);
+    candidateMarkers.push(marker);
+  });
+
+  updatePinScale();
 }
 
 function buildCandidateMarkerItems(candidates) {
@@ -240,52 +262,6 @@ function buildCandidateMarkerItems(candidates) {
 }
 
 function refreshCandidateMarkers() {
-  clearCandidateMarkers();
-  if (!liveMap) return;
-
-  clusterCandidateItems(activeCandidateItems).forEach((cluster) => {
-    const isCluster = cluster.items.length > 1;
-    const topItem = cluster.items[0];
-    const topIndex = topItem.index;
-
-    const el = document.createElement("button");
-    el.type = "button";
-    el.className = `geo-pin compact${isCluster ? " cluster" : ""}${cluster.items.some(({ index }) => index === 0) ? " top" : ""}${cluster.items.some(({ index }) => index === selectedIndex) ? " selected" : ""}`;
-    el.dataset.indices = cluster.items.map(({ index }) => index).join(",");
-    el.setAttribute(
-      "aria-label",
-      isCluster ? `Zoom to ${cluster.items.length} grouped geo candidates` : `Select geo candidate ${topIndex + 1}`
-    );
-    el.innerHTML = `<span class="geo-pin-head">${isCluster ? cluster.items.length : topIndex + 1}</span>`;
-    el.addEventListener("click", (event) => {
-      event.stopPropagation();
-      if (isCluster) {
-        if (liveMap.getZoom() >= 16) {
-          selectCandidate(topIndex);
-        } else {
-          easeToCentered({
-            center: [cluster.coord.lon, cluster.coord.lat],
-            zoom: Math.min(liveMap.getZoom() + 2.2, 16),
-            pitch: 0,
-            bearing: 0,
-            duration: 650
-          });
-        }
-      } else {
-        selectCandidate(topIndex);
-      }
-    });
-
-    const marker = new maplibregl.Marker({
-      element: el,
-      anchor: "center",
-      offset: [0, 0]
-    })
-      .setLngLat([cluster.coord.lon, cluster.coord.lat])
-      .addTo(liveMap);
-    candidateMarkers.push(marker);
-  });
-
   updatePinScale();
 }
 
@@ -627,7 +603,7 @@ function ensureLiveMap() {
         if (liveMap.getZoom() <= globePitchResetZoom && liveMap.getPitch() !== 0) {
           easeToCentered({ center: liveMap.getCenter(), pitch: 0, duration: 180 });
         }
-        updatePinScale();
+        refreshCandidateMarkers();
       });
 
       bringCandidateLayersToFront();

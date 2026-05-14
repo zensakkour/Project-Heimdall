@@ -429,11 +429,42 @@ html, body {
 }
 
 .inline-checkbox input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
   flex: 0 0 auto;
-  height: 14px;
+  width: 13px;
+  height: 13px;
   margin: 0;
   padding: 0;
-  width: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 3px;
+  background: transparent;
+  cursor: pointer;
+  position: relative;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.inline-checkbox input[type="checkbox"]:checked {
+  background: var(--accent, #4a9eff);
+  border-color: var(--accent, #4a9eff);
+}
+
+.inline-checkbox input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 1px;
+  width: 5px;
+  height: 8px;
+  border: 1.5px solid #fff;
+  border-top: none;
+  border-left: none;
+  transform: rotate(45deg);
+}
+
+.inline-checkbox input[type="checkbox"]:focus-visible {
+  outline: 1px solid rgba(255, 255, 255, 0.4);
+  outline-offset: 2px;
 }
 
 .profile-row select {
