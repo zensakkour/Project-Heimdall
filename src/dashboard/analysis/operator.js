@@ -193,8 +193,19 @@ function clearCandidateMarkers() {
   candidatePinsPopulated = false;
 }
 
-function updateHtmlMarkerSelection(_index) {
-  // Selection is driven by updateSelectedMarker via GeoJSON paint properties — no-op here.
+function updateHtmlMarkerSelection(index) {
+  candidateMarkers.forEach((marker) => {
+    const el = marker.getElement();
+    const idx = Number(el.dataset.index);
+    const isSelected = idx === index;
+    const color = CAND_COLORS[idx] || "#4a5568";
+    el.style.background = isSelected ? "#ffffff" : color;
+    el.style.color = isSelected ? color : "#ffffff";
+    el.style.borderColor = isSelected ? color : "rgba(255,255,255,0.85)";
+    el.style.boxShadow = isSelected
+      ? `0 0 0 3px ${color}55, 0 2px 8px rgba(0,0,0,0.55)`
+      : "0 2px 8px rgba(0,0,0,0.55)";
+  });
 }
 
 function updatePinScale() {
@@ -214,23 +225,55 @@ function operatorMapCoord(item) {
   return numericCandidateCoord(item);
 }
 
+const CAND_COLORS = ["#10b981", "#6366f1", "#f59e0b", "#ef4444", "#8b5cf6"];
+
 function renderCandidatePins(candidates) {
+  clearCandidateMarkers();
   if (!liveMap) return;
-  const features = candidates.slice(0, topLimit).flatMap((item, idx) => {
+
+  candidates.slice(0, topLimit).forEach((item, idx) => {
     const coord = numericCandidateCoord(item);
-    if (!coord) return [];
-    return [{
-      type: "Feature",
-      geometry: { type: "Point", coordinates: [coord.lon, coord.lat] },
-      properties: { index: idx, rank: idx + 1 }
-    }];
+    if (!coord) return;
+
+    const color = CAND_COLORS[idx] || "#4a5568";
+    const size = idx === 0 ? 28 : 24;
+
+    const el = document.createElement("div");
+    el.className = "candidate-pin-marker";
+    el.dataset.index = String(idx);
+    Object.assign(el.style, {
+      width: `${size}px`,
+      height: `${size}px`,
+      background: color,
+      border: "2.5px solid rgba(255,255,255,0.85)",
+      borderRadius: "50%",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontSize: idx === 0 ? "13px" : "11px",
+      fontWeight: "700",
+      color: "#ffffff",
+      cursor: "pointer",
+      boxShadow: "0 2px 8px rgba(0,0,0,0.55)",
+      userSelect: "none",
+    });
+    el.textContent = String(idx + 1);
+    el.title = `Candidate ${idx + 1}`;
+
+    el.addEventListener("click", (e) => {
+      e.stopPropagation();
+      selectCandidate(idx);
+    });
+
+    const marker = new maplibregl.Marker({ element: el, anchor: "center" })
+      .setLngLat([coord.lon, coord.lat])
+      .addTo(liveMap);
+    candidateMarkers.push(marker);
   });
-  liveMap.getSource("candidates")?.setData({ type: "FeatureCollection", features });
-  candidatePinsPopulated = features.length > 0;
 }
 
 function refreshCandidateMarkers() {
-  // No-op — GeoJSON layers update automatically.
+  // Markers are permanent — nothing to refresh.
 }
 
 function markerCandidateIndices(el) {
