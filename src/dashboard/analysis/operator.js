@@ -1962,7 +1962,8 @@ function doLoadSession(sid) {
             // Restore source image into the left-panel preview area.
             // Use the binary image endpoint for reliability instead of base64 data URL.
             const source = data.source || {};
-            const imgEndpoint = `/api/operator/sessions/${loadedSessionId}/image`;
+            // Add cache buster to prevent stale image loads from session storage
+            const imgEndpoint = `/api/operator/sessions/${loadedSessionId}/image?t=${Date.now()}`;
             const imgUrl = source.image_data_url
                 || (source.has_session_image || source.image_file ? imgEndpoint : null);
             const thumb = byId("source-thumb");
@@ -1981,14 +1982,37 @@ function doLoadSession(sid) {
             }
 
             if (imgUrl) {
+                console.log("LOG: Constructing image load for URL:", imgUrl);
                 if (geolocateBtn) geolocateBtn.disabled = false;
-                if (lightboxImg) {
-                    selectedLightboxDetectionIndex = 0;
-                    lightboxImg.onload = () => renderLightboxIntel();
-                    lightboxImg.src = imgUrl;
-                    if (lightboxImg.complete && lightboxImg.naturalWidth > 0) renderLightboxIntel();
-                }
-                if (thumb) thumb.src = imgUrl;
+                
+                // Fetch image as blob to get better error reporting
+                fetch(imgUrl)
+                    .then(r => {
+                        if (!r.ok) throw new Error(`Image fetch failed (HTTP ${r.status})`);
+                        return r.blob();
+                    })
+                    .then(blob => {
+                        const blobUrl = URL.createObjectURL(blob);
+                        if (lightboxImg) {
+                            selectedLightboxDetectionIndex = 0;
+                            lightboxImg.removeAttribute("width");
+                            lightboxImg.removeAttribute("height");
+                            lightboxImg.onload = () => {
+                                console.log("LOG: Lightbox image loaded via blob successfully");
+                                renderLightboxIntel();
+                                // Clean up blob URL after load
+                                // URL.revokeObjectURL(blobUrl); 
+                            };
+                            lightboxImg.src = blobUrl;
+                        }
+                        if (thumb) {
+                            thumb.src = blobUrl;
+                        }
+                    })
+                    .catch(err => {
+                        console.error("LOG: Image blob load failed:", err);
+                        showAnalysisAlert(`Failed to load source image from session storage.\nReason: ${err.message}\nURL: ${imgUrl}`);
+                    });
             }
 
             renderSummary(data);
