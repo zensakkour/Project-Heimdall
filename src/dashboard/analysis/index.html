@@ -11,7 +11,7 @@
       crossorigin=""
     />
     <link rel="stylesheet" href="../theme.css?v=7" />
-    <link rel="stylesheet" href="operator.css?v=44" />
+    <link rel="stylesheet" href="operator.css?v=45" />
 
 
   </head>
@@ -48,14 +48,8 @@
         <div class="control-sep"></div>
         <button id="map-street-walk" class="btn-text" title="Street Walk Mode">
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-            <!-- Head -->
-            <circle cx="13" cy="4" r="1.8"/>
-            <!-- Body / forward lean -->
-            <path d="M13 5.8 L10.5 12 L8 20"/>
-            <!-- Back leg -->
-            <path d="M10.5 12 L14 18"/>
-            <!-- Arms -->
-            <path d="M8.5 9.5 L15 8.5"/>
+            <path d="M3 12 Q12 2 21 12 Q12 22 3 12Z"/>
+            <circle cx="12" cy="12" r="3"/>
           </svg>
         </button>
       </div>
@@ -73,7 +67,6 @@
              <option value="">— Load Session —</option>
           </select>
           <button id="btn-load-session" class="primary-btn header-btn">Load</button>
-          <button id="btn-export-session" class="primary-btn header-btn">Export</button>
         </div>
       </header>
 
@@ -407,7 +400,7 @@
     </div>
 
     <script src="https://unpkg.com/maplibre-gl@5.0.0/dist/maplibre-gl.js" crossorigin=""></script>
-    <script type="module" src="operator.js?v=44"></script>
+    <script type="module" src="operator.js?v=45"></script>
 
         <button id="btn-confirm-cand" style="display:none;"></button>
         <button id="btn-reject-cand" style="display:none;"></button>
