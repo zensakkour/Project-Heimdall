@@ -2256,7 +2256,7 @@ def operator_list_sessions() -> JSONResponse:
     sessions_dir = APP_ROOT / "operator_sessions"
     sessions = []
     if sessions_dir.exists():
-        # New: folder-per-session
+        # Per-session folders (UUID-named)
         for session_dir in sessions_dir.iterdir():
             if not session_dir.is_dir():
                 continue
@@ -2280,12 +2280,22 @@ def operator_list_sessions() -> JSONResponse:
     sessions.sort(key=lambda x: x.get("updated_at") or "", reverse=True)
     return JSONResponse({"sessions": sessions})
 
+@app.get("/api/operator/sessions/{session_id}/image")
+def operator_get_session_image(session_id: str):
+    sessions_dir = APP_ROOT / "operator_sessions"
+    for folder_path in sessions_dir.glob(f"session_*{session_id}"):
+        if folder_path.is_dir():
+            img_file = folder_path / "image.jpg"
+            if img_file.exists():
+                return FileResponse(str(img_file), media_type="image/jpeg")
+    return JSONResponse({"error": "Image not found"}, status_code=404)
+
 @app.get("/api/operator/sessions/{session_id}")
 def operator_get_session_by_id(session_id: str) -> JSONResponse:
     global _OPERATOR_SESSION
     sessions_dir = APP_ROOT / "operator_sessions"
 
-    # Per-session folder
+    # Per-session folder (UUID-named)
     json_path = sessions_dir / session_id / "session.json"
     if json_path.exists():
         try:
@@ -2332,13 +2342,28 @@ async def operator_save_session(request: Request) -> JSONResponse:
         custom_name = data.get("name", "")
         save_as_new = data.get("save_as_new", False)
 
+        old_session_id = _OPERATOR_SESSION.get("session_id")
+
         if save_as_new:
             _OPERATOR_SESSION["session_id"] = uuid.uuid4().hex
-            # Reset timeline and notes ID to differentiate if needed, though copying is fine
             if not custom_name and "custom_name" in _OPERATOR_SESSION:
                 del _OPERATOR_SESSION["custom_name"]
 
         _save_operator_session(custom_name)
+
+        # For save-as-new: copy the source image from the old session folder to the new one
+        # (image_data_url is absent when loaded from disk; the file must be copied explicitly)
+        if save_as_new and old_session_id:
+            sessions_dir = APP_ROOT / "operator_sessions"
+            old_dir = sessions_dir / old_session_id
+            new_dir = sessions_dir / _OPERATOR_SESSION["session_id"]
+            old_source = (_OPERATOR_SESSION.get("source") or {}).get("image_file")
+            if old_source:
+                src_path = old_dir / old_source
+                dst_path = new_dir / old_source
+                if src_path.exists() and not dst_path.exists():
+                    import shutil
+                    shutil.copy2(src_path, dst_path)
         return JSONResponse({"status": "session_saved", "session_id": _OPERATOR_SESSION["session_id"]})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
@@ -2508,6 +2533,11 @@ async def operator_analyze(
 ) -> JSONResponse:
     _reset_operator_session()
     _OPERATOR_SESSION["status"] = "running"
+
+    image_bytes = await image.read()
+    import base64
+    _OPERATOR_SESSION["source_image_data"] = base64.b64encode(image_bytes).decode("utf-8")
+    await image.seek(0)
 
     _add_timeline_event("Source uploaded", "info")
 
