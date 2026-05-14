@@ -1293,3 +1293,316 @@ html, body {
     border-color: #10b981;
     box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
 }
+
+/* ── Street View Interactive Viewer ─────────────────────────────── */
+
+/*
+ * Each element uses position:fixed independently so NOTHING in the parent
+ * chain can affect them. The .sv-viewer-content is a transparent wrapper.
+ */
+.sv-modal {
+  align-items: stretch;
+  justify-content: stretch;
+}
+
+.sv-modal .lightbox-backdrop {
+  z-index: 0;
+}
+
+.sv-viewer-content {
+  position: fixed;
+  inset: 3vh 2vw;
+  z-index: 1001;
+  pointer-events: auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+  min-height: 0;
+  background: #050505;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 32px 100px rgba(0,0,0,0.85);
+}
+
+/* LEFT half — image, fixed to left side of viewport */
+.sv-image-wrap {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  background: #000;
+  border-right: 1px solid rgba(255,255,255,0.12);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#sv-img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  opacity: 1;
+  user-select: none;
+  -webkit-user-drag: none;
+  transform-origin: center center;
+  transition: transform 0.12s ease;
+}
+
+.sv-overlay-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.sv-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255,255,255,0.75);
+  font-size: 14px;
+  background: rgba(0,0,0,0.7);
+  z-index: 5;
+}
+
+.sv-error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255,255,255,0.5);
+  font-size: 14px;
+  line-height: 1.5;
+  text-align: center;
+  padding: 28px;
+  background: rgba(0,0,0,0.78);
+  z-index: 5;
+}
+
+/* RIGHT half — controls, fixed to right side of viewport */
+.sv-ctrl-panel {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  background: #0d1520;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 24px 16px;
+  gap: 16px;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.sv-ctrl-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+
+.sv-ctrl-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.04em;
+}
+
+.sv-close-btn {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.14);
+  color: rgba(255,255,255,0.6);
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s, color 0.12s;
+  flex-shrink: 0;
+}
+.sv-close-btn:hover { background: rgba(220,50,50,0.4); color: #fff; border-color: rgba(220,70,70,0.5); }
+
+.sv-meta-text {
+  font-size: 11px;
+  color: rgba(255,255,255,0.38);
+  line-height: 1.6;
+  flex-shrink: 0;
+}
+
+.sv-heading-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(16,185,129,0.08);
+  border: 1px solid rgba(16,185,129,0.22);
+  border-radius: 10px;
+  padding: 10px 16px;
+  flex-shrink: 0;
+}
+
+.sv-ctrl-lbl {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.3);
+}
+
+.sv-heading-val {
+  font-size: 30px;
+  font-weight: 800;
+  color: #10b981;
+  font-variant-numeric: tabular-nums;
+}
+
+.sv-ctrl-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.sv-nav-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px;
+}
+
+.sv-grid-dot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255,255,255,0.12);
+  font-size: 14px;
+}
+
+.sv-ctrl-btn {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  color: #fff;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 44px;
+  font-size: 18px;
+  font-weight: 600;
+  transition: background 0.12s, border-color 0.12s;
+  user-select: none;
+}
+
+.sv-ctrl-btn:hover:not(:disabled):not(.hidden) {
+  background: rgba(16,185,129,0.25);
+  border-color: rgba(16,185,129,0.6);
+}
+
+.sv-ctrl-btn:active:not(:disabled) { opacity: 0.65; }
+
+.sv-ctrl-btn:disabled {
+  opacity: 0.18;
+  cursor: default;
+}
+
+.sv-dir-btn.hidden {
+  opacity: 0.15;
+  pointer-events: none;
+}
+
+.sv-seq-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sv-seq-ind {
+  flex: 1;
+  text-align: center;
+  font-size: 13px;
+  color: rgba(255,255,255,0.5);
+  font-variant-numeric: tabular-nums;
+}
+
+.sv-zoom-row { display: flex; gap: 6px; }
+.sv-zoom-row .sv-ctrl-btn { flex: 1; }
+
+.sv-zoom-lbl {
+  color: rgba(255,255,255,0.4);
+  font-size: 11px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.sv-cand-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+}
+
+.sv-cand-title {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: rgba(255,255,255,0.28);
+  font-weight: 700;
+  margin-bottom: 2px;
+  flex-shrink: 0;
+}
+
+.sv-cand-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.07);
+  background: rgba(255,255,255,0.025);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.sv-cand-item.in-view {
+  border-color: rgba(16,185,129,0.4);
+  background: rgba(16,185,129,0.08);
+}
+
+.sv-cand-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.sv-cand-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sv-cand-rank { font-weight: 700; color: #fff; }
+.sv-cand-bearing { color: rgba(255,255,255,0.38); font-family: monospace; font-size: 10px; }
+
+@media (max-width: 900px) {
+  .sv-viewer-content {
+    inset: 2vh 2vw;
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  .sv-image-wrap {
+    border-right: none;
+    border-bottom: 1px solid rgba(255,255,255,0.12);
+  }
+
+  .sv-ctrl-panel {
+    max-height: 42vh;
+  }
+}
