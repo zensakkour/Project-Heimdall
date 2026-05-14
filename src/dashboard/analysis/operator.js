@@ -6,6 +6,16 @@ let isStreetWalkMode = false;
 let droppedPinLocation = null;
 let currentManualPinMarker = null;
 
+// Street View interactive viewer state
+let svState = {
+    imageId: null, lat: null, lon: null, heading: null,
+    sequence: null, seqPos: null, seqTotal: null,
+    candidates: [], minimap: null, minimapReady: null, minimapMarkers: [],
+};
+const SV_CAND_COLORS = ["#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#a855f7"];
+
+let loadedSessionId = null;
+
 let noteMarkers = [];
 let activeProfile = "paris";
 let liveMap = null;
@@ -764,17 +774,74 @@ function updateSelectedMarker(index) {
   }
 }
 
+function loadNoteForTarget(targetType, rankOrLat, lon) {
+    const noteInput = byId("operator-note-input");
+    if (!noteInput) return;
+
+    noteInput.value = ""; // Clear by default
+
+    if (lastResult && lastResult.notes) {
+        const note = lastResult.notes.find(n => {
+            if (targetType === "candidate" && n.target_type === "candidate") {
+                return n.rank === rankOrLat;
+            } else if (targetType === "manual_pin" && n.target_type === "manual_pin") {
+                return Math.abs(n.lat - rankOrLat) < 0.0001 && Math.abs(n.lon - lon) < 0.0001;
+            } else if (targetType === "note_id") {
+                return n.note_id === rankOrLat;
+            }
+            return false;
+        });
+
+        if (note) {
+            noteInput.value = note.text;
+            return;
+        }
+    }
+
+    fetch("/api/operator/session").then(r => r.json()).then(data => {
+        if (!data.notes) return;
+
+        const note = data.notes.find(n => {
+            if (targetType === "candidate" && n.target_type === "candidate") {
+                return n.rank === rankOrLat;
+            } else if (targetType === "manual_pin" && n.target_type === "manual_pin") {
+                // approximate matching for lat/lon floats
+                return Math.abs(n.lat - rankOrLat) < 0.0001 && Math.abs(n.lon - lon) < 0.0001;
+            } else if (targetType === "note_id") {
+                return n.note_id === rankOrLat;
+            }
+            return false;
+        });
+
+        if (note) {
+            noteInput.value = note.text;
+        }
+    }).catch(err => console.error("Failed to fetch session for notes:", err));
+}
+
 function selectCandidate(index) {
+  droppedPinLocation = null;
   const cards = document.querySelectorAll(".candidate-card");
   if (!cards.length) return;
   
   if (index < 0) index = 0;
   if (index >= cards.length) index = cards.length - 1;
   
-  selectedIndex = index;
   const card = cards[index];
-  
+  const isAlreadySelected = card.classList.contains("active");
+
   cards.forEach(c => c.classList.remove("active"));
+
+  if (isAlreadySelected) {
+      selectedIndex = -1;
+      updateSelectedMarker(-1);
+      updateHtmlMarkerSelection(-1);
+      const noteInput = byId("operator-note-input");
+      if (noteInput) noteInput.value = "";
+      return;
+  }
+
+  selectedIndex = index;
   card.classList.add("active");
   updateSelectedMarker(index);
   updateHtmlMarkerSelection(index);
@@ -793,6 +860,8 @@ function selectCandidate(index) {
       duration: 1200 
     });
   }
+
+  loadNoteForTarget("candidate", index + 1);
 }
 
 function recordCandidateAction(action, index = selectedIndex) {
@@ -957,44 +1026,366 @@ function renderCandidateList(result) {
   });
 
   selectedIndex = -1;
+  const noteInput = byId("operator-note-input");
+  if (noteInput) noteInput.value = "";
 }
+
+// ── Street View Math Helpers ─────────────────────────────────────
+
+function svBearingTo(fromLat, fromLon, toLat, toLon) {
+    const dLon = (toLon - fromLon) * Math.PI / 180;
+    const lat1 = fromLat * Math.PI / 180;
+    const lat2 = toLat * Math.PI / 180;
+    const y = Math.sin(dLon) * Math.cos(lat2);
+    const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+    return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+
+function svHaversineKm(lat1, lon1, lat2, lon2) {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// ── Street View State Helpers ─────────────────────────────────────
+
+function svSetLoading(active) {
+    const loading = byId("sv-loading");
+    const img = byId("sv-img");
+    const err = byId("sv-error");
+    if (loading) loading.style.display = active ? "flex" : "none";
+    if (img) img.style.visibility = active ? "hidden" : "visible";
+    if (err) err.style.display = "none";
+}
+
+function svSetError(msg) {
+    const loading = byId("sv-loading");
+    const img = byId("sv-img");
+    const err = byId("sv-error");
+    if (loading) loading.style.display = "none";
+    if (img) img.style.visibility = "hidden";
+    if (err) { err.style.display = "flex"; err.textContent = msg; }
+    // Clear canvas
+    const canvas = byId("sv-overlay-canvas");
+    if (canvas) { const ctx = canvas.getContext("2d"); ctx?.clearRect(0, 0, canvas.width, canvas.height); }
+}
+
+function svClose() {
+    byId("street-view-modal")?.classList.remove("active");
+    svApplyZoom(1);
+    if (svState.minimapMarkers) {
+        svState.minimapMarkers.forEach(m => m.remove());
+        svState.minimapMarkers = [];
+    }
+}
+
+// ── Zoom ─────────────────────────────────────────────────────────
+let svZoom = 1;
+const SV_ZOOM_MIN = 0.5, SV_ZOOM_MAX = 5, SV_ZOOM_STEP = 0.25;
+
+function svApplyZoom(z) {
+    svZoom = Math.max(SV_ZOOM_MIN, Math.min(SV_ZOOM_MAX, z));
+    const img = byId("sv-img");
+    if (img) img.style.transform = `scale(${svZoom})`;
+    const lbl = byId("sv-zoom-label");
+    if (lbl) lbl.textContent = `${Math.round(svZoom * 100)}%`;
+}
+
+// ── Street View Core ──────────────────────────────────────────────
 
 function openStreetView(lat, lon) {
     const modal = byId("street-view-modal");
-    const img = byId("street-view-img");
-    const err = byId("street-view-error");
-    const info = byId("street-view-info");
+    if (!modal) return;
 
-    if (!modal || !img || !err || !info) return;
+    // Collect top-5 candidates for overlay rendering
+    const rawCands = sortedCandidates(lastResult).slice(0, 5);
+    svState.candidates = rawCands.map((c, i) => ({
+        rank: i + 1,
+        lat: parseFloat(candidateMapLat(c)),
+        lon: parseFloat(candidateMapLon(c)),
+        score: candidateWeight(c),
+        color: SV_CAND_COLORS[i] || "#888",
+    }));
 
-    img.style.display = "none";
-    err.style.display = "none";
-    info.textContent = "Loading...";
     modal.classList.add("active");
+    svNavigateTo({ lat, lon });
+}
 
-    fetch(`/api/operator/street_view?lat=${lat}&lon=${lon}`)
-        .then(r => {
-            if (!r.ok) throw new Error("No local street imagery found near this point.");
-            return r.json();
-        })
-        .then(data => {
-            if (data.url) {
-                img.src = data.url;
-                img.style.display = "block";
-                const dateStr = data.captured_at ? ` | Date: ${data.captured_at}` : "";
-                const headStr = data.heading != null ? ` | Heading: ${Math.round(data.heading)}°` : "";
-                const distStr = data.distance_km != null ? ` | Dist: ${(data.distance_km * 1000).toFixed(0)}m` : "";
-                info.textContent = `Provider: ${data.provider}${dateStr}${headStr}${distStr}`;
-            } else {
-                throw new Error("No URL returned");
-            }
-        })
-        .catch(error => {
-            info.textContent = "";
-            err.style.display = "block";
-            err.textContent = "No imagery available here.";
-            console.error("Street view error:", error);
+async function svNavigateTo({ lat, lon, imageId, preferHeading } = {}) {
+    svSetLoading(true);
+
+    const params = new URLSearchParams();
+    if (imageId) params.set("image_id", imageId);
+    if (lat != null) params.set("lat", lat);
+    if (lon != null) params.set("lon", lon);
+    if (preferHeading != null) params.set("prefer_heading", preferHeading);
+
+    try {
+        const resp = await fetch(`/api/operator/street_view/neighbors?${params}`);
+        if (!resp.ok) {
+            const errorPayload = await resp.json().catch(() => ({}));
+            throw new Error(errorPayload.message || errorPayload.error || "No imagery found");
+        }
+        const data = await resp.json();
+        svApplyState(data);
+    } catch (err) {
+        svSetError(err?.message || "No imagery available here.");
+        console.error("Street view navigate error:", err);
+    }
+}
+
+function svApplyState(data) {
+    const cur = data.current;
+    if (!cur) { svSetError("No imagery returned."); return; }
+    const imageUrl = cur.url || cur.image_url || cur.image_path;
+    if (!imageUrl) { svSetError("Street imagery was found, but no displayable image URL was returned."); return; }
+
+    svState.imageId = cur.image_id;
+    svState.lat = cur.lat;
+    svState.lon = cur.lon;
+    svState.heading = cur.heading;
+    svState.sequence = cur.sequence;
+    svState.seqPos = data.sequence_position;
+    svState.seqTotal = data.sequence_total;
+
+    // Load image
+    const img = byId("sv-img");
+    if (img) {
+        img.removeAttribute("src");
+        img.style.visibility = "hidden";
+        img.onload = () => {
+            svSetLoading(false);
+            svDrawCandidateOverlays();
+        };
+        img.onerror = () => svSetError("Image failed to load.");
+        img.src = imageUrl;
+        if (img.complete && img.naturalWidth > 0) {
+            svSetLoading(false);
+            requestAnimationFrame(svDrawCandidateOverlays);
+        }
+    }
+
+    // Meta text
+    const meta = byId("sv-meta");
+    if (meta) {
+        const ts = cur.captured_at ? parseInt(cur.captured_at) : null;
+        const dateStr = ts && !isNaN(ts) ? new Date(ts).toLocaleDateString() : (cur.captured_at || "");
+        const distStr = cur.distance_km != null ? `${(cur.distance_km * 1000).toFixed(0)}m from target` : "";
+        meta.textContent = [cur.provider, dateStr, distStr].filter(Boolean).join(" · ");
+    }
+
+    // Sequence indicator
+    const seqInd = byId("sv-seq-indicator");
+    if (seqInd) seqInd.textContent = `${data.sequence_position} / ${data.sequence_total}`;
+
+    // Heading label
+    const headLabel = byId("sv-heading-label");
+    if (headLabel) headLabel.textContent = cur.heading != null ? `${Math.round(cur.heading)}°` : "--°";
+
+    // Sequence buttons
+    const prevBtn = byId("sv-btn-prev");
+    const nextBtn = byId("sv-btn-next");
+    if (prevBtn) { prevBtn.disabled = !data.prev; prevBtn.dataset.navId = data.prev?.image_id || ""; }
+    if (nextBtn) { nextBtn.disabled = !data.next; nextBtn.dataset.navId = data.next?.image_id || ""; }
+
+    // Directional nav buttons in the right panel
+    const fwdArrow = byId("sv-arrow-fwd");
+    const backArrow = byId("sv-arrow-back");
+    if (fwdArrow) {
+        fwdArrow.classList.toggle("hidden", !data.next);
+        fwdArrow.dataset.navId = data.next?.image_id || "";
+    }
+    if (backArrow) {
+        backArrow.classList.toggle("hidden", !data.prev);
+        backArrow.dataset.navId = data.prev?.image_id || "";
+    }
+
+    svRenderCandidateList();
+    svUpdateMinimap();
+}
+
+function svDrawCandidateOverlays() {
+    const canvas = byId("sv-overlay-canvas");
+    const img = byId("sv-img");
+    if (!canvas || !img || svState.heading == null) return;
+
+    // Position canvas exactly over the rendered image (which is flex-centered in sv-image-wrap)
+    const iL = img.offsetLeft;
+    const iT = img.offsetTop;
+    const iW = img.offsetWidth;
+    const iH = img.offsetHeight;
+    if (!iW || !iH) return;
+
+    canvas.style.left = iL + "px";
+    canvas.style.top = iT + "px";
+    canvas.style.width = iW + "px";
+    canvas.style.height = iH + "px";
+    canvas.style.inset = "auto"; // override CSS inset:0
+    canvas.width = iW;
+    canvas.height = iH;
+
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, iW, iH);
+
+    if (svState.candidates.length === 0) return;
+
+    const FOV = 90;
+    const camHeading = svState.heading;
+
+    svState.candidates.forEach(cand => {
+        if (cand.lat == null || cand.lon == null || isNaN(cand.lat)) return;
+
+        const bearing = svBearingTo(svState.lat, svState.lon, cand.lat, cand.lon);
+        let relAngle = (bearing - camHeading + 360) % 360;
+        if (relAngle > 180) relAngle -= 360; // -180 to +180
+
+        if (Math.abs(relAngle) > FOV / 2) return;
+
+        const x = (0.5 + relAngle / FOV) * iW;
+        // Pin drops from upper-middle of the image
+        const pinY = iH * 0.42;
+        const distKm = svHaversineKm(svState.lat, svState.lon, cand.lat, cand.lon);
+
+        // Dashed ground line from pin bottom to bottom of image
+        ctx.save();
+        ctx.setLineDash([3, 4]);
+        ctx.strokeStyle = cand.color + "66";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(x, pinY + 20);
+        ctx.lineTo(x, iH - 6);
+        ctx.stroke();
+        ctx.restore();
+
+        // Outer glow
+        ctx.beginPath();
+        ctx.arc(x, pinY, 24, 0, Math.PI * 2);
+        ctx.fillStyle = cand.color + "1a";
+        ctx.fill();
+
+        // Pin circle
+        ctx.beginPath();
+        ctx.arc(x, pinY, 17, 0, Math.PI * 2);
+        ctx.fillStyle = cand.color + "cc";
+        ctx.fill();
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Rank number
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "bold 12px 'Courier New', monospace";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(`#${cand.rank}`, x, pinY);
+
+        // Distance badge below pin
+        const label = `${(distKm * 1000).toFixed(0)}m`;
+        ctx.font = "9px monospace";
+        const bW = ctx.measureText(label).width + 8;
+        const bX = x - bW / 2;
+        const bY = pinY + 22;
+        ctx.fillStyle = "rgba(0,0,0,0.65)";
+        ctx.beginPath();
+        if (ctx.roundRect) {
+            ctx.roundRect(bX, bY, bW, 14, 3);
+        } else {
+            ctx.rect(bX, bY, bW, 14);
+        }
+        ctx.fill();
+        ctx.fillStyle = cand.color;
+        ctx.textBaseline = "middle";
+        ctx.fillText(label, x, bY + 7);
+    });
+}
+
+function svRenderCandidateList() {
+    const list = byId("sv-cand-list");
+    if (!list) return;
+
+    list.innerHTML = '<div class="sv-cand-title">Geo Candidates</div>';
+
+    if (!svState.lat || svState.heading == null) return;
+
+    const FOV = 90;
+    svState.candidates.forEach(cand => {
+        if (cand.lat == null || isNaN(cand.lat)) return;
+
+        const bearing = svBearingTo(svState.lat, svState.lon, cand.lat, cand.lon);
+        let relAngle = (bearing - svState.heading + 360) % 360;
+        if (relAngle > 180) relAngle -= 360;
+        const inView = Math.abs(relAngle) <= FOV / 2;
+        const distKm = svHaversineKm(svState.lat, svState.lon, cand.lat, cand.lon);
+        const bearingLabel = inView
+            ? "IN VIEW"
+            : relAngle > 0
+                ? `${Math.round(relAngle)}° right`
+                : `${Math.round(-relAngle)}° left`;
+
+        const item = document.createElement("div");
+        item.className = `sv-cand-item${inView ? " in-view" : ""}`;
+        item.innerHTML = `
+            <div class="sv-cand-dot" style="background:${cand.color}"></div>
+            <div class="sv-cand-info">
+                <div class="sv-cand-rank">#${cand.rank} &nbsp;${(cand.score * 100).toFixed(0)}%</div>
+                <div class="sv-cand-bearing">${bearingLabel} · ${(distKm * 1000).toFixed(0)}m</div>
+            </div>`;
+        list.appendChild(item);
+    });
+}
+
+function svInitMinimap() {
+    const container = byId("sv-minimap");
+    if (!container || svState.minimap) return;
+
+    try {
+        svState.minimap = new maplibregl.Map({
+            container: "sv-minimap",
+            style: mapStyleUrl,
+            center: parisCenter,
+            zoom: 15,
+            interactive: false,
+            attributionControl: false,
         });
+        svState.minimapReady = new Promise(resolve => svState.minimap.on("load", resolve));
+    } catch (e) {
+        // Mini-map is enhancement only — ignore failures
+    }
+}
+
+function svUpdateMinimap() {
+    if (!svState.minimap) svInitMinimap();
+    if (!svState.minimapReady || svState.lat == null) return;
+
+    svState.minimapReady.then(() => {
+        svState.minimap.setCenter([svState.lon, svState.lat]);
+        svState.minimap.setZoom(16);
+
+        // Clear old markers
+        (svState.minimapMarkers || []).forEach(m => m.remove());
+        svState.minimapMarkers = [];
+
+        // Camera position marker (white dot with heading arrow)
+        const camEl = document.createElement("div");
+        camEl.style.cssText = `width:14px;height:14px;border-radius:50%;background:#fff;border:2px solid #10b981;box-shadow:0 0 6px rgba(16,185,129,0.6);`;
+        const camMarker = new maplibregl.Marker({ element: camEl })
+            .setLngLat([svState.lon, svState.lat])
+            .addTo(svState.minimap);
+        svState.minimapMarkers.push(camMarker);
+
+        // Candidate markers on mini-map
+        svState.candidates.forEach(cand => {
+            if (cand.lat == null || isNaN(cand.lat)) return;
+            const el = document.createElement("div");
+            el.style.cssText = `width:10px;height:10px;border-radius:50%;background:${cand.color};border:1.5px solid rgba(255,255,255,0.5);`;
+            const marker = new maplibregl.Marker({ element: el })
+                .setLngLat([cand.lon, cand.lat])
+                .addTo(svState.minimap);
+            svState.minimapMarkers.push(marker);
+        });
+    }).catch(() => {});
 }
 
 function renderLiveMap(result, { resetView = false } = {}) {
@@ -1185,6 +1576,9 @@ function setupAnalysis() {
     const file = input.files?.[0];
     if (!file) return;
 
+    loadedSessionId = null;
+    localStorage.removeItem("heimdallSessionId");
+
     const profile = byId("profile-select").value || "paris";
     console.log("LOG: Starting pipeline...", { profile, filename: file.name });
 
@@ -1354,6 +1748,40 @@ function setupKeyboardNav() {
       if (selectedIndex >= 0) selectCandidate(selectedIndex);
     }
   });
+
+  // Street view keyboard navigation (WASD + arrows + ESC)
+  window.addEventListener("keydown", (e) => {
+    if (!byId("street-view-modal")?.classList.contains("active")) return;
+    if (e.key === "Escape") {
+      e.preventDefault();
+      svClose();
+    } else if (e.key === "ArrowUp" || e.key === "w" || e.key === "W") {
+      // Forward: next in sequence
+      e.preventDefault();
+      byId("sv-arrow-fwd")?.click();
+    } else if (e.key === "ArrowDown" || e.key === "s" || e.key === "S") {
+      // Backward: prev in sequence
+      e.preventDefault();
+      byId("sv-arrow-back")?.click();
+    } else if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") {
+      // Look left
+      e.preventDefault();
+      byId("sv-arrow-left-img")?.click();
+    } else if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") {
+      // Look right
+      e.preventDefault();
+      byId("sv-arrow-right-img")?.click();
+    } else if (e.key === "+" || e.key === "=") {
+      e.preventDefault();
+      svApplyZoom(svZoom + SV_ZOOM_STEP);
+    } else if (e.key === "-") {
+      e.preventDefault();
+      svApplyZoom(svZoom - SV_ZOOM_STEP);
+    } else if (e.key === "r" || e.key === "R") {
+      e.preventDefault();
+      svApplyZoom(1);
+    }
+  });
 }
 
 function setupToggles() {
@@ -1452,11 +1880,13 @@ function loadSessionList() {
                 data.sessions.forEach(session => {
                     const option = document.createElement("option");
                     option.value = session.session_id;
-                    const dateStr = session.updated_at ? new Date(session.updated_at).toLocaleString() : "Unknown";
                     const fileStr = session.source_filename ? ` - ${session.source_filename}` : "";
-                    option.textContent = `${dateStr}${fileStr} [${session.status}]`;
+                    option.textContent = `${session.display_name}${fileStr} [${session.status}]`;
                     select.appendChild(option);
                 });
+            }
+            if (loadedSessionId) {
+                select.value = loadedSessionId;
             }
         })
         .catch(err => console.error("Failed to load session list:", err));
@@ -1474,8 +1904,47 @@ function init() {
   setupPanelAccordions();
   setupToggles();
   setupOperatorActions();
+
+  const savedSessionId = localStorage.getItem("heimdallSessionId");
+  if (savedSessionId) {
+      loadedSessionId = savedSessionId;
+  }
+
   loadSessionList();
   
+  if (loadedSessionId) {
+      fetch(`/api/operator/sessions/${loadedSessionId}`)
+          .then(r => {
+              if (r.ok) return r.json();
+              loadedSessionId = null;
+              localStorage.removeItem("heimdallSessionId");
+              loadSessionList();
+              throw new Error("Session not found");
+          })
+          .then(data => {
+               if (!data.session_id) return;
+               // Full mock of lastResult structure needed by UI renderers
+               lastResult = {
+                   geo: data.fused_estimate,
+                   candidates: data.candidates,
+                   clues: data.clues,
+                   detections: data.detections
+               };
+               renderSummary(data);
+               renderCandidateList(lastResult);
+               renderLiveMap(lastResult);
+               renderTimeline(data);
+               renderClues(data);
+               renderNoteMarkers();
+               renderNotesList();
+               if (data.operator_notes) {
+                   const noteInput = byId("operator-note-input");
+                   if (noteInput) noteInput.value = data.operator_notes;
+               }
+          })
+          .catch(err => console.error("Failed to auto-load session:", err));
+  }
+
   const tabGeotags = document.getElementById("tab-geotags");
   const tabNotes = document.getElementById("tab-notes");
   const geotagsView = document.getElementById("geotags-view");
@@ -1489,6 +1958,19 @@ function init() {
           tabNotes.style.borderBottomColor = "transparent";
           geotagsView.style.display = "flex";
           notesView.style.display = "none";
+
+          // Clear Notes tab selection when switching back to Geotags
+          const notesList = document.getElementById("notes-list");
+          if (notesList) {
+              notesList.querySelectorAll(".result-card").forEach(c => c.classList.remove("active"));
+          }
+
+          if (selectedIndex === -1) {
+              const noteInput = byId("operator-note-input");
+              if (noteInput) noteInput.value = "";
+          } else {
+              loadNoteForTarget("candidate", selectedIndex + 1);
+          }
       });
       tabNotes.addEventListener("click", () => {
           tabNotes.style.color = "var(--accent)";
@@ -1497,6 +1979,15 @@ function init() {
           tabGeotags.style.borderBottomColor = "transparent";
           notesView.style.display = "flex";
           geotagsView.style.display = "none";
+
+          // Clear Geotags selection when switching to Notes
+          selectedIndex = -1;
+          const cards = document.querySelectorAll(".candidate-card");
+          cards.forEach(c => c.classList.remove("active"));
+
+          const noteInput = byId("operator-note-input");
+          if (noteInput) noteInput.value = "";
+
           renderNotesList();
           renderNoteMarkers();
       });
@@ -1657,12 +2148,77 @@ function renderLightboxIntel() {
 }
 
 function setupOperatorActions() {
+    // Street View navigation
     const closeStreetViewBtn = byId("close-street-view-modal");
-    if (closeStreetViewBtn) {
-        closeStreetViewBtn.addEventListener("click", () => {
-             byId("street-view-modal")?.classList.remove("active");
-        });
-    }
+    if (closeStreetViewBtn) closeStreetViewBtn.addEventListener("click", svClose);
+
+    const svBackdrop = byId("street-view-backdrop");
+    if (svBackdrop) svBackdrop.addEventListener("click", svClose);
+
+    const svPrevBtn = byId("sv-btn-prev");
+    if (svPrevBtn) svPrevBtn.addEventListener("click", () => {
+        const id = svPrevBtn.dataset.navId;
+        if (id) svNavigateTo({ imageId: id });
+    });
+
+    const svNextBtn = byId("sv-btn-next");
+    if (svNextBtn) svNextBtn.addEventListener("click", () => {
+        const id = svNextBtn.dataset.navId;
+        if (id) svNavigateTo({ imageId: id });
+    });
+
+    const svLeftBtn = byId("sv-btn-left");
+    if (svLeftBtn) svLeftBtn.addEventListener("click", () => {
+        const ph = ((svState.heading || 0) - 90 + 360) % 360;
+        svNavigateTo({ lat: svState.lat, lon: svState.lon, preferHeading: ph });
+    });
+
+    const svRightBtn = byId("sv-btn-right");
+    if (svRightBtn) svRightBtn.addEventListener("click", () => {
+        const ph = ((svState.heading || 0) + 90) % 360;
+        svNavigateTo({ lat: svState.lat, lon: svState.lon, preferHeading: ph });
+    });
+
+    // Right-panel directional buttons
+    const svFwdArrow = byId("sv-arrow-fwd");
+    if (svFwdArrow) svFwdArrow.addEventListener("click", () => {
+        const id = svFwdArrow.dataset.navId;
+        if (id) svNavigateTo({ imageId: id });
+    });
+
+    const svBackArrow = byId("sv-arrow-back");
+    if (svBackArrow) svBackArrow.addEventListener("click", () => {
+        const id = svBackArrow.dataset.navId;
+        if (id) svNavigateTo({ imageId: id });
+    });
+
+    const svLeftImg = byId("sv-arrow-left-img");
+    if (svLeftImg) svLeftImg.addEventListener("click", () => {
+        const ph = ((svState.heading || 0) - 90 + 360) % 360;
+        svNavigateTo({ lat: svState.lat, lon: svState.lon, preferHeading: ph });
+    });
+
+    const svRightImg = byId("sv-arrow-right-img");
+    if (svRightImg) svRightImg.addEventListener("click", () => {
+        const ph = ((svState.heading || 0) + 90) % 360;
+        svNavigateTo({ lat: svState.lat, lon: svState.lon, preferHeading: ph });
+    });
+
+    // Zoom buttons
+    byId("sv-zoom-in")?.addEventListener("click", () => svApplyZoom(svZoom + SV_ZOOM_STEP));
+    byId("sv-zoom-out")?.addEventListener("click", () => svApplyZoom(svZoom - SV_ZOOM_STEP));
+    byId("sv-zoom-reset")?.addEventListener("click", () => svApplyZoom(1));
+
+    // Mouse wheel zoom on the image area
+    byId("sv-image-wrap")?.addEventListener("wheel", (e) => {
+        if (!byId("street-view-modal")?.classList.contains("active")) return;
+        e.preventDefault();
+        svApplyZoom(svZoom + (e.deltaY < 0 ? SV_ZOOM_STEP : -SV_ZOOM_STEP));
+    }, { passive: false });
+
+    window.addEventListener("resize", () => {
+        if (byId("street-view-modal")?.classList.contains("active")) svDrawCandidateOverlays();
+    });
 
     const confirmBtn = byId("btn-confirm-cand");
     const rejectBtn = byId("btn-reject-cand");
@@ -1670,16 +2226,113 @@ function setupOperatorActions() {
     const saveNoteBtn = byId("btn-save-note");
     const exportBtn = byId("btn-export-session");
     const saveSessionBtn = byId("btn-save-session");
+    const newSessionBtn = byId("btn-new-session");
     const dropPinBtn = byId("btn-drop-pin");
+
+    const sessionSaveModal = byId("session-save-modal");
+    const btnUpdateSession = byId("btn-modal-update-session");
+    const btnSaveNewSession = byId("btn-modal-save-new-session");
+    const btnCancelSession = byId("btn-modal-cancel-session");
+
+    if (btnCancelSession && sessionSaveModal) {
+        btnCancelSession.addEventListener("click", () => {
+            sessionSaveModal.classList.remove("active");
+        });
+    }
+
+    if (btnUpdateSession && sessionSaveModal) {
+        btnUpdateSession.addEventListener("click", () => {
+            sessionSaveModal.classList.remove("active");
+            postForm("/api/operator/save", JSON.stringify({ save_as_new: false }))
+                .then(r => r.json())
+                .then(data => {
+                    if (data.session_id) {
+                        loadedSessionId = data.session_id;
+                        localStorage.setItem("heimdallSessionId", data.session_id);
+                    }
+                    loadSessionList();
+                    alert("Session updated successfully.");
+                });
+        });
+    }
+
+    if (btnSaveNewSession && sessionSaveModal) {
+        btnSaveNewSession.addEventListener("click", () => {
+            sessionSaveModal.classList.remove("active");
+            const sessionName = prompt("Enter a new custom name for this session (optional):");
+            if (sessionName !== null) {
+                postForm("/api/operator/save", JSON.stringify({ name: sessionName.trim(), save_as_new: true }))
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.session_id) {
+                            loadedSessionId = data.session_id;
+                            localStorage.setItem("heimdallSessionId", data.session_id);
+                        }
+                        loadSessionList();
+                        alert("Session saved as new.");
+                    });
+            }
+        });
+    }
+
+    if (newSessionBtn) {
+        newSessionBtn.addEventListener("click", () => {
+            fetch("/api/operator/reset", { method: "POST" })
+                .then(() => {
+                    loadedSessionId = null;
+                    localStorage.removeItem("heimdallSessionId");
+                    setMetric("diag-backend", "-");
+                    setMetric("diag-worker", "-");
+                    setMetric("diag-tier", "-");
+                    setMetric("diag-radius", "-");
+                    lastResult = null;
+                    selectedIndex = -1;
+                    droppedPinLocation = null;
+
+                    const progress = byId("progress");
+                    const errorContainer = byId("analysis-error");
+                    const previewBlock = byId("preview-block");
+                    const ingestBlock = byId("ingest-block");
+
+                    if (progress) progress.style.display = "none";
+                    if (errorContainer) errorContainer.style.display = "none";
+                    if (previewBlock) previewBlock.style.display = "none";
+                    if (ingestBlock) ingestBlock.style.display = "block";
+
+                    const geolocateBtn = byId("geolocate-image");
+                    if (geolocateBtn) geolocateBtn.disabled = true;
+
+                    renderCandidateList(null);
+                    renderLiveMap(null);
+                    renderTimeline(null);
+                    renderClues(null);
+                    renderNoteMarkers();
+                    renderNotesList();
+
+                    const noteInput = byId("operator-note-input");
+                    if (noteInput) noteInput.value = "";
+                });
+        });
+    }
 
     if (saveSessionBtn) {
         saveSessionBtn.addEventListener("click", () => {
-            const sessionName = prompt("Enter a custom name for this session (optional):");
-            if (sessionName !== null) {
-                postForm("/api/operator/save", JSON.stringify({ name: sessionName.trim() }))
-                    .then(() => {
-                        loadSessionList();
-                    });
+            if (loadedSessionId && sessionSaveModal) {
+                sessionSaveModal.classList.add("active");
+            } else {
+                const sessionName = prompt("Enter a custom name for this session (optional):");
+                if (sessionName !== null) {
+                    postForm("/api/operator/save", JSON.stringify({ name: sessionName.trim(), save_as_new: true }))
+                        .then(r => r.json())
+                        .then(data => {
+                            if (data.session_id) {
+                                loadedSessionId = data.session_id;
+                                localStorage.setItem("heimdallSessionId", data.session_id);
+                            }
+                            loadSessionList();
+                            alert("Session saved as new.");
+                        });
+                }
             }
         });
     }
@@ -1707,19 +2360,35 @@ function setupOperatorActions() {
              const oldWarn = document.getElementById("note-save-warn");
              if (oldWarn) oldWarn.remove();
 
-             if (selectedIndex === -1 && !droppedPinLocation) {
+             // Wait, what if we selected a note from the notes list?
+             // It's allowed to update the selected note or candidate. Let's rely on checking if there's any active selection.
+             // The prompt logic: "Select a candidate or drop/select a note pin to save this note."
+             const isNoteSelected = document.querySelector("#notes-list .result-card.active") !== null;
+
+             if (selectedIndex === -1 && !droppedPinLocation && !isNoteSelected) {
                  const warn = document.createElement("div");
                  warn.id = "note-save-warn";
                  warn.style.color = "#ef4444";
                  warn.style.fontSize = "11px";
                  warn.style.marginTop = "4px";
-                 warn.textContent = "Select a candidate or drop a note pin to save this note.";
+                 warn.textContent = "Select a candidate or drop/select a note pin to save this note.";
                  noteInput.parentElement.appendChild(warn);
                  return;
              }
 
              let targetData = {};
-             if (selectedIndex !== -1 && lastResult && lastResult.candidates) {
+             // We can check which tab is active to determine precedence
+             const isNotesTabActive = document.getElementById("notes-view")?.style.display === "flex";
+
+             if (isNotesTabActive && isNoteSelected) {
+                 const activeCard = document.querySelector("#notes-list .result-card.active");
+                 if (activeCard && activeCard.dataset.noteId) {
+                     targetData = {
+                         target_type: "note_id",
+                         note_id: activeCard.dataset.noteId
+                     };
+                 }
+             } else if (selectedIndex !== -1 && lastResult && lastResult.candidates) {
                  const cand = lastResult.candidates[selectedIndex];
                  targetData = {
                      target_type: "candidate",
@@ -1790,6 +2459,9 @@ function setupOperatorActions() {
             fetch(`/api/operator/sessions/${sid}`)
                 .then(r => r.json())
                 .then(data => {
+                     loadedSessionId = data.session_id || sid;
+                     localStorage.setItem("heimdallSessionId", loadedSessionId);
+
                      // Full mock of lastResult structure needed by UI renderers
                      lastResult = {
                          geo: data.fused_estimate,
@@ -1798,7 +2470,12 @@ function setupOperatorActions() {
                          detections: data.detections
                      };
                      renderSummary(data);
+                     renderCandidateList(lastResult);
+                     renderLiveMap(lastResult);
+                     renderTimeline(data);
+                     renderClues(data);
                      renderNoteMarkers();
+                     renderNotesList();
                      if (data.operator_notes) {
                          const noteInput = byId("operator-note-input");
                          if (noteInput) noteInput.value = data.operator_notes;
@@ -1840,6 +2517,9 @@ function setupOperatorActions() {
                   selectedIndex = -1;
                   renderCandidates();
 
+                  const noteInput = byId("operator-note-input");
+                  if (noteInput) noteInput.value = "";
+
                   if (currentManualPinMarker) {
                       currentManualPinMarker.remove();
                   }
@@ -1852,6 +2532,11 @@ function setupOperatorActions() {
                   el.style.border = "2px solid white";
                   el.style.borderRadius = "50%";
                   el.style.boxShadow = "0 0 8px rgba(255, 0, 0, 0.8)";
+
+                  el.addEventListener("click", (evt) => {
+                      evt.stopPropagation();
+                      loadNoteForTarget("manual_pin", lat, lon);
+                  });
 
                   currentManualPinMarker = new maplibregl.Marker({ element: el })
                       .setLngLat([lon, lat])
@@ -1896,6 +2581,14 @@ function renderNoteMarkers() {
                 el.style.borderRadius = "50%";
                 el.style.boxShadow = "0 0 8px rgba(255, 184, 77, 0.8)";
                 el.title = note.text;
+
+                el.addEventListener("click", (evt) => {
+                    evt.stopPropagation();
+                    const noteInput = byId("operator-note-input");
+                    if (noteInput) {
+                        noteInput.value = note.text;
+                    }
+                });
 
                 const marker = new maplibregl.Marker({ element: el })
                     .setLngLat([lon, lat])
@@ -1945,10 +2638,17 @@ function renderNotesList() {
                 <div style="font-size: 12px; color: #fff; line-height: 1.4; margin-bottom: 6px;">${note.text}</div>
                 <div style="font-size: 9px; color: var(--text-secondary); text-align: right;">${timeStr}</div>
             `;
+            if (note.note_id) card.dataset.noteId = note.note_id;
 
             card.addEventListener("click", () => {
+                list.querySelectorAll(".result-card").forEach(c => c.classList.remove("active"));
+                card.classList.add("active");
                 if (lat && lon && liveMap) {
                     flyToCentered({ center: [lon, lat], zoom: 16 });
+                }
+                const noteInput = byId("operator-note-input");
+                if (noteInput) {
+                    noteInput.value = note.text;
                 }
             });
 

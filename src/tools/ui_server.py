@@ -76,15 +76,22 @@ def _save_operator_session(custom_name: str = None):
     _OPERATOR_SESSION["updated_at"] = _utc_now_iso()
     if custom_name:
         _OPERATOR_SESSION["custom_name"] = custom_name
+    elif "custom_name" in _OPERATOR_SESSION:
+        custom_name = _OPERATOR_SESSION["custom_name"]
 
     from datetime import datetime, timezone
-    dt_str = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    display_name = f"{dt_str}_{custom_name}" if custom_name else f"auto_{dt_str}"
+    dt_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H-%M")
+    display_name = f"{dt_str} - {custom_name}" if custom_name else f"auto_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
 
     clean_name = "".join(c for c in display_name if c.isalnum() or c in (' ', '-', '_')).strip().replace(' ', '_')
 
     sessions_dir = APP_ROOT / "operator_sessions"
     sessions_dir.mkdir(parents=True, exist_ok=True)
+
+    # Remove any existing files for this session ID
+    for existing_file in sessions_dir.glob(f"session_*_{_OPERATOR_SESSION['session_id']}.json"):
+        existing_file.unlink(missing_ok=True)
+
     file_path = sessions_dir / f"session_{clean_name}_{_OPERATOR_SESSION['session_id']}.json"
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(_OPERATOR_SESSION, f, indent=2)
@@ -2221,6 +2228,13 @@ def operator_list_sessions() -> JSONResponse:
                 with open(file_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                     name = file_path.name.replace("session_", "").replace(f"_{data.get('session_id')}.json", "")
+                    # Reconstruct display name properly if custom name exists since we clean it for the filename
+                    if data.get("custom_name"):
+                        if "_-_" in name:
+                            parts = name.split("_-_", 1)
+                            # Convert 2026-05-13_17-30 back to 2026-05-13 17-30
+                            date_part = parts[0][:10] + " " + parts[0][11:] if len(parts[0]) >= 11 and parts[0][10] == '_' else parts[0].replace("_", " ")
+                            name = f"{date_part} - {data.get('custom_name')}"
 
                     sessions.append({
                         "session_id": data.get("session_id"),
@@ -2252,11 +2266,20 @@ def operator_get_session_by_id(session_id: str) -> JSONResponse:
 
 @app.post("/api/operator/save")
 async def operator_save_session(request: Request) -> JSONResponse:
+    global _OPERATOR_SESSION
     try:
         data = await request.json()
         custom_name = data.get("name", "")
+        save_as_new = data.get("save_as_new", False)
+
+        if save_as_new:
+            _OPERATOR_SESSION["session_id"] = uuid.uuid4().hex
+            # Reset timeline and notes ID to differentiate if needed, though copying is fine
+            if not custom_name and "custom_name" in _OPERATOR_SESSION:
+                del _OPERATOR_SESSION["custom_name"]
+
         _save_operator_session(custom_name)
-        return JSONResponse({"status": "session_saved"})
+        return JSONResponse({"status": "session_saved", "session_id": _OPERATOR_SESSION["session_id"]})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 
@@ -2301,14 +2324,38 @@ async def operator_add_note(request: Request) -> JSONResponse:
             "target_type": data.get("target_type")
         }
 
-        if data.get("target_type") == "candidate":
-            note_entry["rank"] = data.get("rank")
-            note_entry["source"] = data.get("source")
-        elif data.get("target_type") == "manual_pin":
-            note_entry["lat"] = data.get("lat")
-            note_entry["lon"] = data.get("lon")
+        target_type = data.get("target_type")
 
-        _OPERATOR_SESSION["notes"].append(note_entry)
+        # Check if note exists for this target, update if so
+        updated = False
+        for existing_note in _OPERATOR_SESSION["notes"]:
+            if target_type == "note_id" and existing_note.get("note_id") == data.get("note_id"):
+                existing_note["text"] = note
+                existing_note["timestamp"] = _utc_now_iso()
+                updated = True
+                break
+            elif target_type == "candidate" and existing_note.get("target_type") == "candidate":
+                if existing_note.get("rank") == data.get("rank"):
+                    existing_note["text"] = note
+                    existing_note["timestamp"] = _utc_now_iso()
+                    updated = True
+                    break
+            elif target_type == "manual_pin" and existing_note.get("target_type") == "manual_pin":
+                if abs(existing_note.get("lat", 0) - data.get("lat", 0)) < 0.0001 and abs(existing_note.get("lon", 0) - data.get("lon", 0)) < 0.0001:
+                    existing_note["text"] = note
+                    existing_note["timestamp"] = _utc_now_iso()
+                    updated = True
+                    break
+
+        if not updated:
+            if target_type == "candidate":
+                note_entry["rank"] = data.get("rank")
+                note_entry["source"] = data.get("source")
+            elif target_type == "manual_pin":
+                note_entry["lat"] = data.get("lat")
+                note_entry["lon"] = data.get("lon")
+            _OPERATOR_SESSION["notes"].append(note_entry)
+
         _OPERATOR_SESSION["operator_notes"] = note # Keep for backwards compat
 
         _add_timeline_event("Operator added a note", "info")
@@ -2334,16 +2381,63 @@ def operator_export_session() -> JSONResponse:
 from src.core.geo.street_view import LocalStreetViewProvider
 _STREET_VIEW_PROVIDER = None
 
-@app.get("/api/operator/street_view")
-def operator_street_view(lat: float, lon: float) -> JSONResponse:
+def _get_sv_provider() -> "LocalStreetViewProvider":
     global _STREET_VIEW_PROVIDER
     if _STREET_VIEW_PROVIDER is None:
-        _STREET_VIEW_PROVIDER = LocalStreetViewProvider()
+        data_dir = str(APP_ROOT / "data" / "paris_realistic_v1" / "street_combined")
+        _STREET_VIEW_PROVIDER = LocalStreetViewProvider(data_dir=data_dir)
+    return _STREET_VIEW_PROVIDER
 
-    nearest = _STREET_VIEW_PROVIDER.find_nearest(lat, lon)
+@app.get("/api/operator/street_view")
+def operator_street_view(lat: float, lon: float) -> JSONResponse:
+    nearest = _get_sv_provider().find_nearest(lat, lon)
     if nearest:
         return JSONResponse(nearest)
     return JSONResponse({"error": "No street view imagery found near this location"}, status_code=404)
+
+@app.get("/api/operator/street_view/image/{image_id}")
+def operator_sv_image(image_id: str):
+    provider = _get_sv_provider()
+    point = provider._by_id.get(image_id)
+    if not point:
+        return JSONResponse({"error": "Image not found"}, status_code=404)
+    img_path = provider.data_dir / point["path"]
+    if not img_path.exists():
+        return JSONResponse({"error": "Image file not found on disk"}, status_code=404)
+    return FileResponse(str(img_path), media_type="image/jpeg")
+
+@app.get("/api/operator/street_view/neighbors")
+def operator_sv_neighbors(
+    image_id: Optional[str] = None,
+    lat: Optional[float] = None,
+    lon: Optional[float] = None,
+    prefer_heading: Optional[float] = None,
+) -> JSONResponse:
+    provider = _get_sv_provider()
+
+    # Resolve the current image
+    current = None
+    if image_id:
+        point = provider._by_id.get(image_id)
+        if point:
+            current = provider._point_to_response(point, 0.0)
+    if current is None and lat is not None and lon is not None:
+        if prefer_heading is not None:
+            current = provider.find_nearest_by_heading(lat, lon, prefer_heading)
+        else:
+            current = provider.find_nearest(lat, lon)
+
+    if not current:
+        return JSONResponse({"error": "No imagery found near this location"}, status_code=404)
+
+    neighbors = provider.get_sequence_neighbors(current["image_id"])
+    return JSONResponse({
+        "current": current,
+        "prev": neighbors["prev"],
+        "next": neighbors["next"],
+        "sequence_position": neighbors["position"],
+        "sequence_total": neighbors["total"],
+    })
 
 @app.post("/api/operator/analyze")
 async def operator_analyze(
