@@ -406,14 +406,13 @@ html, body {
 }
 
 .profile-row {
-  display: grid;
+  display: flex;
+  align-items: center;
   gap: var(--control-gap);
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
 
-.dev-mode-row {
-  align-items: center;
-  margin-top: 8px;
+.profile-row select {
+  flex: 1;
 }
 
 .inline-checkbox {
@@ -422,27 +421,53 @@ html, body {
   cursor: pointer;
   display: flex;
   flex-direction: row;
+  flex-shrink: 0;
   font-size: 11px;
-  gap: 8px;
-  grid-column: 1 / -1;
-  justify-content: flex-start;
+  gap: 6px;
   line-height: 1.2;
-  padding-left: var(--form-text-inset);
-  width: 100%;
+  white-space: nowrap;
 }
 
 .inline-checkbox input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
   flex: 0 0 auto;
-  justify-self: end;
-  height: 14px;
-  margin: 0 0 0 auto;
-  min-height: 0;
+  width: 13px;
+  height: 13px;
+  margin: 0;
   padding: 0;
-  width: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 3px;
+  background: transparent;
+  cursor: pointer;
+  position: relative;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.inline-checkbox input[type="checkbox"]:checked {
+  background: var(--accent, #4a9eff);
+  border-color: var(--accent, #4a9eff);
+}
+
+.inline-checkbox input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 1px;
+  width: 5px;
+  height: 8px;
+  border: 1.5px solid #fff;
+  border-top: none;
+  border-left: none;
+  transform: rotate(45deg);
+}
+
+.inline-checkbox input[type="checkbox"]:focus-visible {
+  outline: 1px solid rgba(255, 255, 255, 0.4);
+  outline-offset: 2px;
 }
 
 .profile-row select {
-  flex: 1;
   height: 42px !important;
   min-height: 42px !important;
   background: rgba(0, 0, 0, 0.5);
@@ -561,7 +586,7 @@ html, body {
 }
 
 .candidate-card {
-  padding: 11px 16px;
+  padding: 11px var(--panel-inset);
   background: transparent;
   border: none;
   border-left: 2px solid transparent;
@@ -985,7 +1010,7 @@ html, body {
 
 .panel-collapse.active {
   display: block;
-  padding: 0 16px 14px;
+  padding: 0 var(--panel-inset) 14px;
 }
 
 .diag-body {
@@ -1853,7 +1878,7 @@ html, body {
 .view-tabs {
   display: flex;
   gap: 0;
-  margin: 10px var(--panel-inset) 0;
+  margin: 10px 0 0;
   flex-shrink: 0;
   border-bottom: 1px solid var(--glass-border);
 }
@@ -1874,6 +1899,10 @@ html, body {
   height: auto;
   min-width: 0;
   transition: color 0.15s ease, border-bottom-color 0.15s ease;
+}
+
+.view-tab:first-child {
+  padding-left: var(--panel-inset);
 }
 
 .view-tab.active {
@@ -1991,8 +2020,15 @@ html, body {
 
 /* --- List Section Padded --- */
 .list-section-padded {
-  padding: var(--panel-inset);
-  padding-bottom: 0;
+  padding: var(--panel-inset) 0 0;
+}
+
+.list-section-padded .section-head-row {
+  padding: 0 var(--panel-inset);
+}
+
+#notes-list {
+  padding: 0 var(--panel-inset);
 }
 
 /* --- Note Actions Row --- */

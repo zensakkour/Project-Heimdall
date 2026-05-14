@@ -191,12 +191,11 @@ function clearCandidateMarkers() {
   candidateMarkers = [];
 }
 
-function updateHtmlMarkerSelection(index) {
+function updateHtmlMarkerSelection(_index) {
   candidateMarkers.forEach((marker) => {
     const el = marker.getElement();
-    const indices = markerCandidateIndices(el);
-    el.classList.toggle("selected", indices.includes(index));
-    el.classList.toggle("top", indices.includes(0));
+    const idx = Number(el.dataset.index);
+    el.classList.toggle("selected", idx === selectedIndex);
   });
 }
 
@@ -227,8 +226,31 @@ function operatorMapCoord(item) {
 }
 
 function renderHtmlCandidateMarkers(candidates) {
+  clearCandidateMarkers();
+  if (!liveMap) return;
   activeCandidateItems = buildCandidateMarkerItems(candidates);
-  refreshCandidateMarkers();
+
+  // One permanent marker per candidate, placed once at its exact coordinate.
+  // Nothing ever moves or recreates these on zoom — MapLibre handles projection.
+  activeCandidateItems.forEach(({ index, coord }) => {
+    const el = document.createElement("button");
+    el.type = "button";
+    el.className = `geo-pin compact${index === 0 ? " top" : ""}`;
+    el.dataset.index = String(index);
+    el.setAttribute("aria-label", `Select geo candidate ${index + 1}`);
+    el.innerHTML = `<span class="geo-pin-head">${index + 1}</span>`;
+    el.addEventListener("click", (event) => {
+      event.stopPropagation();
+      selectCandidate(index);
+    });
+
+    const marker = new maplibregl.Marker({ element: el, anchor: "center", offset: [0, 0] })
+      .setLngLat([coord.lon, coord.lat])
+      .addTo(liveMap);
+    candidateMarkers.push(marker);
+  });
+
+  updatePinScale();
 }
 
 function buildCandidateMarkerItems(candidates) {
@@ -240,52 +262,6 @@ function buildCandidateMarkerItems(candidates) {
 }
 
 function refreshCandidateMarkers() {
-  clearCandidateMarkers();
-  if (!liveMap) return;
-
-  clusterCandidateItems(activeCandidateItems).forEach((cluster) => {
-    const isCluster = cluster.items.length > 1;
-    const topItem = cluster.items[0];
-    const topIndex = topItem.index;
-
-    const el = document.createElement("button");
-    el.type = "button";
-    el.className = `geo-pin compact${isCluster ? " cluster" : ""}${cluster.items.some(({ index }) => index === 0) ? " top" : ""}${cluster.items.some(({ index }) => index === selectedIndex) ? " selected" : ""}`;
-    el.dataset.indices = cluster.items.map(({ index }) => index).join(",");
-    el.setAttribute(
-      "aria-label",
-      isCluster ? `Zoom to ${cluster.items.length} grouped geo candidates` : `Select geo candidate ${topIndex + 1}`
-    );
-    el.innerHTML = `<span class="geo-pin-head">${isCluster ? cluster.items.length : topIndex + 1}</span>`;
-    el.addEventListener("click", (event) => {
-      event.stopPropagation();
-      if (isCluster) {
-        if (liveMap.getZoom() >= 16) {
-          selectCandidate(topIndex);
-        } else {
-          easeToCentered({
-            center: [cluster.coord.lon, cluster.coord.lat],
-            zoom: Math.min(liveMap.getZoom() + 2.2, 16),
-            pitch: 0,
-            bearing: 0,
-            duration: 650
-          });
-        }
-      } else {
-        selectCandidate(topIndex);
-      }
-    });
-
-    const marker = new maplibregl.Marker({
-      element: el,
-      anchor: "center",
-      offset: [0, 0]
-    })
-      .setLngLat([cluster.coord.lon, cluster.coord.lat])
-      .addTo(liveMap);
-    candidateMarkers.push(marker);
-  });
-
   updatePinScale();
 }
 
@@ -316,27 +292,14 @@ function clusterCandidateItems(items) {
     }
 
     target.items.push(item);
-    target.point = averageClusterPoint(target.items);
-    target.coord = averageClusterCoord(target.items);
+    // Keep the cluster pinned to the highest-ranked candidate's exact coordinate.
+    // Averaging produces a midpoint that belongs to no real location, causing
+    // pins to drift to the wrong street when candidates are nearby.
+    target.coord = { ...target.items[0].coord };
+    target.point = liveMap.project([target.coord.lon, target.coord.lat]);
   });
 
   return clusters;
-}
-
-function averageClusterPoint(items) {
-  const sum = items.reduce((acc, item) => {
-    const point = liveMap.project([item.coord.lon, item.coord.lat]);
-    return { x: acc.x + point.x, y: acc.y + point.y };
-  }, { x: 0, y: 0 });
-  return { x: sum.x / items.length, y: sum.y / items.length };
-}
-
-function averageClusterCoord(items) {
-  const sum = items.reduce((acc, item) => ({
-    lat: acc.lat + item.coord.lat,
-    lon: acc.lon + item.coord.lon
-  }), { lat: 0, lon: 0 });
-  return { lat: sum.lat / items.length, lon: sum.lon / items.length };
 }
 
 function markerCandidateIndices(el) {
@@ -636,8 +599,6 @@ function ensureLiveMap() {
         liveMap.on("mouseleave", `candidate-rank-dot-${i}`, clearPointer);
         liveMap.on("mouseleave", `candidate-rank-hit-${i}`, clearPointer);
       }
-      liveMap.on("zoom", refreshCandidateMarkers);
-      liveMap.on("move", refreshCandidateMarkers);
       liveMap.on("zoomend", () => {
         if (liveMap.getZoom() <= globePitchResetZoom && liveMap.getPitch() !== 0) {
           easeToCentered({ center: liveMap.getCenter(), pitch: 0, duration: 180 });
