@@ -772,8 +772,24 @@ function loadNoteForTarget(targetType, rankOrLat, lon) {
 
     noteInput.value = ""; // Clear by default
 
-    // We can avoid a fetch if we already have the notes loaded via lastResult or another state variable
-    // but the session API is lightweight enough. However, let's try to grab it efficiently
+    if (lastResult && lastResult.notes) {
+        const note = lastResult.notes.find(n => {
+            if (targetType === "candidate" && n.target_type === "candidate") {
+                return n.rank === rankOrLat;
+            } else if (targetType === "manual_pin" && n.target_type === "manual_pin") {
+                return Math.abs(n.lat - rankOrLat) < 0.0001 && Math.abs(n.lon - lon) < 0.0001;
+            } else if (targetType === "note_id") {
+                return n.note_id === rankOrLat;
+            }
+            return false;
+        });
+
+        if (note) {
+            noteInput.value = note.text;
+            return;
+        }
+    }
+
     fetch("/api/operator/session").then(r => r.json()).then(data => {
         if (!data.notes) return;
 
@@ -1233,6 +1249,7 @@ function setupAnalysis() {
     if (!file) return;
 
     loadedSessionId = null;
+    localStorage.removeItem("heimdallSessionId");
 
     const profile = byId("profile-select").value || "paris";
     console.log("LOG: Starting pipeline...", { profile, filename: file.name });
@@ -1501,11 +1518,13 @@ function loadSessionList() {
                 data.sessions.forEach(session => {
                     const option = document.createElement("option");
                     option.value = session.session_id;
-                    const dateStr = session.updated_at ? new Date(session.updated_at).toLocaleString() : "Unknown";
                     const fileStr = session.source_filename ? ` - ${session.source_filename}` : "";
-                    option.textContent = `${dateStr}${fileStr} [${session.status}]`;
+                    option.textContent = `${session.display_name}${fileStr} [${session.status}]`;
                     select.appendChild(option);
                 });
+            }
+            if (loadedSessionId) {
+                select.value = loadedSessionId;
             }
         })
         .catch(err => console.error("Failed to load session list:", err));
@@ -1523,8 +1542,47 @@ function init() {
   setupPanelAccordions();
   setupToggles();
   setupOperatorActions();
+
+  const savedSessionId = localStorage.getItem("heimdallSessionId");
+  if (savedSessionId) {
+      loadedSessionId = savedSessionId;
+  }
+
   loadSessionList();
   
+  if (loadedSessionId) {
+      fetch(`/api/operator/sessions/${loadedSessionId}`)
+          .then(r => {
+              if (r.ok) return r.json();
+              loadedSessionId = null;
+              localStorage.removeItem("heimdallSessionId");
+              loadSessionList();
+              throw new Error("Session not found");
+          })
+          .then(data => {
+               if (!data.session_id) return;
+               // Full mock of lastResult structure needed by UI renderers
+               lastResult = {
+                   geo: data.fused_estimate,
+                   candidates: data.candidates,
+                   clues: data.clues,
+                   detections: data.detections
+               };
+               renderSummary(data);
+               renderCandidateList(lastResult);
+               renderLiveMap(lastResult);
+               renderTimeline(data);
+               renderClues(data);
+               renderNoteMarkers();
+               renderNotesList();
+               if (data.operator_notes) {
+                   const noteInput = byId("operator-note-input");
+                   if (noteInput) noteInput.value = data.operator_notes;
+               }
+          })
+          .catch(err => console.error("Failed to auto-load session:", err));
+  }
+
   const tabGeotags = document.getElementById("tab-geotags");
   const tabNotes = document.getElementById("tab-notes");
   const geotagsView = document.getElementById("geotags-view");
@@ -1741,6 +1799,7 @@ function setupOperatorActions() {
     const saveNoteBtn = byId("btn-save-note");
     const exportBtn = byId("btn-export-session");
     const saveSessionBtn = byId("btn-save-session");
+    const newSessionBtn = byId("btn-new-session");
     const dropPinBtn = byId("btn-drop-pin");
 
     const sessionSaveModal = byId("session-save-modal");
@@ -1760,7 +1819,10 @@ function setupOperatorActions() {
             postForm("/api/operator/save", JSON.stringify({ save_as_new: false }))
                 .then(r => r.json())
                 .then(data => {
-                    if (data.session_id) loadedSessionId = data.session_id;
+                    if (data.session_id) {
+                        loadedSessionId = data.session_id;
+                        localStorage.setItem("heimdallSessionId", data.session_id);
+                    }
                     loadSessionList();
                     alert("Session updated successfully.");
                 });
@@ -1775,11 +1837,54 @@ function setupOperatorActions() {
                 postForm("/api/operator/save", JSON.stringify({ name: sessionName.trim(), save_as_new: true }))
                     .then(r => r.json())
                     .then(data => {
-                        if (data.session_id) loadedSessionId = data.session_id;
+                        if (data.session_id) {
+                            loadedSessionId = data.session_id;
+                            localStorage.setItem("heimdallSessionId", data.session_id);
+                        }
                         loadSessionList();
                         alert("Session saved as new.");
                     });
             }
+        });
+    }
+
+    if (newSessionBtn) {
+        newSessionBtn.addEventListener("click", () => {
+            fetch("/api/operator/reset", { method: "POST" })
+                .then(() => {
+                    loadedSessionId = null;
+                    localStorage.removeItem("heimdallSessionId");
+                    setMetric("diag-backend", "-");
+                    setMetric("diag-worker", "-");
+                    setMetric("diag-tier", "-");
+                    setMetric("diag-radius", "-");
+                    lastResult = null;
+                    selectedIndex = -1;
+                    droppedPinLocation = null;
+
+                    const progress = byId("progress");
+                    const errorContainer = byId("analysis-error");
+                    const previewBlock = byId("preview-block");
+                    const ingestBlock = byId("ingest-block");
+
+                    if (progress) progress.style.display = "none";
+                    if (errorContainer) errorContainer.style.display = "none";
+                    if (previewBlock) previewBlock.style.display = "none";
+                    if (ingestBlock) ingestBlock.style.display = "block";
+
+                    const geolocateBtn = byId("geolocate-image");
+                    if (geolocateBtn) geolocateBtn.disabled = true;
+
+                    renderCandidateList(null);
+                    renderLiveMap(null);
+                    renderTimeline(null);
+                    renderClues(null);
+                    renderNoteMarkers();
+                    renderNotesList();
+
+                    const noteInput = byId("operator-note-input");
+                    if (noteInput) noteInput.value = "";
+                });
         });
     }
 
@@ -1793,7 +1898,10 @@ function setupOperatorActions() {
                     postForm("/api/operator/save", JSON.stringify({ name: sessionName.trim(), save_as_new: true }))
                         .then(r => r.json())
                         .then(data => {
-                            if (data.session_id) loadedSessionId = data.session_id;
+                            if (data.session_id) {
+                                loadedSessionId = data.session_id;
+                                localStorage.setItem("heimdallSessionId", data.session_id);
+                            }
                             loadSessionList();
                             alert("Session saved as new.");
                         });
@@ -1925,6 +2033,8 @@ function setupOperatorActions() {
                 .then(r => r.json())
                 .then(data => {
                      loadedSessionId = data.session_id || sid;
+                     localStorage.setItem("heimdallSessionId", loadedSessionId);
+
                      // Full mock of lastResult structure needed by UI renderers
                      lastResult = {
                          geo: data.fused_estimate,
@@ -1933,7 +2043,12 @@ function setupOperatorActions() {
                          detections: data.detections
                      };
                      renderSummary(data);
+                     renderCandidateList(lastResult);
+                     renderLiveMap(lastResult);
+                     renderTimeline(data);
+                     renderClues(data);
                      renderNoteMarkers();
+                     renderNotesList();
                      if (data.operator_notes) {
                          const noteInput = byId("operator-note-input");
                          if (noteInput) noteInput.value = data.operator_notes;
