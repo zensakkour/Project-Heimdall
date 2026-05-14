@@ -1909,16 +1909,16 @@ function setupPanelAccordions() {
 
 function loadSessionList() {
     const select = byId("load-session-select");
-    if (!select) return;
-    fetch("/api/operator/sessions")
+    if (!select) return Promise.resolve();
+    return fetch("/api/operator/sessions")
         .then(r => r.json())
         .then(data => {
-            select.innerHTML = '<option value="">-- Load Session --</option>';
+            select.innerHTML = '<option value="">— Load Session —</option>';
             if (data.sessions && data.sessions.length > 0) {
                 data.sessions.forEach(session => {
                     const option = document.createElement("option");
                     option.value = session.session_id;
-                    const fileStr = session.source_filename ? ` - ${session.source_filename}` : "";
+                    const fileStr = session.source_filename ? ` — ${session.source_filename}` : "";
                     option.textContent = `${session.display_name}${fileStr} [${session.status}]`;
                     select.appendChild(option);
                 });
@@ -1928,6 +1928,53 @@ function loadSessionList() {
             }
         })
         .catch(err => console.error("Failed to load session list:", err));
+}
+
+function doLoadSession(sid) {
+    if (!sid) return;
+    fetch(`/api/operator/sessions/${sid}`)
+        .then(r => r.json())
+        .then(data => {
+            loadedSessionId = data.session_id || sid;
+            localStorage.setItem("heimdallSessionId", loadedSessionId);
+
+            // Restore source image thumbnail
+            if (data.source?.image_data_url) {
+                const thumb = byId("source-thumb");
+                const filenameLbl = byId("preview-filename");
+                const previewBlock = byId("preview-block");
+                const ingestBlock = byId("ingest-block");
+                const lightboxImg = byId("lightbox-img");
+                const lightboxName = byId("lightbox-filename");
+                if (thumb) thumb.src = data.source.image_data_url;
+                if (filenameLbl) filenameLbl.textContent = data.source.filename || "Session image";
+                if (previewBlock) previewBlock.style.display = "flex";
+                if (ingestBlock) ingestBlock.style.display = "none";
+                if (lightboxImg) lightboxImg.src = data.source.image_data_url;
+                if (lightboxName) lightboxName.textContent = data.source.filename || "";
+                const geolocateBtn = byId("geolocate-image");
+                if (geolocateBtn) geolocateBtn.disabled = false;
+            }
+
+            lastResult = {
+                geo: data.fused_estimate,
+                candidates: data.candidates,
+                clues: data.clues,
+                detections: data.detections
+            };
+            renderSummary(data);
+            renderCandidateList(lastResult);
+            renderLiveMap(lastResult);
+            renderTimeline(data);
+            renderClues(data);
+            renderNoteMarkers();
+            renderNotesList();
+            if (data.operator_notes) {
+                const noteInput = byId("operator-note-input");
+                if (noteInput) noteInput.value = data.operator_notes;
+            }
+        })
+        .catch(err => console.error("Failed to load session:", err));
 }
 
 const SVG_CHEVRON_LEFT  = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>`;
@@ -2017,10 +2064,11 @@ function init() {
   setupPanelResize();
   setupPanelCollapse();
 
-  // Do not auto-load session on page load — pins and notes only appear
-  // when a session is explicitly selected and loaded by the operator.
-  localStorage.removeItem("heimdallSessionId");
+  // Reset server session on every page load so stale notes/pins from a
+  // previous session don't bleed through before the operator explicitly loads one.
   loadedSessionId = null;
+  localStorage.removeItem("heimdallSessionId");
+  fetch("/api/operator/reset", { method: "POST" }).catch(() => {});
 
   loadSessionList();
 
@@ -2344,37 +2392,37 @@ function setupOperatorActions() {
         });
     }
 
+    function afterSessionSaved(data) {
+        if (data.session_id) {
+            loadedSessionId = data.session_id;
+            localStorage.setItem("heimdallSessionId", data.session_id);
+        }
+        if (sessionSaveModal) sessionSaveModal.classList.remove("active");
+        loadSessionList().then(() => {
+            // Auto-select and auto-load the saved session
+            const sel = byId("load-session-select");
+            if (sel && loadedSessionId) sel.value = loadedSessionId;
+            doLoadSession(loadedSessionId);
+        });
+    }
+
     if (btnUpdateSession && sessionSaveModal) {
         btnUpdateSession.addEventListener("click", () => {
             sessionSaveModal.classList.remove("active");
             postForm("/api/operator/save", JSON.stringify({ save_as_new: false }))
                 .then(r => r.json())
-                .then(data => {
-                    if (data.session_id) {
-                        loadedSessionId = data.session_id;
-                        localStorage.setItem("heimdallSessionId", data.session_id);
-                    }
-                    loadSessionList();
-                    alert("Session updated successfully.");
-                });
+                .then(afterSessionSaved);
         });
     }
 
     if (btnSaveNewSession && sessionSaveModal) {
         btnSaveNewSession.addEventListener("click", () => {
             sessionSaveModal.classList.remove("active");
-            const sessionName = prompt("Enter a new custom name for this session (optional):");
+            const sessionName = prompt("Enter a name for this session (optional):");
             if (sessionName !== null) {
                 postForm("/api/operator/save", JSON.stringify({ name: sessionName.trim(), save_as_new: true }))
                     .then(r => r.json())
-                    .then(data => {
-                        if (data.session_id) {
-                            loadedSessionId = data.session_id;
-                            localStorage.setItem("heimdallSessionId", data.session_id);
-                        }
-                        loadSessionList();
-                        alert("Session saved as new.");
-                    });
+                    .then(afterSessionSaved);
             }
         });
     }
@@ -2424,18 +2472,11 @@ function setupOperatorActions() {
             if (loadedSessionId && sessionSaveModal) {
                 sessionSaveModal.classList.add("active");
             } else {
-                const sessionName = prompt("Enter a custom name for this session (optional):");
+                const sessionName = prompt("Enter a name for this session (optional):");
                 if (sessionName !== null) {
                     postForm("/api/operator/save", JSON.stringify({ name: sessionName.trim(), save_as_new: true }))
                         .then(r => r.json())
-                        .then(data => {
-                            if (data.session_id) {
-                                loadedSessionId = data.session_id;
-                                localStorage.setItem("heimdallSessionId", data.session_id);
-                            }
-                            loadSessionList();
-                            alert("Session saved as new.");
-                        });
+                        .then(afterSessionSaved);
                 }
             }
         });
@@ -2560,32 +2601,7 @@ function setupOperatorActions() {
                 setTimeout(() => warn.remove(), 3000);
                 return;
             }
-            fetch(`/api/operator/sessions/${sid}`)
-                .then(r => r.json())
-                .then(data => {
-                     loadedSessionId = data.session_id || sid;
-                     localStorage.setItem("heimdallSessionId", loadedSessionId);
-
-                     // Full mock of lastResult structure needed by UI renderers
-                     lastResult = {
-                         geo: data.fused_estimate,
-                         candidates: data.candidates,
-                         clues: data.clues,
-                         detections: data.detections
-                     };
-                     renderSummary(data);
-                     renderCandidateList(lastResult);
-                     renderLiveMap(lastResult);
-                     renderTimeline(data);
-                     renderClues(data);
-                     renderNoteMarkers();
-                     renderNotesList();
-                     if (data.operator_notes) {
-                         const noteInput = byId("operator-note-input");
-                         if (noteInput) noteInput.value = data.operator_notes;
-                     }
-                })
-                .catch(err => console.error("Failed to load session:", err));
+            doLoadSession(sid);
         });
     }
 
@@ -2660,8 +2676,6 @@ function renderNoteMarkers() {
     noteMarkers.forEach(m => m.remove());
     noteMarkers = [];
 
-    if (!loadedSessionId) return;
-
     fetch("/api/operator/session").then(r => r.json()).then(data => {
         if (!data.notes || data.notes.length === 0) return;
 
@@ -2709,11 +2723,6 @@ function renderNoteMarkers() {
 function renderNotesList() {
     const list = document.getElementById("notes-list");
     if (!list) return;
-
-    if (!loadedSessionId) {
-        list.innerHTML = '<div class="empty-state">No notes saved.</div>';
-        return;
-    }
 
     fetch("/api/operator/session").then(r => r.json()).then(data => {
         if (!data.notes || data.notes.length === 0) {
