@@ -1959,9 +1959,12 @@ function doLoadSession(sid) {
                 detections: data.detections
             };
 
-            // Restore source image into the left-panel preview area
+            // Restore source image into the left-panel preview area.
+            // Use the binary image endpoint for reliability instead of base64 data URL.
             const source = data.source || {};
-            const imgUrl = source.image_data_url;
+            const imgEndpoint = `/api/operator/sessions/${loadedSessionId}/image`;
+            const imgUrl = source.image_data_url
+                || (source.has_session_image || source.image_file ? imgEndpoint : null);
             const thumb = byId("source-thumb");
             const filenameLbl = byId("preview-filename");
             const previewBlock = byId("preview-block");
@@ -1970,8 +1973,7 @@ function doLoadSession(sid) {
             const lightboxName = byId("lightbox-filename");
             const geolocateBtn = byId("geolocate-image");
 
-            const hasSource = imgUrl || source.filename;
-            if (hasSource) {
+            if (source.filename || imgUrl) {
                 if (filenameLbl) filenameLbl.textContent = source.filename || "Session image";
                 if (lightboxName) lightboxName.textContent = source.filename || "";
                 if (previewBlock) previewBlock.style.display = "flex";
