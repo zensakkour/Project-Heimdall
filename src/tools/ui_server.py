@@ -2294,7 +2294,7 @@ def operator_get_session_by_id(session_id: str) -> JSONResponse:
             # Re-attach image from separate file if present
             source = data.get("source") or {}
             img_file = source.get("image_file")
-            if img_file:
+            if img_file and not source.get("image_data_url"):
                 img_path = sessions_dir / session_id / img_file
                 if img_path.exists():
                     img_bytes = img_path.read_bytes()

@@ -1942,50 +1942,54 @@ function loadSessionList() {
 function doLoadSession(sid) {
     if (!sid) return;
     fetch(`/api/operator/sessions/${sid}`)
-        .then(r => r.json())
+        .then(r => {
+            if (!r.ok) throw new Error(`Session load failed (HTTP ${r.status})`);
+            return r.json();
+        })
         .then(data => {
+            if (data.error) throw new Error(data.error);
+
             loadedSessionId = data.session_id || sid;
             localStorage.setItem("heimdallSessionId", loadedSessionId);
 
             lastResult = {
-                geo: data.fused_estimate,
+                fused_estimate: data.fused_estimate,
                 candidates: data.candidates,
                 clues: data.clues,
                 detections: data.detections
             };
 
-            // Restore source image; wire onload so detection overlay renders
-            // after the image is actually decoded (naturalWidth > 0)
-            if (data.source?.image_data_url) {
-                const thumb = byId("source-thumb");
-                const filenameLbl = byId("preview-filename");
-                const previewBlock = byId("preview-block");
-                const ingestBlock = byId("ingest-block");
-                const lightboxImg = byId("lightbox-img");
-                const lightboxName = byId("lightbox-filename");
-                const geolocateBtn = byId("geolocate-image");
+            // Restore source image into the left-panel preview area
+            const source = data.source || {};
+            const imgUrl = source.image_data_url;
+            const thumb = byId("source-thumb");
+            const filenameLbl = byId("preview-filename");
+            const previewBlock = byId("preview-block");
+            const ingestBlock = byId("ingest-block");
+            const lightboxImg = byId("lightbox-img");
+            const lightboxName = byId("lightbox-filename");
+            const geolocateBtn = byId("geolocate-image");
 
-                if (filenameLbl) filenameLbl.textContent = data.source.filename || "Session image";
+            const hasSource = imgUrl || source.filename;
+            if (hasSource) {
+                if (filenameLbl) filenameLbl.textContent = source.filename || "Session image";
+                if (lightboxName) lightboxName.textContent = source.filename || "";
                 if (previewBlock) previewBlock.style.display = "flex";
                 if (ingestBlock) ingestBlock.style.display = "none";
-                if (lightboxName) lightboxName.textContent = data.source.filename || "";
-                if (geolocateBtn) geolocateBtn.disabled = false;
+            }
 
+            if (imgUrl) {
+                if (geolocateBtn) geolocateBtn.disabled = false;
                 if (lightboxImg) {
                     selectedLightboxDetectionIndex = 0;
                     lightboxImg.onload = () => renderLightboxIntel();
-                    lightboxImg.src = data.source.image_data_url;
-                    // If browser already has it cached
+                    lightboxImg.src = imgUrl;
                     if (lightboxImg.complete && lightboxImg.naturalWidth > 0) renderLightboxIntel();
                 }
-                if (thumb) thumb.src = data.source.image_data_url;
+                if (thumb) thumb.src = imgUrl;
             }
 
             renderSummary(data);
-            renderCandidateList(lastResult);
-            renderLiveMap(lastResult);
-            renderTimeline(data);
-            renderClues(data);
             renderNoteMarkers();
             renderNotesList();
             if (data.operator_notes) {
