@@ -2549,6 +2549,10 @@ function setupOperatorActions() {
                          dropPinBtn.textContent = "📍 Drop Note Pin";
                      }
 
+                     // Refresh notes list and map markers immediately
+                     renderNotesList();
+                     renderNoteMarkers();
+
                      setTimeout(() => {
                          saveNoteBtn.textContent = "Save Note";
                      }, 2000);
