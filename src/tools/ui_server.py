@@ -85,16 +85,48 @@ def _save_operator_session(custom_name: str = None):
 
     clean_name = "".join(c for c in display_name if c.isalnum() or c in (' ', '-', '_')).strip().replace(' ', '_')
 
-    sessions_dir = APP_ROOT / "operator_sessions"
-    sessions_dir.mkdir(parents=True, exist_ok=True)
+    sessions_root = APP_ROOT / "operator_sessions"
+    sessions_root.mkdir(parents=True, exist_ok=True)
 
-    # Remove any existing files for this session ID
-    for existing_file in sessions_dir.glob(f"session_*_{_OPERATOR_SESSION['session_id']}.json"):
+    session_folder_name = f"session_{clean_name}_{_OPERATOR_SESSION['session_id']}"
+
+    # Remove any existing folders for this session ID that might have a different name
+    for existing_folder in sessions_root.glob(f"session_*_{_OPERATOR_SESSION['session_id']}"):
+        if existing_folder.is_dir() and existing_folder.name != session_folder_name:
+            import shutil
+            shutil.rmtree(existing_folder, ignore_errors=True)
+
+    # Also clean up any old .json files just in case
+    for existing_file in sessions_root.glob(f"session_*_{_OPERATOR_SESSION['session_id']}.json"):
         existing_file.unlink(missing_ok=True)
 
-    file_path = sessions_dir / f"session_{clean_name}_{_OPERATOR_SESSION['session_id']}.json"
+    session_dir = sessions_root / session_folder_name
+    session_dir.mkdir(parents=True, exist_ok=True)
+
+    # Save image if present in session state (Base64)
+    if "source_image_data" in _OPERATOR_SESSION:
+        try:
+            import base64
+            img_data = base64.b64decode(_OPERATOR_SESSION["source_image_data"])
+            img_path = session_dir / "image.jpg" # Defaulting to jpg
+            with open(img_path, "wb") as f:
+                f.write(img_data)
+            _OPERATOR_SESSION["image_url"] = f"/api/operator/sessions/{_OPERATOR_SESSION['session_id']}/image"
+        except Exception as e:
+            print(f"Error saving image: {e}")
+            pass
+        # We don't want to save the raw base64 string to the JSON
+        # but we need to keep a copy of the session state to save
+        session_to_save = _OPERATOR_SESSION.copy()
+        del session_to_save["source_image_data"]
+    else:
+        session_to_save = _OPERATOR_SESSION.copy()
+        if "source_image_data" in session_to_save:
+            del session_to_save["source_image_data"]
+
+    file_path = session_dir / "session.json"
     with open(file_path, "w", encoding="utf-8") as f:
-        json.dump(_OPERATOR_SESSION, f, indent=2)
+        json.dump(session_to_save, f, indent=2)
 
 def _reset_operator_session():
     global _OPERATOR_SESSION
@@ -2223,11 +2255,39 @@ def operator_list_sessions() -> JSONResponse:
     sessions_dir = APP_ROOT / "operator_sessions"
     sessions = []
     if sessions_dir.exists():
-        for file_path in sessions_dir.glob("session_*.json"):
+        # Support both old file format and new folder format
+        session_files = list(sessions_dir.glob("session_*.json"))
+        session_folders = [d for d in sessions_dir.glob("session_*") if d.is_dir()]
+
+        for file_path in session_files:
             try:
                 with open(file_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                     name = file_path.name.replace("session_", "").replace(f"_{data.get('session_id')}.json", "")
+                    if data.get("custom_name"):
+                        if "_-_" in name:
+                            parts = name.split("_-_", 1)
+                            date_part = parts[0][:10] + " " + parts[0][11:] if len(parts[0]) >= 11 and parts[0][10] == '_' else parts[0].replace("_", " ")
+                            name = f"{date_part} - {data.get('custom_name')}"
+                    sessions.append({
+                        "session_id": data.get("session_id"),
+                        "custom_name": data.get("custom_name", ""),
+                        "display_name": name,
+                        "updated_at": data.get("updated_at"),
+                        "status": data.get("status"),
+                        "source_filename": data.get("source", {}).get("filename") if data.get("source") else None
+                    })
+            except Exception:
+                continue
+
+        for folder_path in session_folders:
+            json_file = folder_path / "session.json"
+            if not json_file.exists():
+                continue
+            try:
+                with open(json_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    name = folder_path.name.replace("session_", "").replace(f"_{data.get('session_id')}", "")
                     # Reconstruct display name properly if custom name exists since we clean it for the filename
                     if data.get("custom_name"):
                         if "_-_" in name:
@@ -2249,10 +2309,35 @@ def operator_list_sessions() -> JSONResponse:
     sessions.sort(key=lambda x: x.get("updated_at") or "", reverse=True)
     return JSONResponse({"sessions": sessions})
 
+@app.get("/api/operator/sessions/{session_id}/image")
+def operator_get_session_image(session_id: str):
+    sessions_dir = APP_ROOT / "operator_sessions"
+    for folder_path in sessions_dir.glob(f"session_*{session_id}"):
+        if folder_path.is_dir():
+            img_file = folder_path / "image.jpg"
+            if img_file.exists():
+                return FileResponse(str(img_file), media_type="image/jpeg")
+    return JSONResponse({"error": "Image not found"}, status_code=404)
+
 @app.get("/api/operator/sessions/{session_id}")
 def operator_get_session_by_id(session_id: str) -> JSONResponse:
     global _OPERATOR_SESSION
     sessions_dir = APP_ROOT / "operator_sessions"
+
+    # Try folder format first
+    for folder_path in sessions_dir.glob(f"session_*{session_id}"):
+        if folder_path.is_dir():
+            json_file = folder_path / "session.json"
+            if json_file.exists():
+                try:
+                    with open(json_file, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                        _OPERATOR_SESSION = data
+                        return JSONResponse(_OPERATOR_SESSION)
+                except Exception as e:
+                    return JSONResponse({"error": str(e)}, status_code=500)
+
+    # Fallback to old file format
     for file_path in sessions_dir.glob(f"session_*{session_id}.json"):
         if file_path.exists():
             try:
@@ -2262,6 +2347,7 @@ def operator_get_session_by_id(session_id: str) -> JSONResponse:
                     return JSONResponse(_OPERATOR_SESSION)
             except Exception as e:
                 return JSONResponse({"error": str(e)}, status_code=500)
+
     return JSONResponse({"error": "Session not found"}, status_code=404)
 
 @app.post("/api/operator/save")
@@ -2272,11 +2358,26 @@ async def operator_save_session(request: Request) -> JSONResponse:
         custom_name = data.get("name", "")
         save_as_new = data.get("save_as_new", False)
 
+        old_session_id = _OPERATOR_SESSION.get("session_id")
+
         if save_as_new:
             _OPERATOR_SESSION["session_id"] = uuid.uuid4().hex
             # Reset timeline and notes ID to differentiate if needed, though copying is fine
             if not custom_name and "custom_name" in _OPERATOR_SESSION:
                 del _OPERATOR_SESSION["custom_name"]
+
+            # Carry over the image if we are saving as new
+            if old_session_id:
+                sessions_dir = APP_ROOT / "operator_sessions"
+                # Find old folder
+                for old_folder in sessions_dir.glob(f"session_*{old_session_id}"):
+                    if old_folder.is_dir():
+                        old_img = old_folder / "image.jpg"
+                        if old_img.exists():
+                            import base64
+                            with open(old_img, "rb") as f:
+                                _OPERATOR_SESSION["source_image_data"] = base64.b64encode(f.read()).decode("utf-8")
+                            break
 
         _save_operator_session(custom_name)
         return JSONResponse({"status": "session_saved", "session_id": _OPERATOR_SESSION["session_id"]})
@@ -2448,6 +2549,11 @@ async def operator_analyze(
 ) -> JSONResponse:
     _reset_operator_session()
     _OPERATOR_SESSION["status"] = "running"
+
+    image_bytes = await image.read()
+    import base64
+    _OPERATOR_SESSION["source_image_data"] = base64.b64encode(image_bytes).decode("utf-8")
+    await image.seek(0)
 
     _add_timeline_event("Source uploaded", "info")
 
