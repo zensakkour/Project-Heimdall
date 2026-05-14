@@ -627,9 +627,8 @@ function ensureLiveMap() {
         if (liveMap.getZoom() <= globePitchResetZoom && liveMap.getPitch() !== 0) {
           easeToCentered({ center: liveMap.getCenter(), pitch: 0, duration: 180 });
         }
-        refreshCandidateMarkers();
+        updatePinScale();
       });
-      liveMap.on("moveend", refreshCandidateMarkers);
 
       bringCandidateLayersToFront();
 
