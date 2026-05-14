@@ -466,7 +466,7 @@ function ensureLiveMap() {
       style: mapStyleUrl,
       center: globeCenter,
       zoom: globeZoom,
-      pitch: 0, 
+      pitch: 0,
       bearing: 0,
       padding: padding,
       projection: { type: "globe" },
@@ -823,10 +823,10 @@ function selectCandidate(index) {
   droppedPinLocation = null;
   const cards = document.querySelectorAll(".candidate-card");
   if (!cards.length) return;
-  
+
   if (index < 0) index = 0;
   if (index >= cards.length) index = cards.length - 1;
-  
+
   const card = cards[index];
   const isAlreadySelected = card.classList.contains("active");
 
@@ -846,18 +846,18 @@ function selectCandidate(index) {
   updateSelectedMarker(index);
   updateHtmlMarkerSelection(index);
   card.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  
+
   const lat = parseFloat(card.dataset.lat);
   const lon = parseFloat(card.dataset.lon);
-  
+
   if (liveMap) {
     console.log(`LOG: Inspecting candidate #${index + 1} at ${lat}, ${lon}`);
     flyToCentered({
-      center: [lon, lat], 
-      zoom: 18, 
+      center: [lon, lat],
+      zoom: 18,
       pitch: 0,
       bearing: 0,
-      duration: 1200 
+      duration: 1200
     });
   }
 
@@ -927,10 +927,10 @@ function renderCandidateList(result) {
     card.dataset.lat = lat;
     card.dataset.lon = lon;
     card.dataset.index = idx;
-    
+
     const coordString = `${Number(lat).toFixed(6)}, ${Number(lon).toFixed(6)}`;
     const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
-    
+
     // Check source
     const sourceId = cand.match_id || cand.source || "N/A";
     const isExif = sourceId === "exif:gps";
@@ -1014,7 +1014,7 @@ function renderCandidateList(result) {
 
     container.appendChild(card);
   });
-  
+
   // Attach street view handlers
   container.querySelectorAll(".street-view-btn").forEach(btn => {
       btn.addEventListener("click", (e) => {
@@ -1392,7 +1392,7 @@ function renderLiveMap(result, { resetView = false } = {}) {
   ensureLiveMap();
   const fusion = result?.fused_estimate;
   const candidates = sortedCandidates(result);
-  
+
   if (!fusion || candidates.length === 0) return;
 
   const visibleCandidates = candidates.slice(0, topLimit);
@@ -1435,7 +1435,7 @@ function renderSummary(result) {
   setMetric("diag-backend", res.source?.filename || "-");
   setMetric("diag-worker", res.runtime?.worker_mode || "-");
   setMetric("diag-tier", geo.tier || "-");
-  
+
   // Radius: prefer non-zero fusion radius, fallback to geo uncertainty
   let radius = "-";
   if (fusion.radius_km !== undefined && fusion.radius_km > 0) {
@@ -1446,7 +1446,7 @@ function renderSummary(result) {
     radius = `${geo.uncertainty_m}m`;
   }
   setMetric("diag-radius", radius);
-  
+
   // Model Status: Check safe_demo or backend name
   const isDemo = Boolean(res.safe_demo);
   const modelStatus = isDemo ? "DEMO FALLBACK" : "REAL MODEL";
@@ -1499,7 +1499,7 @@ function setupFilePicker() {
   const removeBtn = byId("remove-image");
   const geolocateBtn = byId("geolocate-image");
   const errorContainer = byId("analysis-error");
-  
+
   if (!input || !trigger) return;
 
   trigger.addEventListener("click", () => input.click());
@@ -1584,12 +1584,12 @@ function setupAnalysis() {
 
     const form = new FormData();
     form.append("image", file);
-    
+
     try {
       if (progress) progress.style.display = "block";
       if (errorContainer) errorContainer.style.display = "none";
       btn.disabled = true;
-      
+
       const startTime = performance.now();
 
       const devMode = byId("dev-mode-toggle")?.checked ? "1" : "";
@@ -1604,7 +1604,7 @@ function setupAnalysis() {
       }
 
       const duration = (performance.now() - startTime) / 1000;
-      
+
       console.log(`LOG: Pipeline finished in ${duration.toFixed(2)}s`);
       if (result.safe_demo) {
         const fallbackReason = result.geo_debug?.fallback_reason || result.fallback_reason || "server returned demo fallback";
@@ -1711,7 +1711,7 @@ function setupMapControls() {
   }
 
   liveMapReady?.then(updateTiltLabel);
-  
+
   byId("map-reset-paris").addEventListener("click", () => {
     easeToCentered({ center: parisCenter, zoom: 11, pitch: 0, bearing: 0, duration: 1400 });
     window.setTimeout(updateTiltLabel, 1420);
@@ -1804,7 +1804,7 @@ function setupDiagnostics() {
   const copySumBtn = byId("copy-diag-all");
   const copyJsonBtn = byId("copy-json");
   const expandJsonBtn = byId("expand-json");
-  
+
   const jsonModal = byId("json-modal");
   const jsonModalText = byId("modal-json-text");
   const closeJsonBtn = byId("close-json-modal");
@@ -1911,7 +1911,7 @@ function init() {
   }
 
   loadSessionList();
-  
+
   if (loadedSessionId) {
       fetch(`/api/operator/sessions/${loadedSessionId}`)
           .then(r => {
@@ -1940,17 +1940,6 @@ function init() {
                if (data.operator_notes) {
                    const noteInput = byId("operator-note-input");
                    if (noteInput) noteInput.value = data.operator_notes;
-               }
-               if (data.image_url) {
-                   const thumb = byId("source-thumb");
-                   const lightboxImg = byId("lightbox-img");
-                   if (thumb) thumb.src = data.image_url;
-                   if (lightboxImg) {
-                       lightboxImg.src = data.image_url;
-                       lightboxImg.onload = renderLightboxIntel;
-                   }
-                   if (byId("ingest-block")) byId("ingest-block").style.display = "none";
-                   if (byId("preview-block")) byId("preview-block").style.display = "flex";
                }
           })
           .catch(err => console.error("Failed to auto-load session:", err));
@@ -2491,17 +2480,6 @@ function setupOperatorActions() {
                          const noteInput = byId("operator-note-input");
                          if (noteInput) noteInput.value = data.operator_notes;
                      }
-                     if (data.image_url) {
-                         const thumb = byId("source-thumb");
-                         const lightboxImg = byId("lightbox-img");
-                         if (thumb) thumb.src = data.image_url;
-                         if (lightboxImg) {
-                             lightboxImg.src = data.image_url;
-                             lightboxImg.onload = renderLightboxIntel;
-                         }
-                         if (byId("ingest-block")) byId("ingest-block").style.display = "none";
-                         if (byId("preview-block")) byId("preview-block").style.display = "flex";
-                     }
                      loadSessionList();
                 })
                 .catch(err => console.error("Failed to load session:", err));
@@ -2658,11 +2636,8 @@ function renderNotesList() {
 
             card.innerHTML = `
                 ${targetHtml}
-                <div class="card-sub-wrap note-text-wrap" style="margin-bottom: 6px;">
-                  <div class="card-sub note-text" style="color: #fff; font-size: 12px;">${note.text}</div>
-                  <button class="source-more note-more" type="button" hidden>Show more</button>
-                </div>
-                <div style="font-size: 9px; color: var(--text-secondary); text-align: right; border-top: none;">${timeStr}</div>
+                <div style="font-size: 12px; color: #fff; line-height: 1.4; margin-bottom: 6px;">${note.text}</div>
+                <div style="font-size: 9px; color: var(--text-secondary); text-align: right;">${timeStr}</div>
             `;
             if (note.note_id) card.dataset.noteId = note.note_id;
 
@@ -2679,22 +2654,6 @@ function renderNotesList() {
             });
 
             list.appendChild(card);
-
-            const subEl = card.querySelector(".note-text");
-            const sourceMore = card.querySelector(".note-more");
-            if (subEl && sourceMore) {
-              requestAnimationFrame(() => {
-                const isOverflowing = subEl.scrollHeight > subEl.clientHeight + 1;
-                sourceMore.hidden = !isOverflowing;
-              });
-
-              sourceMore.addEventListener("click", (e) => {
-                e.stopPropagation();
-                const isExp = subEl.classList.toggle("expanded");
-                sourceMore.textContent = isExp ? "Show less" : "Show more";
-              });
-            }
-
         });
     });
 }
