@@ -1505,7 +1505,9 @@ function renderSummary(result) {
   renderTimeline(result);
   renderClues(result);
   selectedLightboxDetectionIndex = 0;
-  renderLightboxIntel();
+  // Only draw overlay if image is already decoded; doLoadSession sets onload for the async case
+  const lbImg = byId("lightbox-img");
+  if (lbImg && lbImg.naturalWidth > 0) renderLightboxIntel();
 }
 
 function showAnalysisAlert(message) {
@@ -1945,7 +1947,15 @@ function doLoadSession(sid) {
             loadedSessionId = data.session_id || sid;
             localStorage.setItem("heimdallSessionId", loadedSessionId);
 
-            // Restore source image thumbnail
+            lastResult = {
+                geo: data.fused_estimate,
+                candidates: data.candidates,
+                clues: data.clues,
+                detections: data.detections
+            };
+
+            // Restore source image; wire onload so detection overlay renders
+            // after the image is actually decoded (naturalWidth > 0)
             if (data.source?.image_data_url) {
                 const thumb = byId("source-thumb");
                 const filenameLbl = byId("preview-filename");
@@ -1953,22 +1963,24 @@ function doLoadSession(sid) {
                 const ingestBlock = byId("ingest-block");
                 const lightboxImg = byId("lightbox-img");
                 const lightboxName = byId("lightbox-filename");
-                if (thumb) thumb.src = data.source.image_data_url;
+                const geolocateBtn = byId("geolocate-image");
+
                 if (filenameLbl) filenameLbl.textContent = data.source.filename || "Session image";
                 if (previewBlock) previewBlock.style.display = "flex";
                 if (ingestBlock) ingestBlock.style.display = "none";
-                if (lightboxImg) lightboxImg.src = data.source.image_data_url;
                 if (lightboxName) lightboxName.textContent = data.source.filename || "";
-                const geolocateBtn = byId("geolocate-image");
                 if (geolocateBtn) geolocateBtn.disabled = false;
+
+                if (lightboxImg) {
+                    selectedLightboxDetectionIndex = 0;
+                    lightboxImg.onload = () => renderLightboxIntel();
+                    lightboxImg.src = data.source.image_data_url;
+                    // If browser already has it cached
+                    if (lightboxImg.complete && lightboxImg.naturalWidth > 0) renderLightboxIntel();
+                }
+                if (thumb) thumb.src = data.source.image_data_url;
             }
 
-            lastResult = {
-                geo: data.fused_estimate,
-                candidates: data.candidates,
-                clues: data.clues,
-                detections: data.detections
-            };
             renderSummary(data);
             renderCandidateList(lastResult);
             renderLiveMap(lastResult);
