@@ -2411,7 +2411,6 @@ function setupOperatorActions() {
     const rejectBtn = byId("btn-reject-cand");
     const noteInput = byId("operator-note-input");
     const saveNoteBtn = byId("btn-save-note");
-    const exportBtn = byId("btn-export-session");
     const saveSessionBtn = byId("btn-save-session");
     const newSessionBtn = byId("btn-new-session");
     const dropPinBtn = byId("btn-drop-pin");
@@ -2566,21 +2565,6 @@ function setupOperatorActions() {
         });
     }
 
-    if (exportBtn) {
-        exportBtn.addEventListener("click", () => {
-             fetch("/api/operator/export.json").then(r=>r.json()).then(data => {
-                  const blob = new Blob([JSON.stringify(data, null, 2)], {type: "application/json"});
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = url;
-                  a.download = "session_export.json";
-                  document.body.appendChild(a);
-                  a.click();
-                  document.body.removeChild(a);
-                  URL.revokeObjectURL(url);
-             });
-        });
-    }
 
     const sessionSelect = byId("load-session-select");
     const loadSessionBtn = byId("btn-load-session");

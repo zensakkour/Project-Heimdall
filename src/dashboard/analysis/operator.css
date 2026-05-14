@@ -89,7 +89,7 @@ html, body {
   justify-content: space-between;
   height: 40px;
   min-height: 40px;
-  padding: 0 14px;
+  padding: 0 var(--panel-inset);
   border-bottom: 1px solid var(--glass-border);
   flex-shrink: 0;
   gap: 8px;
@@ -297,7 +297,7 @@ html, body {
 
 /* --- Preview Block --- */
 .preview-header {
-  padding: 14px 16px;
+  padding: 14px var(--panel-inset);
 }
 
 .preview-block {
@@ -1853,7 +1853,7 @@ html, body {
 .view-tabs {
   display: flex;
   gap: 0;
-  margin: 10px 16px 0;
+  margin: 10px var(--panel-inset) 0;
   flex-shrink: 0;
   border-bottom: 1px solid var(--glass-border);
 }
