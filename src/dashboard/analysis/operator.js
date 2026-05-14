@@ -12,7 +12,7 @@ let svState = {
     sequence: null, seqPos: null, seqTotal: null,
     candidates: [], minimap: null, minimapReady: null, minimapMarkers: [],
 };
-const SV_CAND_COLORS = ["#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#a855f7"];
+const SV_CAND_COLORS = ["#f2f2f2", "#c9c9c9", "#9f9f9f", "#777777", "#555555"];
 
 let loadedSessionId = null;
 
