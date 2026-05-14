@@ -406,14 +406,13 @@ html, body {
 }
 
 .profile-row {
-  display: grid;
+  display: flex;
+  align-items: center;
   gap: var(--control-gap);
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
 
-.dev-mode-row {
-  align-items: center;
-  margin-top: 8px;
+.profile-row select {
+  flex: 1;
 }
 
 .inline-checkbox {
@@ -422,27 +421,22 @@ html, body {
   cursor: pointer;
   display: flex;
   flex-direction: row;
+  flex-shrink: 0;
   font-size: 11px;
-  gap: 8px;
-  grid-column: 1 / -1;
-  justify-content: flex-start;
+  gap: 6px;
   line-height: 1.2;
-  padding-left: 0;
-  width: 100%;
+  white-space: nowrap;
 }
 
 .inline-checkbox input[type="checkbox"] {
   flex: 0 0 auto;
-  justify-self: end;
   height: 14px;
-  margin: 0 0 0 auto;
-  min-height: 0;
+  margin: 0;
   padding: 0;
   width: 14px;
 }
 
 .profile-row select {
-  flex: 1;
   height: 42px !important;
   min-height: 42px !important;
   background: rgba(0, 0, 0, 0.5);
