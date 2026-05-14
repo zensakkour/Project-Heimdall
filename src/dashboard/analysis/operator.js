@@ -2420,8 +2420,8 @@ function setupOperatorActions() {
         btnUpdateSession.addEventListener("click", () => {
             sessionSaveModal.classList.remove("active");
             postForm("/api/operator/save", JSON.stringify({ save_as_new: false }))
-                .then(r => r.json())
-                .then(afterSessionSaved);
+                .then(afterSessionSaved)
+                .catch(err => console.error("Save failed:", err));
         });
     }
 
@@ -2431,8 +2431,8 @@ function setupOperatorActions() {
             const sessionName = prompt("Enter a name for this session (optional):");
             if (sessionName !== null) {
                 postForm("/api/operator/save", JSON.stringify({ name: sessionName.trim(), save_as_new: true }))
-                    .then(r => r.json())
-                    .then(afterSessionSaved);
+                    .then(afterSessionSaved)
+                    .catch(err => console.error("Save failed:", err));
             }
         });
     }
@@ -2453,8 +2453,8 @@ function setupOperatorActions() {
                 const sessionName = prompt("Enter a name for this session (optional):");
                 if (sessionName !== null) {
                     postForm("/api/operator/save", JSON.stringify({ name: sessionName.trim(), save_as_new: true }))
-                        .then(r => r.json())
-                        .then(afterSessionSaved);
+                        .then(afterSessionSaved)
+                        .catch(err => console.error("Save failed:", err));
                 }
             }
         });
