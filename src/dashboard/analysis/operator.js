@@ -1425,9 +1425,18 @@ function svUpdateMinimap() {
 
 function renderLiveMap(result, { resetView = false } = {}) {
   ensureLiveMap();
+
+  // Always clear existing markers and sources first
+  clearCandidateMarkers();
+  liveMapReady.then(() => {
+    liveMap.getSource("candidates")?.setData(emptyFeatureCollection);
+    liveMap.getSource("ring")?.setData({ type: "FeatureCollection", features: [] });
+    liveMap.getSource("mean")?.setData(emptyFeatureCollection);
+  });
+
   const fusion = result?.fused_estimate;
   const candidates = sortedCandidates(result);
-  
+
   if (!fusion || candidates.length === 0) return;
 
   const visibleCandidates = candidates.slice(0, topLimit);
@@ -1443,10 +1452,8 @@ function renderLiveMap(result, { resetView = false } = {}) {
   } : null;
 
   liveMapReady.then(() => {
-    liveMap.getSource("candidates").setData(emptyFeatureCollection);
     renderHtmlCandidateMarkers(visibleCandidates);
-    liveMap.getSource("ring").setData({ type: "FeatureCollection", features: ringFeature ? [ringFeature] : [] });
-    liveMap.getSource("mean").setData(emptyFeatureCollection);
+    liveMap.getSource("ring")?.setData({ type: "FeatureCollection", features: ringFeature ? [ringFeature] : [] });
     bringCandidateLayersToFront();
     if (resetView) {
       easeToCentered({
@@ -2434,8 +2441,7 @@ function setupOperatorActions() {
         newSessionBtn.addEventListener("click", () => {
             localStorage.removeItem("heimdallPendingLoad");
             localStorage.removeItem("heimdallSessionId");
-            fetch("/api/operator/reset", { method: "POST" })
-                .finally(() => window.location.reload());
+            window.location.reload();
         });
     }
 
