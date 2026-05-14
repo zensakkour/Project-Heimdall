@@ -2064,13 +2064,23 @@ function init() {
   setupPanelResize();
   setupPanelCollapse();
 
-  // Reset server session on every page load so stale notes/pins from a
-  // previous session don't bleed through before the operator explicitly loads one.
+  // On every page load: check if a session was queued to auto-load (set before reload).
+  // If yes, load it. If no, reset server so there's no stale state.
+  const pendingSessionId = localStorage.getItem("heimdallPendingLoad");
+  localStorage.removeItem("heimdallPendingLoad");
   loadedSessionId = null;
   localStorage.removeItem("heimdallSessionId");
-  fetch("/api/operator/reset", { method: "POST" }).catch(() => {});
 
-  loadSessionList();
+  if (pendingSessionId) {
+    loadSessionList().then(() => {
+      const sel = byId("load-session-select");
+      if (sel) sel.value = pendingSessionId;
+      doLoadSession(pendingSessionId);
+    });
+  } else {
+    fetch("/api/operator/reset", { method: "POST" }).catch(() => {});
+    loadSessionList();
+  }
 
   const tabGeotags = document.getElementById("tab-geotags");
   const tabNotes = document.getElementById("tab-notes");
@@ -2394,16 +2404,9 @@ function setupOperatorActions() {
 
     function afterSessionSaved(data) {
         if (data.session_id) {
-            loadedSessionId = data.session_id;
-            localStorage.setItem("heimdallSessionId", data.session_id);
+            localStorage.setItem("heimdallPendingLoad", data.session_id);
         }
-        if (sessionSaveModal) sessionSaveModal.classList.remove("active");
-        loadSessionList().then(() => {
-            // Auto-select and auto-load the saved session
-            const sel = byId("load-session-select");
-            if (sel && loadedSessionId) sel.value = loadedSessionId;
-            doLoadSession(loadedSessionId);
-        });
+        window.location.reload();
     }
 
     if (btnUpdateSession && sessionSaveModal) {
@@ -2429,52 +2432,10 @@ function setupOperatorActions() {
 
     if (newSessionBtn) {
         newSessionBtn.addEventListener("click", () => {
+            localStorage.removeItem("heimdallPendingLoad");
+            localStorage.removeItem("heimdallSessionId");
             fetch("/api/operator/reset", { method: "POST" })
-                .then(() => {
-                    loadedSessionId = null;
-                    localStorage.removeItem("heimdallSessionId");
-
-                    // Deselect the dropdown
-                    const sessionSelectEl = byId("load-session-select");
-                    if (sessionSelectEl) sessionSelectEl.value = "";
-
-                    setMetric("diag-backend", "-");
-                    setMetric("diag-worker", "-");
-                    setMetric("diag-tier", "-");
-                    setMetric("diag-radius", "-");
-                    setMetric("diag-model-status", "-");
-                    const rawJson = byId("raw-json");
-                    if (rawJson) rawJson.textContent = "{}";
-                    const modalJson = byId("modal-json-text");
-                    if (modalJson) modalJson.textContent = "{}";
-
-                    lastResult = null;
-                    selectedIndex = -1;
-                    droppedPinLocation = null;
-
-                    const progress = byId("progress");
-                    const errorContainer = byId("analysis-error");
-                    const previewBlock = byId("preview-block");
-                    const ingestBlock = byId("ingest-block");
-
-                    if (progress) progress.style.display = "none";
-                    if (errorContainer) errorContainer.style.display = "none";
-                    if (previewBlock) previewBlock.style.display = "none";
-                    if (ingestBlock) ingestBlock.style.display = "block";
-
-                    const geolocateBtn = byId("geolocate-image");
-                    if (geolocateBtn) geolocateBtn.disabled = true;
-
-                    renderCandidateList(null);
-                    renderLiveMap(null);
-                    renderTimeline(null);
-                    renderClues(null);
-                    renderNoteMarkers();
-                    renderNotesList();
-
-                    const noteInput = byId("operator-note-input");
-                    if (noteInput) noteInput.value = "";
-                });
+                .finally(() => window.location.reload());
         });
     }
 
@@ -2607,12 +2568,13 @@ function setupOperatorActions() {
                 warn.style.color = "#ef4444";
                 warn.style.fontSize = "11px";
                 warn.style.marginLeft = "8px";
-                warn.textContent = "Please select a session first.";
+                warn.textContent = "Select a session first.";
                 loadSessionBtn.parentElement.appendChild(warn);
                 setTimeout(() => warn.remove(), 3000);
                 return;
             }
-            doLoadSession(sid);
+            localStorage.setItem("heimdallPendingLoad", sid);
+            window.location.reload();
         });
     }
 
