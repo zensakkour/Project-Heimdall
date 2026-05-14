@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
 
@@ -2285,24 +2285,16 @@ def operator_get_session_by_id(session_id: str) -> JSONResponse:
     global _OPERATOR_SESSION
     sessions_dir = APP_ROOT / "operator_sessions"
 
-    # New: folder-per-session
+    # Per-session folder
     json_path = sessions_dir / session_id / "session.json"
     if json_path.exists():
         try:
             with open(json_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            # Re-attach image from separate file if present
+            # Signal the frontend that an image is available via the image endpoint
             source = data.get("source") or {}
-            img_file = source.get("image_file")
-            if img_file and not source.get("image_data_url"):
-                img_path = sessions_dir / session_id / img_file
-                if img_path.exists():
-                    img_bytes = img_path.read_bytes()
-                    ext = img_path.suffix.lstrip(".")
-                    ct = f"image/{'jpeg' if ext == 'jpg' else ext}"
-                    data["source"]["image_data_url"] = (
-                        f"data:{ct};base64," + base64.b64encode(img_bytes).decode("utf-8")
-                    )
+            if source.get("image_file") and not source.get("image_data_url"):
+                data["source"]["has_session_image"] = True
             _OPERATOR_SESSION = data
             return JSONResponse(_OPERATOR_SESSION)
         except Exception as e:
@@ -2319,6 +2311,18 @@ def operator_get_session_by_id(session_id: str) -> JSONResponse:
             return JSONResponse({"error": str(e)}, status_code=500)
 
     return JSONResponse({"error": "Session not found"}, status_code=404)
+
+
+@app.get("/api/operator/sessions/{session_id}/image")
+def operator_get_session_image(session_id: str):
+    sessions_dir = APP_ROOT / "operator_sessions"
+    session_dir = sessions_dir / session_id
+    for ext in ["jpg", "jpeg", "png", "webp", "gif"]:
+        img_path = session_dir / f"source.{ext}"
+        if img_path.exists():
+            ct = f"image/{'jpeg' if ext in ('jpg', 'jpeg') else ext}"
+            return Response(content=img_path.read_bytes(), media_type=ct)
+    return JSONResponse({"error": "Image not found"}, status_code=404)
 
 @app.post("/api/operator/save")
 async def operator_save_session(request: Request) -> JSONResponse:
