@@ -427,7 +427,7 @@ html, body {
   grid-column: 1 / -1;
   justify-content: flex-start;
   line-height: 1.2;
-  padding-left: var(--form-text-inset);
+  padding-left: 0;
   width: 100%;
 }
 
@@ -561,7 +561,7 @@ html, body {
 }
 
 .candidate-card {
-  padding: 11px 16px;
+  padding: 11px var(--panel-inset);
   background: transparent;
   border: none;
   border-left: 2px solid transparent;
@@ -985,7 +985,7 @@ html, body {
 
 .panel-collapse.active {
   display: block;
-  padding: 0 16px 14px;
+  padding: 0 var(--panel-inset) 14px;
 }
 
 .diag-body {
@@ -1991,8 +1991,15 @@ html, body {
 
 /* --- List Section Padded --- */
 .list-section-padded {
-  padding: var(--panel-inset);
-  padding-bottom: 0;
+  padding: var(--panel-inset) 0 0;
+}
+
+.list-section-padded .section-head-row {
+  padding: 0 var(--panel-inset);
+}
+
+#notes-list {
+  padding: 0 var(--panel-inset);
 }
 
 /* --- Note Actions Row --- */
