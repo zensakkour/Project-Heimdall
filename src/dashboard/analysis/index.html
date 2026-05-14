@@ -72,6 +72,7 @@
           <span class="brand-text">Project Heimdall — Paris</span>
         </div>
         <div style="display: flex; gap: 8px; align-items: center; margin-left: auto; padding-right: 12px;">
+          <button id="btn-new-session" class="btn-text" style="height: 28px; font-size: 11px; padding: 0 12px;">Start New Session</button>
           <button id="btn-save-session" class="primary-btn" style="height: 28px; font-size: 11px; padding: 0 12px;">Save Current Session</button>
           <select id="load-session-select" style="background: rgba(0,0,0,0.6); color: #fff; border: 1px solid var(--glass-border); padding: 4px 8px; border-radius: 4px; font-size: 12px; height: 28px; outline: none; cursor: pointer; max-width: 200px;">
              <option value="">-- Load Session --</option>
@@ -291,19 +292,86 @@
       </div>
     </div>
 
-    <!-- Street View Modal -->
-    <div id="street-view-modal" class="lightbox">
+    <!-- Street View Modal (Interactive) -->
+    <div id="street-view-modal" class="lightbox sv-modal">
       <div class="lightbox-backdrop" id="street-view-backdrop"></div>
-      <div class="lightbox-content" style="width: 85vw; max-width: 1100px; padding: 20px;">
-        <div class="modal-header" style="width: 100%; display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid var(--glass-border); padding-bottom: 12px;">
-           <span class="brand-text" style="font-size: 16px;">Street View Investigation</span>
-           <div id="street-view-info" style="font-size: 12px; color: var(--text-secondary);"></div>
+      <div class="sv-viewer-content" role="dialog" aria-modal="true" aria-label="Street View Investigation">
+        <!-- LEFT: image area -->
+        <div class="sv-image-wrap" id="sv-image-wrap">
+          <img id="sv-img" src="" alt="Street View" />
+          <canvas id="sv-overlay-canvas" class="sv-overlay-canvas"></canvas>
+          <div id="sv-loading" class="sv-loading">Loading…</div>
+          <div id="sv-error" class="sv-error" style="display:none;"></div>
         </div>
-        <div style="width: 100%; display: flex; justify-content: center; align-items: center; min-height: 300px; background: #000; border: 1px solid var(--glass-border); border-radius: 8px; overflow: hidden;">
-            <img id="street-view-img" src="" alt="Street View" style="max-width: 100%; max-height: 70vh; display: none;" />
-            <div id="street-view-error" style="color: var(--text-secondary); display: none;">No imagery available here.</div>
+
+        <!-- RIGHT: control panel (always visible) -->
+        <div class="sv-ctrl-panel">
+
+          <div class="sv-ctrl-header">
+            <span class="sv-ctrl-title">Street View</span>
+            <button id="close-street-view-modal" class="sv-close-btn">✕</button>
+          </div>
+
+          <div id="sv-meta" class="sv-meta-text"></div>
+
+          <div class="sv-heading-box">
+            <span class="sv-ctrl-lbl">Heading</span>
+            <span id="sv-heading-label" class="sv-heading-val">--°</span>
+          </div>
+
+          <div class="sv-ctrl-block">
+            <div class="sv-ctrl-lbl">Navigate</div>
+            <div class="sv-nav-grid">
+              <div></div>
+              <button id="sv-arrow-fwd" class="sv-ctrl-btn sv-dir-btn hidden" title="Forward (W / &#8593;)">&#8593;</button>
+              <div></div>
+              <button id="sv-arrow-left-img" class="sv-ctrl-btn sv-dir-btn" title="Look Left (A / &#8592;)">&#8592;</button>
+              <div class="sv-grid-dot">&#8226;</div>
+              <button id="sv-arrow-right-img" class="sv-ctrl-btn sv-dir-btn" title="Look Right (D / &#8594;)">&#8594;</button>
+              <div></div>
+              <button id="sv-arrow-back" class="sv-ctrl-btn sv-dir-btn hidden" title="Back (S / &#8595;)">&#8595;</button>
+              <div></div>
+            </div>
+          </div>
+
+          <div class="sv-ctrl-block">
+            <div class="sv-ctrl-lbl">Sequence</div>
+            <div class="sv-seq-row">
+              <button id="sv-btn-prev" class="sv-ctrl-btn" disabled>&#8592; Prev</button>
+              <span id="sv-seq-indicator" class="sv-seq-ind">&#8212; / &#8212;</span>
+              <button id="sv-btn-next" class="sv-ctrl-btn" disabled>Next &#8594;</button>
+            </div>
+          </div>
+
+          <div class="sv-ctrl-block">
+            <div class="sv-ctrl-lbl">Zoom &nbsp;<span id="sv-zoom-label" class="sv-zoom-lbl">100%</span></div>
+            <div class="sv-zoom-row">
+              <button id="sv-zoom-out" class="sv-ctrl-btn">&#8722;</button>
+              <button id="sv-zoom-in" class="sv-ctrl-btn">+</button>
+              <button id="sv-zoom-reset" class="sv-ctrl-btn" title="Reset zoom (R)">&#8634;</button>
+            </div>
+          </div>
+
+          <div class="sv-cand-list" id="sv-cand-list">
+            <div class="sv-cand-title">Geo Candidates</div>
+          </div>
+
         </div>
-        <button id="close-street-view-modal" class="lightbox-close">✕</button>
+      </div>
+    </div>
+
+    <!-- Save Session Modal -->
+    <div id="session-save-modal" class="lightbox">
+      <div class="lightbox-backdrop" id="session-save-backdrop"></div>
+      <div class="lightbox-content" style="width: 400px; padding: 20px; background: var(--glass-bg); border: 1px solid var(--glass-border);">
+        <div class="modal-header" style="margin-bottom: 16px; border-bottom: 1px solid var(--glass-border); padding-bottom: 12px;">
+           <span class="brand-text" style="font-size: 16px;">Save Session</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+           <button id="btn-modal-update-session" class="primary-btn" style="height: 36px; font-size: 13px;">Update Current Session</button>
+           <button id="btn-modal-save-new-session" class="primary-btn" style="height: 36px; font-size: 13px;">Save As New Session</button>
+           <button id="btn-modal-cancel-session" class="btn-text" style="height: 36px; font-size: 13px;">Cancel</button>
+        </div>
       </div>
     </div>
 
