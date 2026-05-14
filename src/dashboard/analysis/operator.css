@@ -33,8 +33,8 @@ html, body {
 
 .app-shell {
   display: grid;
-  grid-template-columns: 340px 1fr 360px;
-  grid-template-rows: 52px 1fr;
+  grid-template-columns: 350px 1fr 380px;
+  grid-template-rows: 60px 1fr;
   grid-template-areas:
     "header header header"
     "left   map    right";
@@ -335,7 +335,7 @@ html, body {
 
 .profile-row select {
   flex: 1;
-  min-height: 38px;
+  height: 42px;
   background: rgba(0, 0, 0, 0.5);
   border: 1px solid var(--glass-border);
   color: var(--text-primary);
@@ -351,7 +351,11 @@ html, body {
 .profile-row select:hover,
 .profile-row select:focus {
   border-color: rgba(255, 255, 255, 0.2);
-  outline: none;
+  outline: none;}
+
+/* Force geolocate button to match select height */
+#geolocate-image {
+  height: 42px;
 }
 
 /* --- Buttons --- */
@@ -717,94 +721,95 @@ html, body {
   align-self: end;
   justify-self: start;
   bottom: 0;
-  margin: 0 0 14px 14px;
+  margin: 0 0 12px 12px;
   position: relative;
   z-index: 10;
   display: flex;
   flex-direction: row;
   align-items: center;
   gap: 0;
-  background: rgba(14, 14, 14, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--glass-bg);
+  border: none;
   border-radius: 8px;
   padding: 2px 4px;
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(8px);
 }
 
 .map-controls button {
   background: transparent;
   border: 0;
-  color: var(--text-secondary);
-  height: 30px;
-  min-width: 30px;
+  color: var(--text-primary);
+  height: 32px;
+  min-width: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  border-radius: 5px;
+  border-radius: 4px;
   transition: all 0.15s ease;
-  padding: 0 7px;
+  padding: 0 8px;
 }
 
 .map-controls svg {
-  height: 16px;
-  width: 16px;
+  height: 18px;
+  width: 18px;
 }
 
-.map-controls svg path {
-  fill: none;
+.map-controls svg path,
+.map-controls svg circle,
+.map-controls svg line,
+.map-controls svg polyline,
+.map-controls svg rect {
   stroke: currentColor;
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 2;
+  stroke-width: 1.75;
 }
 
 .map-controls button:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .map-controls .btn-text {
-  min-width: 52px;
-  font-size: 9px;
+  min-width: 64px;
+  font-size: 10px;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-secondary);
+  letter-spacing: 0.04em;
 }
 
 .map-controls .tilt-handle {
   gap: 4px;
-  min-width: 54px;
-  padding: 0 8px;
+  min-width: 60px;
+  padding: 0 9px;
   touch-action: none;
   user-select: none;
 }
 
 .map-controls .tilt-handle.dragging {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.1);
   cursor: move;
 }
 
 .tilt-icon {
-  height: 14px;
-  width: 14px;
+  height: 16px;
+  width: 16px;
 }
 
 .tilt-label {
   color: var(--text-secondary);
   font-family: "JetBrains Mono", monospace;
-  font-size: 9px;
-  min-width: 26px;
+  font-size: 10px;
+  min-width: 30px;
   text-align: right;
 }
 
 .control-sep {
   width: 1px;
-  height: 16px;
-  background: rgba(255, 255, 255, 0.08);
-  margin: 0 3px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.1);
+  margin: 0 4px;
 }
 
 /* --- Collapsible Sections --- */
@@ -815,12 +820,12 @@ html, body {
   color: var(--text-secondary);
   cursor: pointer;
   display: flex;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
-  height: 44px;
+  height: 52px;
   justify-content: space-between;
   letter-spacing: 0.1em;
-  padding: 0 16px;
+  padding: 0 var(--panel-inset);
   text-transform: uppercase;
   width: 100%;
   transition: color 0.15s ease, background 0.15s ease;
@@ -1475,7 +1480,16 @@ html, body {
 .sv-seq-row {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
+}
+
+.sv-seq-row .sv-ctrl-btn {
+  flex: 0 0 auto;
+  min-width: 72px;
+  font-size: 13px;
+  height: 40px;
+  padding: 0 12px;
+  gap: 4px;
 }
 
 .sv-seq-ind {
@@ -1669,8 +1683,11 @@ html, body {
 
 .header-btn {
   height: 28px !important;
+  min-height: 28px !important;
+  max-height: 28px !important;
   font-size: 11px !important;
   padding: 0 11px !important;
+  min-width: 0 !important;
 }
 
 .header-select {
@@ -1680,7 +1697,9 @@ html, body {
   padding: 0 10px;
   border-radius: 7px;
   font-size: 11px;
-  height: 28px;
+  height: 28px !important;
+  min-height: 28px !important;
+  max-height: 28px !important;
   outline: none;
   cursor: pointer;
   max-width: 160px;
@@ -1744,15 +1763,19 @@ html, body {
   display: flex !important;
   align-items: center !important;
   gap: 5px !important;
-  height: 28px !important;
+  height: 32px !important;
+  min-height: 32px !important;
+  max-height: 32px !important;
   font-size: 11px !important;
   padding: 0 10px !important;
 }
 
 .note-save-btn {
-  height: 28px !important;
+  height: 32px !important;
+  min-height: 32px !important;
+  max-height: 32px !important;
   font-size: 11px !important;
-  padding: 0 12px !important;
+  padding: 0 14px !important;
 }
 
 /* --- Card Action Row --- */
