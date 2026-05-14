@@ -11,7 +11,7 @@
       crossorigin=""
     />
     <link rel="stylesheet" href="../theme.css?v=7" />
-    <link rel="stylesheet" href="operator.css?v=30" />
+    <link rel="stylesheet" href="operator.css?v=31" />
 
 <style>
 .session-timeline { font-size: 11px; color: var(--text-secondary); max-height: 150px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
@@ -295,7 +295,7 @@
     <!-- Street View Modal (Interactive) -->
     <div id="street-view-modal" class="lightbox sv-modal">
       <div class="lightbox-backdrop" id="street-view-backdrop"></div>
-      <div class="sv-viewer-content" role="dialog" aria-modal="true" aria-label="Street View Investigation">
+      <div class="lightbox-content sv-viewer-content" role="dialog" aria-modal="true" aria-label="Street View Investigation">
         <!-- LEFT: image area -->
         <div class="sv-image-wrap" id="sv-image-wrap">
           <img id="sv-img" src="" alt="Street View" />
@@ -388,7 +388,7 @@
     </div>
 
     <script src="https://unpkg.com/maplibre-gl@5.0.0/dist/maplibre-gl.js" crossorigin=""></script>
-    <script type="module" src="operator.js?v=30"></script>
+    <script type="module" src="operator.js?v=31"></script>
 
         <button id="btn-confirm-cand" style="display:none;"></button>
         <button id="btn-reject-cand" style="display:none;"></button>
