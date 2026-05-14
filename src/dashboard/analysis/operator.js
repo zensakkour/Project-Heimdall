@@ -6,6 +6,14 @@ let isStreetWalkMode = false;
 let droppedPinLocation = null;
 let currentManualPinMarker = null;
 
+// Street View interactive viewer state
+let svState = {
+    imageId: null, lat: null, lon: null, heading: null,
+    sequence: null, seqPos: null, seqTotal: null,
+    candidates: [], minimap: null, minimapReady: null, minimapMarkers: [],
+};
+const SV_CAND_COLORS = ["#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#a855f7"];
+
 let loadedSessionId = null;
 
 let noteMarkers = [];
@@ -1022,42 +1030,362 @@ function renderCandidateList(result) {
   if (noteInput) noteInput.value = "";
 }
 
+// ── Street View Math Helpers ─────────────────────────────────────
+
+function svBearingTo(fromLat, fromLon, toLat, toLon) {
+    const dLon = (toLon - fromLon) * Math.PI / 180;
+    const lat1 = fromLat * Math.PI / 180;
+    const lat2 = toLat * Math.PI / 180;
+    const y = Math.sin(dLon) * Math.cos(lat2);
+    const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+    return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+
+function svHaversineKm(lat1, lon1, lat2, lon2) {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// ── Street View State Helpers ─────────────────────────────────────
+
+function svSetLoading(active) {
+    const loading = byId("sv-loading");
+    const img = byId("sv-img");
+    const err = byId("sv-error");
+    if (loading) loading.style.display = active ? "flex" : "none";
+    if (img) img.style.visibility = active ? "hidden" : "visible";
+    if (err) err.style.display = "none";
+}
+
+function svSetError(msg) {
+    const loading = byId("sv-loading");
+    const img = byId("sv-img");
+    const err = byId("sv-error");
+    if (loading) loading.style.display = "none";
+    if (img) img.style.visibility = "hidden";
+    if (err) { err.style.display = "flex"; err.textContent = msg; }
+    // Clear canvas
+    const canvas = byId("sv-overlay-canvas");
+    if (canvas) { const ctx = canvas.getContext("2d"); ctx?.clearRect(0, 0, canvas.width, canvas.height); }
+}
+
+function svClose() {
+    byId("street-view-modal")?.classList.remove("active");
+    svApplyZoom(1);
+    if (svState.minimapMarkers) {
+        svState.minimapMarkers.forEach(m => m.remove());
+        svState.minimapMarkers = [];
+    }
+}
+
+// ── Zoom ─────────────────────────────────────────────────────────
+let svZoom = 1;
+const SV_ZOOM_MIN = 0.5, SV_ZOOM_MAX = 5, SV_ZOOM_STEP = 0.25;
+
+function svApplyZoom(z) {
+    svZoom = Math.max(SV_ZOOM_MIN, Math.min(SV_ZOOM_MAX, z));
+    const img = byId("sv-img");
+    if (img) img.style.transform = `scale(${svZoom})`;
+    const lbl = byId("sv-zoom-label");
+    if (lbl) lbl.textContent = `${Math.round(svZoom * 100)}%`;
+}
+
+// ── Street View Core ──────────────────────────────────────────────
+
 function openStreetView(lat, lon) {
     const modal = byId("street-view-modal");
-    const img = byId("street-view-img");
-    const err = byId("street-view-error");
-    const info = byId("street-view-info");
+    if (!modal) return;
 
-    if (!modal || !img || !err || !info) return;
+    // Collect top-5 candidates for overlay rendering
+    const rawCands = sortedCandidates(lastResult).slice(0, 5);
+    svState.candidates = rawCands.map((c, i) => ({
+        rank: i + 1,
+        lat: parseFloat(candidateMapLat(c)),
+        lon: parseFloat(candidateMapLon(c)),
+        score: candidateWeight(c),
+        color: SV_CAND_COLORS[i] || "#888",
+    }));
 
-    img.style.display = "none";
-    err.style.display = "none";
-    info.textContent = "Loading...";
     modal.classList.add("active");
+    svNavigateTo({ lat, lon });
+}
 
-    fetch(`/api/operator/street_view?lat=${lat}&lon=${lon}`)
-        .then(r => {
-            if (!r.ok) throw new Error("No local street imagery found near this point.");
-            return r.json();
-        })
-        .then(data => {
-            if (data.url) {
-                img.src = data.url;
-                img.style.display = "block";
-                const dateStr = data.captured_at ? ` | Date: ${data.captured_at}` : "";
-                const headStr = data.heading != null ? ` | Heading: ${Math.round(data.heading)}°` : "";
-                const distStr = data.distance_km != null ? ` | Dist: ${(data.distance_km * 1000).toFixed(0)}m` : "";
-                info.textContent = `Provider: ${data.provider}${dateStr}${headStr}${distStr}`;
-            } else {
-                throw new Error("No URL returned");
-            }
-        })
-        .catch(error => {
-            info.textContent = "";
-            err.style.display = "block";
-            err.textContent = "No imagery available here.";
-            console.error("Street view error:", error);
+async function svNavigateTo({ lat, lon, imageId, preferHeading } = {}) {
+    svSetLoading(true);
+
+    const params = new URLSearchParams();
+    if (imageId) params.set("image_id", imageId);
+    if (lat != null) params.set("lat", lat);
+    if (lon != null) params.set("lon", lon);
+    if (preferHeading != null) params.set("prefer_heading", preferHeading);
+
+    try {
+        const resp = await fetch(`/api/operator/street_view/neighbors?${params}`);
+        if (!resp.ok) {
+            const errorPayload = await resp.json().catch(() => ({}));
+            throw new Error(errorPayload.message || errorPayload.error || "No imagery found");
+        }
+        const data = await resp.json();
+        svApplyState(data);
+    } catch (err) {
+        svSetError(err?.message || "No imagery available here.");
+        console.error("Street view navigate error:", err);
+    }
+}
+
+function svApplyState(data) {
+    const cur = data.current;
+    if (!cur) { svSetError("No imagery returned."); return; }
+    const imageUrl = cur.url || cur.image_url || cur.image_path;
+    if (!imageUrl) { svSetError("Street imagery was found, but no displayable image URL was returned."); return; }
+
+    svState.imageId = cur.image_id;
+    svState.lat = cur.lat;
+    svState.lon = cur.lon;
+    svState.heading = cur.heading;
+    svState.sequence = cur.sequence;
+    svState.seqPos = data.sequence_position;
+    svState.seqTotal = data.sequence_total;
+
+    // Load image
+    const img = byId("sv-img");
+    if (img) {
+        img.removeAttribute("src");
+        img.style.visibility = "hidden";
+        img.onload = () => {
+            svSetLoading(false);
+            svDrawCandidateOverlays();
+        };
+        img.onerror = () => svSetError("Image failed to load.");
+        img.src = imageUrl;
+        if (img.complete && img.naturalWidth > 0) {
+            svSetLoading(false);
+            requestAnimationFrame(svDrawCandidateOverlays);
+        }
+    }
+
+    // Meta text
+    const meta = byId("sv-meta");
+    if (meta) {
+        const ts = cur.captured_at ? parseInt(cur.captured_at) : null;
+        const dateStr = ts && !isNaN(ts) ? new Date(ts).toLocaleDateString() : (cur.captured_at || "");
+        const distStr = cur.distance_km != null ? `${(cur.distance_km * 1000).toFixed(0)}m from target` : "";
+        meta.textContent = [cur.provider, dateStr, distStr].filter(Boolean).join(" · ");
+    }
+
+    // Sequence indicator
+    const seqInd = byId("sv-seq-indicator");
+    if (seqInd) seqInd.textContent = `${data.sequence_position} / ${data.sequence_total}`;
+
+    // Heading label
+    const headLabel = byId("sv-heading-label");
+    if (headLabel) headLabel.textContent = cur.heading != null ? `${Math.round(cur.heading)}°` : "--°";
+
+    // Sequence buttons
+    const prevBtn = byId("sv-btn-prev");
+    const nextBtn = byId("sv-btn-next");
+    if (prevBtn) { prevBtn.disabled = !data.prev; prevBtn.dataset.navId = data.prev?.image_id || ""; }
+    if (nextBtn) { nextBtn.disabled = !data.next; nextBtn.dataset.navId = data.next?.image_id || ""; }
+
+    // Directional nav buttons in the right panel
+    const fwdArrow = byId("sv-arrow-fwd");
+    const backArrow = byId("sv-arrow-back");
+    if (fwdArrow) {
+        fwdArrow.classList.toggle("hidden", !data.next);
+        fwdArrow.dataset.navId = data.next?.image_id || "";
+    }
+    if (backArrow) {
+        backArrow.classList.toggle("hidden", !data.prev);
+        backArrow.dataset.navId = data.prev?.image_id || "";
+    }
+
+    svRenderCandidateList();
+    svUpdateMinimap();
+}
+
+function svDrawCandidateOverlays() {
+    const canvas = byId("sv-overlay-canvas");
+    const img = byId("sv-img");
+    if (!canvas || !img || svState.heading == null) return;
+
+    // Position canvas exactly over the rendered image (which is flex-centered in sv-image-wrap)
+    const iL = img.offsetLeft;
+    const iT = img.offsetTop;
+    const iW = img.offsetWidth;
+    const iH = img.offsetHeight;
+    if (!iW || !iH) return;
+
+    canvas.style.left = iL + "px";
+    canvas.style.top = iT + "px";
+    canvas.style.width = iW + "px";
+    canvas.style.height = iH + "px";
+    canvas.style.inset = "auto"; // override CSS inset:0
+    canvas.width = iW;
+    canvas.height = iH;
+
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, iW, iH);
+
+    if (svState.candidates.length === 0) return;
+
+    const FOV = 90;
+    const camHeading = svState.heading;
+
+    svState.candidates.forEach(cand => {
+        if (cand.lat == null || cand.lon == null || isNaN(cand.lat)) return;
+
+        const bearing = svBearingTo(svState.lat, svState.lon, cand.lat, cand.lon);
+        let relAngle = (bearing - camHeading + 360) % 360;
+        if (relAngle > 180) relAngle -= 360; // -180 to +180
+
+        if (Math.abs(relAngle) > FOV / 2) return;
+
+        const x = (0.5 + relAngle / FOV) * iW;
+        // Pin drops from upper-middle of the image
+        const pinY = iH * 0.42;
+        const distKm = svHaversineKm(svState.lat, svState.lon, cand.lat, cand.lon);
+
+        // Dashed ground line from pin bottom to bottom of image
+        ctx.save();
+        ctx.setLineDash([3, 4]);
+        ctx.strokeStyle = cand.color + "66";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(x, pinY + 20);
+        ctx.lineTo(x, iH - 6);
+        ctx.stroke();
+        ctx.restore();
+
+        // Outer glow
+        ctx.beginPath();
+        ctx.arc(x, pinY, 24, 0, Math.PI * 2);
+        ctx.fillStyle = cand.color + "1a";
+        ctx.fill();
+
+        // Pin circle
+        ctx.beginPath();
+        ctx.arc(x, pinY, 17, 0, Math.PI * 2);
+        ctx.fillStyle = cand.color + "cc";
+        ctx.fill();
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Rank number
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "bold 12px 'Courier New', monospace";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(`#${cand.rank}`, x, pinY);
+
+        // Distance badge below pin
+        const label = `${(distKm * 1000).toFixed(0)}m`;
+        ctx.font = "9px monospace";
+        const bW = ctx.measureText(label).width + 8;
+        const bX = x - bW / 2;
+        const bY = pinY + 22;
+        ctx.fillStyle = "rgba(0,0,0,0.65)";
+        ctx.beginPath();
+        if (ctx.roundRect) {
+            ctx.roundRect(bX, bY, bW, 14, 3);
+        } else {
+            ctx.rect(bX, bY, bW, 14);
+        }
+        ctx.fill();
+        ctx.fillStyle = cand.color;
+        ctx.textBaseline = "middle";
+        ctx.fillText(label, x, bY + 7);
+    });
+}
+
+function svRenderCandidateList() {
+    const list = byId("sv-cand-list");
+    if (!list) return;
+
+    list.innerHTML = '<div class="sv-cand-title">Geo Candidates</div>';
+
+    if (!svState.lat || svState.heading == null) return;
+
+    const FOV = 90;
+    svState.candidates.forEach(cand => {
+        if (cand.lat == null || isNaN(cand.lat)) return;
+
+        const bearing = svBearingTo(svState.lat, svState.lon, cand.lat, cand.lon);
+        let relAngle = (bearing - svState.heading + 360) % 360;
+        if (relAngle > 180) relAngle -= 360;
+        const inView = Math.abs(relAngle) <= FOV / 2;
+        const distKm = svHaversineKm(svState.lat, svState.lon, cand.lat, cand.lon);
+        const bearingLabel = inView
+            ? "IN VIEW"
+            : relAngle > 0
+                ? `${Math.round(relAngle)}° right`
+                : `${Math.round(-relAngle)}° left`;
+
+        const item = document.createElement("div");
+        item.className = `sv-cand-item${inView ? " in-view" : ""}`;
+        item.innerHTML = `
+            <div class="sv-cand-dot" style="background:${cand.color}"></div>
+            <div class="sv-cand-info">
+                <div class="sv-cand-rank">#${cand.rank} &nbsp;${(cand.score * 100).toFixed(0)}%</div>
+                <div class="sv-cand-bearing">${bearingLabel} · ${(distKm * 1000).toFixed(0)}m</div>
+            </div>`;
+        list.appendChild(item);
+    });
+}
+
+function svInitMinimap() {
+    const container = byId("sv-minimap");
+    if (!container || svState.minimap) return;
+
+    try {
+        svState.minimap = new maplibregl.Map({
+            container: "sv-minimap",
+            style: mapStyleUrl,
+            center: parisCenter,
+            zoom: 15,
+            interactive: false,
+            attributionControl: false,
         });
+        svState.minimapReady = new Promise(resolve => svState.minimap.on("load", resolve));
+    } catch (e) {
+        // Mini-map is enhancement only — ignore failures
+    }
+}
+
+function svUpdateMinimap() {
+    if (!svState.minimap) svInitMinimap();
+    if (!svState.minimapReady || svState.lat == null) return;
+
+    svState.minimapReady.then(() => {
+        svState.minimap.setCenter([svState.lon, svState.lat]);
+        svState.minimap.setZoom(16);
+
+        // Clear old markers
+        (svState.minimapMarkers || []).forEach(m => m.remove());
+        svState.minimapMarkers = [];
+
+        // Camera position marker (white dot with heading arrow)
+        const camEl = document.createElement("div");
+        camEl.style.cssText = `width:14px;height:14px;border-radius:50%;background:#fff;border:2px solid #10b981;box-shadow:0 0 6px rgba(16,185,129,0.6);`;
+        const camMarker = new maplibregl.Marker({ element: camEl })
+            .setLngLat([svState.lon, svState.lat])
+            .addTo(svState.minimap);
+        svState.minimapMarkers.push(camMarker);
+
+        // Candidate markers on mini-map
+        svState.candidates.forEach(cand => {
+            if (cand.lat == null || isNaN(cand.lat)) return;
+            const el = document.createElement("div");
+            el.style.cssText = `width:10px;height:10px;border-radius:50%;background:${cand.color};border:1.5px solid rgba(255,255,255,0.5);`;
+            const marker = new maplibregl.Marker({ element: el })
+                .setLngLat([cand.lon, cand.lat])
+                .addTo(svState.minimap);
+            svState.minimapMarkers.push(marker);
+        });
+    }).catch(() => {});
 }
 
 function renderLiveMap(result, { resetView = false } = {}) {
@@ -1418,6 +1746,40 @@ function setupKeyboardNav() {
     } else if (e.key === "Enter") {
       e.preventDefault();
       if (selectedIndex >= 0) selectCandidate(selectedIndex);
+    }
+  });
+
+  // Street view keyboard navigation (WASD + arrows + ESC)
+  window.addEventListener("keydown", (e) => {
+    if (!byId("street-view-modal")?.classList.contains("active")) return;
+    if (e.key === "Escape") {
+      e.preventDefault();
+      svClose();
+    } else if (e.key === "ArrowUp" || e.key === "w" || e.key === "W") {
+      // Forward: next in sequence
+      e.preventDefault();
+      byId("sv-arrow-fwd")?.click();
+    } else if (e.key === "ArrowDown" || e.key === "s" || e.key === "S") {
+      // Backward: prev in sequence
+      e.preventDefault();
+      byId("sv-arrow-back")?.click();
+    } else if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") {
+      // Look left
+      e.preventDefault();
+      byId("sv-arrow-left-img")?.click();
+    } else if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") {
+      // Look right
+      e.preventDefault();
+      byId("sv-arrow-right-img")?.click();
+    } else if (e.key === "+" || e.key === "=") {
+      e.preventDefault();
+      svApplyZoom(svZoom + SV_ZOOM_STEP);
+    } else if (e.key === "-") {
+      e.preventDefault();
+      svApplyZoom(svZoom - SV_ZOOM_STEP);
+    } else if (e.key === "r" || e.key === "R") {
+      e.preventDefault();
+      svApplyZoom(1);
     }
   });
 }
@@ -1786,12 +2148,77 @@ function renderLightboxIntel() {
 }
 
 function setupOperatorActions() {
+    // Street View navigation
     const closeStreetViewBtn = byId("close-street-view-modal");
-    if (closeStreetViewBtn) {
-        closeStreetViewBtn.addEventListener("click", () => {
-             byId("street-view-modal")?.classList.remove("active");
-        });
-    }
+    if (closeStreetViewBtn) closeStreetViewBtn.addEventListener("click", svClose);
+
+    const svBackdrop = byId("street-view-backdrop");
+    if (svBackdrop) svBackdrop.addEventListener("click", svClose);
+
+    const svPrevBtn = byId("sv-btn-prev");
+    if (svPrevBtn) svPrevBtn.addEventListener("click", () => {
+        const id = svPrevBtn.dataset.navId;
+        if (id) svNavigateTo({ imageId: id });
+    });
+
+    const svNextBtn = byId("sv-btn-next");
+    if (svNextBtn) svNextBtn.addEventListener("click", () => {
+        const id = svNextBtn.dataset.navId;
+        if (id) svNavigateTo({ imageId: id });
+    });
+
+    const svLeftBtn = byId("sv-btn-left");
+    if (svLeftBtn) svLeftBtn.addEventListener("click", () => {
+        const ph = ((svState.heading || 0) - 90 + 360) % 360;
+        svNavigateTo({ lat: svState.lat, lon: svState.lon, preferHeading: ph });
+    });
+
+    const svRightBtn = byId("sv-btn-right");
+    if (svRightBtn) svRightBtn.addEventListener("click", () => {
+        const ph = ((svState.heading || 0) + 90) % 360;
+        svNavigateTo({ lat: svState.lat, lon: svState.lon, preferHeading: ph });
+    });
+
+    // Right-panel directional buttons
+    const svFwdArrow = byId("sv-arrow-fwd");
+    if (svFwdArrow) svFwdArrow.addEventListener("click", () => {
+        const id = svFwdArrow.dataset.navId;
+        if (id) svNavigateTo({ imageId: id });
+    });
+
+    const svBackArrow = byId("sv-arrow-back");
+    if (svBackArrow) svBackArrow.addEventListener("click", () => {
+        const id = svBackArrow.dataset.navId;
+        if (id) svNavigateTo({ imageId: id });
+    });
+
+    const svLeftImg = byId("sv-arrow-left-img");
+    if (svLeftImg) svLeftImg.addEventListener("click", () => {
+        const ph = ((svState.heading || 0) - 90 + 360) % 360;
+        svNavigateTo({ lat: svState.lat, lon: svState.lon, preferHeading: ph });
+    });
+
+    const svRightImg = byId("sv-arrow-right-img");
+    if (svRightImg) svRightImg.addEventListener("click", () => {
+        const ph = ((svState.heading || 0) + 90) % 360;
+        svNavigateTo({ lat: svState.lat, lon: svState.lon, preferHeading: ph });
+    });
+
+    // Zoom buttons
+    byId("sv-zoom-in")?.addEventListener("click", () => svApplyZoom(svZoom + SV_ZOOM_STEP));
+    byId("sv-zoom-out")?.addEventListener("click", () => svApplyZoom(svZoom - SV_ZOOM_STEP));
+    byId("sv-zoom-reset")?.addEventListener("click", () => svApplyZoom(1));
+
+    // Mouse wheel zoom on the image area
+    byId("sv-image-wrap")?.addEventListener("wheel", (e) => {
+        if (!byId("street-view-modal")?.classList.contains("active")) return;
+        e.preventDefault();
+        svApplyZoom(svZoom + (e.deltaY < 0 ? SV_ZOOM_STEP : -SV_ZOOM_STEP));
+    }, { passive: false });
+
+    window.addEventListener("resize", () => {
+        if (byId("street-view-modal")?.classList.contains("active")) svDrawCandidateOverlays();
+    });
 
     const confirmBtn = byId("btn-confirm-cand");
     const rejectBtn = byId("btn-reject-cand");
