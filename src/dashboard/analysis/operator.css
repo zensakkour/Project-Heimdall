@@ -1408,6 +1408,7 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
+  cursor: default;
 }
 
 #sv-img {
@@ -1419,7 +1420,6 @@ html, body {
   user-select: none;
   -webkit-user-drag: none;
   transform-origin: center center;
-  transition: transform 0.12s ease;
 }
 
 .sv-overlay-canvas {
