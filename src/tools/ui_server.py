@@ -2230,7 +2230,6 @@ def operator_list_sessions() -> JSONResponse:
                     name = file_path.name.replace("session_", "").replace(f"_{data.get('session_id')}.json", "")
                     # Reconstruct display name properly if custom name exists since we clean it for the filename
                     if data.get("custom_name"):
-                        date_str = name.split("_-_")[0].replace("_", "-").replace("-", "-", 2) if "_-_" in name else name
                         if "_-_" in name:
                             parts = name.split("_-_", 1)
                             # Convert 2026-05-13_17-30 back to 2026-05-13 17-30
