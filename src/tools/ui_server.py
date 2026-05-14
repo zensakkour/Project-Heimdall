@@ -2458,12 +2458,16 @@ async def operator_analyze(
         await asyncio.sleep(1) # simulate work
 
         # mock data
+        img_bytes = await image.read()
+        img_b64 = base64.b64encode(img_bytes).decode("utf-8")
+        img_content_type = image.content_type or "image/jpeg"
         _OPERATOR_SESSION["source"] = {
             "filename": image.filename,
             "width": 800,
             "height": 600,
             "has_exif_gps": False,
-            "quality": {"blur": 0.05, "brightness": 0.5}
+            "quality": {"blur": 0.05, "brightness": 0.5},
+            "image_data_url": f"data:{img_content_type};base64,{img_b64}"
         }
         _OPERATOR_SESSION["fused_estimate"] = {
             "lat": 48.8566,
@@ -2514,12 +2518,16 @@ async def operator_analyze(
             image_path = Path(tmp) / _safe_upload_name(image.filename, "upload-image.bin")
             await _write_upload_limited(image, image_path, _MAX_IMAGE_BYTES)
 
+            img_bytes = image_path.read_bytes()
+            img_b64 = base64.b64encode(img_bytes).decode("utf-8")
+            img_content_type = image.content_type or "image/jpeg"
             _OPERATOR_SESSION["source"] = {
                 "filename": image.filename,
-                "width": 0, # not parsed here for simplicity
+                "width": 0,
                 "height": 0,
                 "has_exif_gps": False,
-                "quality": {}
+                "quality": {},
+                "image_data_url": f"data:{img_content_type};base64,{img_b64}"
             }
 
             _add_timeline_event("Preprocessing complete", "info")
