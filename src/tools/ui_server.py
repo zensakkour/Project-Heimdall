@@ -2784,6 +2784,221 @@ async def operator_analyze(
         _add_timeline_event(f"Analysis failed: {str(e)}", "error")
         return JSONResponse({"error": str(e), "session": _OPERATOR_SESSION}, status_code=500)
 
+# ---------------------------------------------------------------------------
+# Case Management API
+# ---------------------------------------------------------------------------
+
+CASES_DIR = APP_ROOT / "cases"
+
+
+def _load_case(case_id: str) -> dict | None:
+    case_file = CASES_DIR / case_id / "case.json"
+    if not case_file.exists():
+        return None
+    try:
+        with open(case_file, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def _save_case(case: dict) -> None:
+    case_dir = CASES_DIR / case["case_id"]
+    case_dir.mkdir(parents=True, exist_ok=True)
+    with open(case_dir / "case.json", "w", encoding="utf-8") as f:
+        json.dump(case, f, indent=2, ensure_ascii=False)
+
+
+def _case_summary(case: dict) -> dict:
+    return {
+        "case_id": case.get("case_id"),
+        "name": case.get("name", "Unnamed Case"),
+        "description": case.get("description", ""),
+        "created_at": case.get("created_at"),
+        "updated_at": case.get("updated_at"),
+        "session_count": len(case.get("sessions", [])),
+        "sessions": case.get("sessions", []),
+    }
+
+
+@app.get("/api/cases")
+def list_cases() -> JSONResponse:
+    cases = []
+    if CASES_DIR.exists():
+        for case_dir in sorted(CASES_DIR.iterdir(), key=lambda d: d.stat().st_mtime, reverse=True):
+            if not case_dir.is_dir():
+                continue
+            case = _load_case(case_dir.name)
+            if case:
+                cases.append(_case_summary(case))
+    return JSONResponse({"cases": cases})
+
+
+@app.post("/api/cases")
+async def create_case(request: Request) -> JSONResponse:
+    body = await request.json()
+    case_id = uuid.uuid4().hex
+    now = _utc_now_iso()
+    case: dict = {
+        "case_id": case_id,
+        "name": body.get("name") or f"Case {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+        "description": body.get("description", ""),
+        "created_at": now,
+        "updated_at": now,
+        "sessions": [],
+        "connections": [],
+    }
+    _save_case(case)
+    return JSONResponse(case, status_code=201)
+
+
+@app.get("/api/cases/{case_id}")
+def get_case(case_id: str) -> JSONResponse:
+    case = _load_case(case_id)
+    if not case:
+        return JSONResponse({"error": "Case not found"}, status_code=404)
+    return JSONResponse(case)
+
+
+@app.put("/api/cases/{case_id}")
+async def update_case(case_id: str, request: Request) -> JSONResponse:
+    case = _load_case(case_id)
+    if not case:
+        return JSONResponse({"error": "Case not found"}, status_code=404)
+    body = await request.json()
+    if "name" in body:
+        case["name"] = body["name"]
+    if "description" in body:
+        case["description"] = body["description"]
+    case["updated_at"] = _utc_now_iso()
+    _save_case(case)
+    return JSONResponse(case)
+
+
+@app.delete("/api/cases/{case_id}")
+def delete_case(case_id: str) -> JSONResponse:
+    import shutil
+    case_dir = CASES_DIR / case_id
+    if not case_dir.exists():
+        return JSONResponse({"error": "Case not found"}, status_code=404)
+    shutil.rmtree(case_dir)
+    return JSONResponse({"deleted": case_id})
+
+
+@app.post("/api/cases/{case_id}/sessions")
+async def add_session_to_case(case_id: str, request: Request) -> JSONResponse:
+    case = _load_case(case_id)
+    if not case:
+        return JSONResponse({"error": "Case not found"}, status_code=404)
+    body = await request.json()
+    session_id = body.get("session_id", "")
+    if not session_id:
+        return JSONResponse({"error": "session_id required"}, status_code=400)
+    if session_id not in case["sessions"]:
+        case["sessions"].append(session_id)
+        case["updated_at"] = _utc_now_iso()
+        _save_case(case)
+    return JSONResponse(_case_summary(case))
+
+
+@app.delete("/api/cases/{case_id}/sessions/{session_id}")
+def remove_session_from_case(case_id: str, session_id: str) -> JSONResponse:
+    case = _load_case(case_id)
+    if not case:
+        return JSONResponse({"error": "Case not found"}, status_code=404)
+    case["sessions"] = [s for s in case["sessions"] if s != session_id]
+    case["updated_at"] = _utc_now_iso()
+    _save_case(case)
+    return JSONResponse(_case_summary(case))
+
+
+@app.post("/api/cases/{case_id}/connections")
+async def update_case_connections(case_id: str, request: Request) -> JSONResponse:
+    case = _load_case(case_id)
+    if not case:
+        return JSONResponse({"error": "Case not found"}, status_code=404)
+    body = await request.json()
+    case["connections"] = body.get("connections", [])
+    case["updated_at"] = _utc_now_iso()
+    _save_case(case)
+    return JSONResponse(_case_summary(case))
+
+
+# ---------------------------------------------------------------------------
+# Refuse Candidate
+# ---------------------------------------------------------------------------
+
+@app.post("/api/operator/refuse-candidate")
+async def refuse_candidate(request: Request) -> JSONResponse:
+    global _OPERATOR_SESSION
+    body = await request.json()
+    rank = body.get("rank")
+    if rank is None:
+        return JSONResponse({"error": "rank required"}, status_code=400)
+    candidates = _OPERATOR_SESSION.get("candidates", [])
+    before = len(candidates)
+    _OPERATOR_SESSION["candidates"] = [c for c in candidates if c.get("rank") != rank]
+    # Re-number remaining candidates
+    for i, c in enumerate(_OPERATOR_SESSION["candidates"]):
+        c["rank"] = i + 1
+    after = len(_OPERATOR_SESSION["candidates"])
+    if before != after:
+        _add_timeline_event(f"Candidate rank {rank} refused and removed", "info")
+    return JSONResponse({"ok": True, "removed": before != after, "remaining": after})
+
+
+# ---------------------------------------------------------------------------
+# Note photo attachment
+# ---------------------------------------------------------------------------
+
+@app.post("/api/operator/note-photo")
+async def attach_note_photo(
+    note_id: str = Form(...),
+    photo: UploadFile = File(...),
+) -> JSONResponse:
+    global _OPERATOR_SESSION
+    session_id = _OPERATOR_SESSION.get("session_id")
+    if not session_id:
+        return JSONResponse({"error": "No active session"}, status_code=400)
+
+    data = await photo.read()
+    ext = Path(photo.filename).suffix.lower() if photo.filename else ".jpg"
+    if ext not in {".jpg", ".jpeg", ".png", ".webp", ".gif"}:
+        ext = ".jpg"
+
+    photo_id = uuid.uuid4().hex
+    photo_filename = f"photo_{photo_id}{ext}"
+
+    # Store alongside session if it's been saved; otherwise keep in-memory as data URL
+    session_dir = APP_ROOT / "operator_sessions" / session_id
+    if session_dir.exists():
+        photos_dir = session_dir / "photos"
+        photos_dir.mkdir(exist_ok=True)
+        (photos_dir / photo_filename).write_bytes(data)
+        photo_url = f"/api/operator/sessions/{session_id}/photos/{photo_filename}"
+    else:
+        b64 = base64.b64encode(data).decode()
+        mime = photo.content_type or "image/jpeg"
+        photo_url = f"data:{mime};base64,{b64}"
+
+    # Attach photo URL to the matching note
+    notes = _OPERATOR_SESSION.setdefault("notes", [])
+    for note in notes:
+        if note.get("note_id") == note_id:
+            note.setdefault("photos", []).append({"photo_id": photo_id, "url": photo_url})
+            break
+
+    return JSONResponse({"photo_id": photo_id, "url": photo_url})
+
+
+@app.get("/api/operator/sessions/{session_id}/photos/{filename}")
+def get_session_photo(session_id: str, filename: str):
+    photo_path = APP_ROOT / "operator_sessions" / session_id / "photos" / filename
+    if not photo_path.exists():
+        return JSONResponse({"error": "Photo not found"}, status_code=404)
+    return FileResponse(str(photo_path))
+
+
 # Static mounts come last so API routes are not shadowed.
 app.mount("/dashboard", StaticFiles(directory=DASHBOARD_DIR), name="dashboard")
 app.mount("/analysis", StaticFiles(directory=LIVE_DIR, html=True), name="analysis")

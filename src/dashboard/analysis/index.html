@@ -11,7 +11,7 @@
       crossorigin=""
     />
     <link rel="stylesheet" href="../theme.css?v=7" />
-    <link rel="stylesheet" href="operator.css?v=45" />
+    <link rel="stylesheet" href="operator.css?v=46" />
 
 
   </head>
@@ -57,8 +57,12 @@
       <!-- Top Header Area -->
       <header class="operator-header">
         <div class="brand">
+          <button id="btn-toggle-sidebar" class="cs-icon-btn sidebar-toggle-btn" title="Toggle case sidebar">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></svg>
+          </button>
           <img src="../assets/logo-mark.png" alt="Heimdall" />
           <span class="brand-text">Project Heimdall — Paris</span>
+          <span id="active-case-badge" class="active-case-badge" style="display:none;"></span>
         </div>
         <div class="header-actions">
           <button id="btn-new-session" class="btn-text header-btn">New Session</button>
@@ -70,11 +74,49 @@
         </div>
       </header>
 
+      <!-- Case / Session Sidebar (VSCode-style) -->
+      <aside class="case-sidebar" id="case-sidebar">
+        <div class="case-sidebar-header">
+          <span class="case-sidebar-title">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            Cases
+          </span>
+          <div class="case-sidebar-actions">
+            <button id="btn-new-case" class="cs-icon-btn" title="New Case">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            </button>
+            <button id="btn-collapse-sidebar" class="cs-icon-btn" title="Collapse sidebar">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="case-search-row">
+          <input id="case-search" class="case-search-input" type="search" placeholder="Filter sessions…" autocomplete="off" />
+        </div>
+
+        <div class="case-sidebar-tabs">
+          <button class="cs-tab active" data-tab="cases">Cases</button>
+          <button class="cs-tab" data-tab="sessions">All Sessions</button>
+        </div>
+
+        <div class="case-sidebar-body" id="case-sidebar-body">
+          <div class="cs-empty">Loading…</div>
+        </div>
+
+        <div class="case-sidebar-footer">
+          <button id="btn-add-session-to-case" class="cs-footer-btn" style="display:none;">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            Add current session to case
+          </button>
+        </div>
+      </aside>
+
       <!-- Panel Resize Handles -->
       <div class="left-resize-handle"></div>
       <div class="right-resize-handle"></div>
 
-      <!-- Right Analysis Panel -->
+      <!-- Intelligence Panel -->
       <aside class="left-panel">
         <div class="panel-header-bar">
           <span class="panel-header-title">Intelligence</span>
@@ -398,8 +440,37 @@
         <canvas id="canvas"></canvas>
     </div>
 
+    <!-- New Case Modal -->
+    <div id="new-case-modal" class="lightbox">
+      <div class="lightbox-backdrop" id="new-case-backdrop"></div>
+      <div class="lightbox-content modal-card">
+        <div class="modal-header-bar">
+          <span class="modal-title">New Case</span>
+        </div>
+        <div class="modal-body-stack">
+          <input id="new-case-name" class="modal-text-input" type="text" placeholder="Case name (e.g. Operation Delta)" maxlength="80" />
+          <textarea id="new-case-desc" class="modal-text-input modal-textarea" placeholder="Description (optional)" rows="3"></textarea>
+          <button id="btn-create-case-confirm" class="primary-btn modal-action-btn">Create Case</button>
+          <button id="btn-new-case-cancel" class="btn-text modal-action-btn">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Note Photo Attach Modal -->
+    <div id="note-photo-modal" class="lightbox">
+      <div class="lightbox-backdrop" id="note-photo-backdrop"></div>
+      <div class="lightbox-content modal-card">
+        <div class="modal-header-bar"><span class="modal-title">Attach Photo to Note</span></div>
+        <div class="modal-body-stack">
+          <input id="note-photo-file" type="file" accept="image/*" class="modal-file-input" />
+          <button id="btn-attach-photo-confirm" class="primary-btn modal-action-btn">Attach</button>
+          <button id="btn-note-photo-cancel" class="btn-text modal-action-btn">Cancel</button>
+        </div>
+      </div>
+    </div>
+
     <script src="https://unpkg.com/maplibre-gl@5.0.0/dist/maplibre-gl.js" crossorigin=""></script>
-    <script type="module" src="operator.js?v=45"></script>
+    <script type="module" src="operator.js?v=46"></script>
 
         <button id="btn-confirm-cand" style="display:none;"></button>
         <button id="btn-reject-cand" style="display:none;"></button>

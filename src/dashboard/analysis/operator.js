@@ -946,9 +946,28 @@ function renderCandidateList(result) {
 
     card.addEventListener("click", () => selectCandidate(idx));
 
+    // Refuse candidate row
+    const actionsRow = document.createElement("div");
+    actionsRow.className = "candidate-card-actions";
+    actionsRow.innerHTML = `
+      <button class="btn-refuse-candidate" type="button" title="Remove this candidate from the analysis">
+        <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        Refuse
+      </button>
+      <button class="btn-street-view-card street-view-btn" data-lat="${lat}" data-lon="${lon}" type="button">
+        <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12 Q12 2 21 12 Q12 22 3 12Z"/><circle cx="12" cy="12" r="3"/></svg>
+        Street View
+      </button>
+    `;
+    actionsRow.querySelector(".btn-refuse-candidate").addEventListener("click", (e) => {
+      e.stopPropagation();
+      refuseCandidate(rank);
+    });
+    card.appendChild(actionsRow);
+
     container.appendChild(card);
   });
-  
+
   // Attach street view handlers
   container.querySelectorAll(".street-view-btn").forEach(btn => {
       btn.addEventListener("click", (e) => {
@@ -2739,3 +2758,430 @@ function renderNotesList() {
         });
     });
 }
+
+// ─── REFUSE CANDIDATE ────────────────────────────────────────────────────────
+async function refuseCandidate(rank) {
+  const sessionId = window._currentSessionId;
+  if (!sessionId) return;
+  try {
+    const res = await fetch("/api/operator/refuse-candidate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: sessionId, rank }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const updated = await res.json();
+    window._lastResult = updated;
+    renderCandidateList(updated);
+    renderLiveMap(updated);
+  } catch (err) {
+    console.error("refuseCandidate error:", err);
+  }
+}
+
+// ─── CASE SIDEBAR STATE ───────────────────────────────────────────────────────
+const SESSION_COLORS = [
+  "#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6",
+  "#06b6d4", "#ec4899", "#84cc16", "#f97316", "#6366f1",
+];
+let _cases = [];
+let _allSessions = [];
+let _activeCaseId = null;
+let _overlayMarkers = new Map();
+let _sidebarTab = "cases";
+let _pendingPhotoNoteId = null;
+
+function sessionColor(idx) {
+  return SESSION_COLORS[idx % SESSION_COLORS.length];
+}
+
+function relativeTime(isoStr) {
+  if (!isoStr) return "";
+  const diff = Date.now() - new Date(isoStr).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+
+// ─── DATA LOADING ─────────────────────────────────────────────────────────────
+async function loadCases() {
+  try {
+    const res = await fetch("/api/cases");
+    if (res.ok) _cases = await res.json();
+  } catch (e) { console.error("loadCases:", e); }
+}
+
+async function loadAllSessions() {
+  try {
+    const res = await fetch("/api/operator/sessions");
+    if (res.ok) _allSessions = await res.json();
+  } catch (e) { console.error("loadAllSessions:", e); }
+}
+
+async function refreshSidebar() {
+  await Promise.all([loadCases(), loadAllSessions()]);
+  renderSidebar();
+}
+
+// ─── SIDEBAR RENDER ───────────────────────────────────────────────────────────
+function renderSidebar() {
+  const body = document.getElementById("case-sidebar-body");
+  if (!body) return;
+  const query = (document.getElementById("case-search")?.value || "").toLowerCase();
+  body.innerHTML = "";
+  if (_sidebarTab === "cases") {
+    renderCasesTab(body, query);
+  } else {
+    renderAllSessionsTab(body, query);
+  }
+}
+
+function renderCasesTab(body, query) {
+  const filtered = _cases.filter(c =>
+    c.name.toLowerCase().includes(query) ||
+    (c.description || "").toLowerCase().includes(query)
+  );
+  if (filtered.length === 0) {
+    body.innerHTML = '<p class="cs-empty">No cases yet. Create one above.</p>';
+    return;
+  }
+  filtered.forEach((c, ci) => {
+    const group = document.createElement("div");
+    group.className = "cs-case-group";
+    const isActive = c.id === _activeCaseId;
+
+    const row = document.createElement("div");
+    row.className = "cs-case-row" + (isActive ? " active" : "");
+    row.innerHTML = `
+      <span class="cs-case-chevron" style="transition:transform 0.2s">▶</span>
+      <span class="cs-case-name">${c.name}</span>
+      <span class="cs-case-count">${(c.sessions || []).length}</span>
+      <div class="cs-case-actions">
+        <button class="cs-btn-icon cs-delete-case" title="Delete case">✕</button>
+      </div>
+    `;
+    row.querySelector(".cs-delete-case").addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (!confirm(`Delete case "${c.name}"?`)) return;
+      await fetch(`/api/cases/${c.id}`, { method: "DELETE" });
+      if (_activeCaseId === c.id) _activeCaseId = null;
+      updateActiveCaseBadge();
+      refreshSidebar();
+    });
+
+    const sessionsList = document.createElement("div");
+    sessionsList.className = "cs-sessions-list";
+    let open = isActive;
+
+    const toggleOpen = () => {
+      open = !open;
+      sessionsList.classList.toggle("open", open);
+      row.querySelector(".cs-case-chevron").style.transform = open ? "rotate(90deg)" : "";
+      if (open) {
+        _activeCaseId = c.id;
+        updateActiveCaseBadge();
+      }
+    };
+
+    row.addEventListener("click", (e) => {
+      if (e.target.closest(".cs-case-actions")) return;
+      toggleOpen();
+    });
+
+    if (open) {
+      sessionsList.classList.add("open");
+      row.querySelector(".cs-case-chevron").style.transform = "rotate(90deg)";
+    }
+
+    (c.sessions || []).forEach((sid, si) => {
+      const sess = _allSessions.find(s => s.id === sid);
+      if (!sess) return;
+      if (query && !(sess.name || sess.id).toLowerCase().includes(query)) return;
+      sessionsList.appendChild(buildSessionItem(sess, si, c.id));
+    });
+
+    group.appendChild(row);
+    group.appendChild(sessionsList);
+    body.appendChild(group);
+  });
+}
+
+function renderAllSessionsTab(body, query) {
+  const filtered = _allSessions.filter(s =>
+    (s.name || s.id).toLowerCase().includes(query) ||
+    (s.location_name || "").toLowerCase().includes(query)
+  );
+  if (filtered.length === 0) {
+    body.innerHTML = '<p class="cs-empty">No sessions found.</p>';
+    return;
+  }
+  filtered.forEach((sess, si) => {
+    body.appendChild(buildSessionItem(sess, si, null));
+  });
+}
+
+function buildSessionItem(session, colorIdx, caseId) {
+  const color = sessionColor(colorIdx);
+  const overlay = _overlayMarkers.get(session.id);
+  const isVisible = overlay?.visible || false;
+  const isLoaded = window._currentSessionId === session.id;
+
+  const item = document.createElement("div");
+  item.className = "cs-session-item" + (isLoaded ? " loaded" : "");
+  item.dataset.sessionId = session.id;
+
+  item.innerHTML = `
+    <div class="cs-session-vis ${isVisible ? "visible" : ""}" title="Toggle on map" style="--dot-color:${color}"></div>
+    <div class="cs-session-info">
+      <span class="cs-session-name">${session.name || session.id.slice(0, 12)}</span>
+      <span class="cs-session-meta">${relativeTime(session.created_at)}</span>
+    </div>
+    ${caseId ? `<button class="cs-session-remove" title="Remove from case">✕</button>` : ""}
+  `;
+
+  item.querySelector(".cs-session-vis").addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleSessionOverlay(session.id, color);
+  });
+
+  if (caseId) {
+    item.querySelector(".cs-session-remove").addEventListener("click", async (e) => {
+      e.stopPropagation();
+      await fetch(`/api/cases/${caseId}/sessions/${session.id}`, { method: "DELETE" });
+      refreshSidebar();
+    });
+  }
+
+  item.addEventListener("click", (e) => {
+    if (e.target.closest(".cs-session-vis") || e.target.closest(".cs-session-remove")) return;
+    loadSessionFromSidebar(session.id);
+  });
+
+  return item;
+}
+
+// ─── OVERLAY MARKERS ──────────────────────────────────────────────────────────
+async function toggleSessionOverlay(sessionId, color) {
+  if (_overlayMarkers.has(sessionId)) {
+    const entry = _overlayMarkers.get(sessionId);
+    entry.visible = !entry.visible;
+    entry.markers.forEach(m => {
+      m.getElement().style.display = entry.visible ? "" : "none";
+    });
+    renderSidebar();
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/operator/sessions/${sessionId}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const candidates = data.candidates || [];
+    const markers = [];
+    candidates.forEach(c => {
+      if (!c.lat || !c.lon) return;
+      const el = document.createElement("div");
+      el.className = "overlay-session-marker";
+      el.style.setProperty("--marker-color", color);
+      el.title = `[${sessionId.slice(0, 6)}] ${c.address || ""}`;
+      const marker = new maplibregl.Marker({ element: el })
+        .setLngLat([c.lon, c.lat])
+        .addTo(window._map);
+      markers.push(marker);
+    });
+    _overlayMarkers.set(sessionId, { markers, visible: true, color });
+    renderSidebar();
+  } catch (e) {
+    console.error("toggleSessionOverlay:", e);
+  }
+}
+
+// ─── LOAD SESSION FROM SIDEBAR ────────────────────────────────────────────────
+async function loadSessionFromSidebar(sessionId) {
+  try {
+    const res = await fetch(`/api/operator/sessions/${sessionId}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    window._currentSessionId = sessionId;
+    window._lastResult = data;
+    renderCandidateList(data);
+    renderLiveMap(data);
+    renderSidebar();
+  } catch (e) {
+    console.error("loadSessionFromSidebar:", e);
+  }
+}
+
+// ─── ACTIVE CASE BADGE ────────────────────────────────────────────────────────
+function updateActiveCaseBadge() {
+  const badge = document.getElementById("active-case-badge");
+  if (!badge) return;
+  if (!_activeCaseId) {
+    badge.textContent = "";
+    badge.style.display = "none";
+    return;
+  }
+  const c = _cases.find(x => x.id === _activeCaseId);
+  badge.textContent = c ? `Case: ${c.name}` : "";
+  badge.style.display = c ? "" : "none";
+}
+
+// ─── INIT CASE SIDEBAR ────────────────────────────────────────────────────────
+function initCaseSidebar() {
+  document.getElementById("btn-toggle-sidebar")?.addEventListener("click", () => {
+    document.querySelector(".app-shell").classList.toggle("sidebar-collapsed");
+  });
+
+  document.getElementById("btn-collapse-sidebar")?.addEventListener("click", () => {
+    document.querySelector(".app-shell").classList.toggle("sidebar-collapsed");
+  });
+
+  document.getElementById("btn-new-case")?.addEventListener("click", () => {
+    document.getElementById("new-case-modal").style.display = "flex";
+    document.getElementById("new-case-name").focus();
+  });
+
+  document.getElementById("btn-new-case-confirm")?.addEventListener("click", async () => {
+    const name = document.getElementById("new-case-name").value.trim();
+    if (!name) return;
+    const desc = document.getElementById("new-case-desc").value.trim();
+    const res = await fetch("/api/cases", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, description: desc }),
+    });
+    if (res.ok) {
+      const c = await res.json();
+      _activeCaseId = c.id;
+      document.getElementById("new-case-modal").style.display = "none";
+      document.getElementById("new-case-name").value = "";
+      document.getElementById("new-case-desc").value = "";
+      await refreshSidebar();
+      updateActiveCaseBadge();
+    }
+  });
+
+  document.getElementById("btn-new-case-cancel")?.addEventListener("click", () => {
+    document.getElementById("new-case-modal").style.display = "none";
+  });
+
+  document.querySelectorAll(".cs-tab").forEach(tab => {
+    tab.addEventListener("click", () => {
+      document.querySelectorAll(".cs-tab").forEach(t => t.classList.remove("active"));
+      tab.classList.add("active");
+      _sidebarTab = tab.dataset.tab;
+      renderSidebar();
+    });
+  });
+
+  document.getElementById("case-search")?.addEventListener("input", () => renderSidebar());
+
+  document.getElementById("btn-add-session-to-case")?.addEventListener("click", async () => {
+    if (!_activeCaseId) { alert("Select or create a case first."); return; }
+    const sid = window._currentSessionId;
+    if (!sid) { alert("No active session loaded."); return; }
+    const res = await fetch(`/api/cases/${_activeCaseId}/sessions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: sid }),
+    });
+    if (res.ok) refreshSidebar();
+    else alert("Session already in case or error.");
+  });
+
+  document.getElementById("btn-note-photo-confirm")?.addEventListener("click", async () => {
+    const fileInput = document.getElementById("note-photo-file");
+    if (!fileInput.files.length || !_pendingPhotoNoteId) return;
+    const fd = new FormData();
+    fd.append("session_id", window._currentSessionId || "");
+    fd.append("note_id", _pendingPhotoNoteId);
+    fd.append("photo", fileInput.files[0]);
+    const res = await fetch("/api/operator/note-photo", { method: "POST", body: fd });
+    if (res.ok) {
+      document.getElementById("note-photo-modal").style.display = "none";
+      fileInput.value = "";
+      if (window._lastResult) renderNotesPanel(window._lastResult);
+    }
+  });
+
+  document.getElementById("btn-note-photo-cancel")?.addEventListener("click", () => {
+    document.getElementById("note-photo-modal").style.display = "none";
+  });
+
+  refreshSidebar();
+}
+
+// ─── IMPROVED NOTES PANEL ─────────────────────────────────────────────────────
+function renderNotesPanel(data) {
+  const panel = document.getElementById("notes-panel");
+  if (!panel) return;
+  const notes = data.notes || [];
+  panel.innerHTML = "";
+
+  if (notes.length === 0) {
+    panel.innerHTML = '<p class="cs-empty" style="padding:12px 0">No notes yet.</p>';
+    return;
+  }
+
+  notes.forEach(note => {
+    const card = document.createElement("div");
+    card.className = "note-card";
+
+    const targetLabel = note.candidate_rank
+      ? `Candidate #${note.candidate_rank}`
+      : (note.lat ? `\u{1F4CD} ${Number(note.lat).toFixed(4)}, ${Number(note.lon).toFixed(4)}` : "General");
+
+    const photos = note.photos || [];
+    const sid = data.session_id || window._currentSessionId || "";
+    const photosHtml = photos.map(p =>
+      `<img class="note-photo-thumb" src="/api/operator/sessions/${sid}/photos/${p}" alt="photo" loading="lazy">`
+    ).join("");
+
+    card.innerHTML = `
+      <div class="note-card-header">
+        <span class="note-card-target">${targetLabel}</span>
+        <span class="note-card-time">${relativeTime(note.created_at)}</span>
+      </div>
+      <p class="note-card-text">${note.text || ""}</p>
+      ${photos.length ? `<div class="note-card-photos">${photosHtml}</div>` : ""}
+      <div class="note-card-footer">
+        <button class="note-attach-btn" data-note-id="${note.id}">📎 Photo</button>
+        <button class="note-delete-btn" data-note-id="${note.id}">🗑</button>
+      </div>
+    `;
+
+    card.querySelector(".note-attach-btn").addEventListener("click", () => {
+      _pendingPhotoNoteId = note.id;
+      document.getElementById("note-photo-modal").style.display = "flex";
+    });
+
+    card.querySelector(".note-delete-btn").addEventListener("click", async () => {
+      if (!confirm("Delete this note?")) return;
+      await fetch(`/api/operator/sessions/${sid}/notes/${note.id}`, { method: "DELETE" });
+      if (window._lastResult) {
+        window._lastResult.notes = (window._lastResult.notes || []).filter(n => n.id !== note.id);
+        renderNotesPanel(window._lastResult);
+      }
+    });
+
+    panel.appendChild(card);
+  });
+}
+
+// ─── BOOT ─────────────────────────────────────────────────────────────────────
+document.addEventListener("DOMContentLoaded", () => {
+  initCaseSidebar();
+
+  fetch("/api/operator/sessions")
+    .then(r => r.ok ? r.json() : [])
+    .then(sessions => {
+      if (sessions.length > 0) {
+        const latest = sessions[sessions.length - 1];
+        loadSessionFromSidebar(latest.id);
+      }
+    })
+    .catch(console.error);
+});
