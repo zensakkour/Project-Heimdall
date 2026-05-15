@@ -11,7 +11,7 @@
       crossorigin=""
     />
     <link rel="stylesheet" href="../theme.css?v=7" />
-    <link rel="stylesheet" href="operator.css?v=47" />
+    <link rel="stylesheet" href="operator.css?v=48" />
 
 
   </head>
@@ -464,8 +464,26 @@
       </div>
     </div>
 
+    <!-- Post-Save: Assign to Case Modal -->
+    <div id="post-save-modal" class="lightbox">
+      <div class="lightbox-backdrop" id="post-save-backdrop"></div>
+      <div class="lightbox-content modal-card">
+        <div class="modal-header-bar">
+          <span class="modal-title">Session Saved</span>
+        </div>
+        <div class="modal-body-stack">
+          <p style="font-size:12px;color:#888;margin:0 0 4px;">Assign this session to a case?</p>
+          <select id="post-save-case-select" class="modal-text-input" style="height:36px;padding:0 10px;resize:none;cursor:pointer;">
+            <option value="">— No case (skip) —</option>
+          </select>
+          <button id="btn-post-save-assign" class="primary-btn modal-action-btn">Assign to Case</button>
+          <button id="btn-post-save-skip" class="btn-text modal-action-btn">Skip</button>
+        </div>
+      </div>
+    </div>
+
     <script src="https://unpkg.com/maplibre-gl@5.0.0/dist/maplibre-gl.js" crossorigin=""></script>
-    <script type="module" src="operator.js?v=47"></script>
+    <script type="module" src="operator.js?v=48"></script>
 
         <button id="btn-confirm-cand" style="display:none;"></button>
         <button id="btn-reject-cand" style="display:none;"></button>

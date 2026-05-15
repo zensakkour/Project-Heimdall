@@ -884,10 +884,6 @@ function renderCandidateList(result) {
         <div class="card-coords">${coordString}</div>
         <button class="btn-icon-small copy-coords" title="Copy Coordinates">COPY</button>
       </div>
-      <div style="display: flex; gap: 8px; margin-top: 8px;" class="card-actions-wrapper">
-       <button class="btn-card-action candidate-action" data-action="confirm" type="button">CONFIRM</button>
-       <button class="btn-card-action candidate-action" data-action="reject" type="button">REJECT</button>
-      </div>
       <div class="card-action-row">
         <button class="btn-card-action open-maps">Open in Google Maps</button>
         <button class="btn-card-action street-view-btn street-view-btn-accent" data-lat="${lat}" data-lon="${lon}">Street View</button>
@@ -952,7 +948,7 @@ function renderCandidateList(result) {
     actionsRow.innerHTML = `
       <button class="btn-refuse-candidate" type="button" title="Remove this candidate from the analysis">
         <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-        Refuse
+        Remove
       </button>
       <button class="btn-street-view-card street-view-btn" data-lat="${lat}" data-lon="${lon}" type="button">
         <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12 Q12 2 21 12 Q12 22 3 12Z"/><circle cx="12" cy="12" r="3"/></svg>
@@ -2407,10 +2403,47 @@ function setupOperatorActions() {
     }
 
     function afterSessionSaved(data) {
-        if (data.session_id) {
-            localStorage.setItem("heimdallPendingLoad", data.session_id);
+        const savedId = data.session_id;
+        if (!savedId) { window.location.reload(); return; }
+        localStorage.setItem("heimdallPendingLoad", savedId);
+
+        // Populate case dropdown in post-save modal
+        const modal = document.getElementById("post-save-modal");
+        const sel = document.getElementById("post-save-case-select");
+        if (modal && sel) {
+            sel.innerHTML = '<option value="">— No case (skip) —</option>';
+            (_cases || []).forEach(c => {
+                const opt = document.createElement("option");
+                opt.value = c.case_id;
+                opt.textContent = c.name;
+                sel.appendChild(opt);
+            });
+            modal.style.display = "flex";
+
+            const doFinish = async (caseId) => {
+                modal.style.display = "none";
+                if (caseId) {
+                    await fetch(`/api/cases/${caseId}/sessions`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ session_id: savedId }),
+                    }).catch(() => {});
+                }
+                window.location.reload();
+            };
+
+            document.getElementById("btn-post-save-assign")?.addEventListener("click", () => {
+                doFinish(sel.value);
+            }, { once: true });
+            document.getElementById("btn-post-save-skip")?.addEventListener("click", () => {
+                doFinish("");
+            }, { once: true });
+            document.getElementById("post-save-backdrop")?.addEventListener("click", () => {
+                doFinish("");
+            }, { once: true });
+        } else {
+            window.location.reload();
         }
-        window.location.reload();
     }
 
     if (btnUpdateSession && sessionSaveModal) {

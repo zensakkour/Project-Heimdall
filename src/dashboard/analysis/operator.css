@@ -462,8 +462,11 @@ html, body {
   transform: rotate(45deg);
 }
 
+.inline-checkbox input[type="checkbox"]:focus {
+  outline: none;
+}
 .inline-checkbox input[type="checkbox"]:focus-visible {
-  outline: 1px solid rgba(255, 255, 255, 0.4);
+  outline: 1px solid rgba(255, 255, 255, 0.3);
   outline-offset: 2px;
 }
 
@@ -492,6 +495,15 @@ html, body {
 #geolocate-image {
   height: 42px !important;
   min-height: 42px !important;
+}
+
+/* Global button reset — no browser outline on click, only on keyboard nav */
+button {
+  outline: none;
+}
+button:focus-visible {
+  outline: 1px solid rgba(255, 255, 255, 0.2);
+  outline-offset: 1px;
 }
 
 /* --- Buttons --- */
@@ -2317,8 +2329,19 @@ html, body {
   flex-shrink: 0;
 }
 
-.cs-case-actions { display: none; gap: 2px; flex-shrink: 0; }
-.cs-case-row:hover .cs-case-actions { display: flex; }
+.cs-case-actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s;
+  min-width: 0;
+}
+.cs-case-row:hover .cs-case-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
 
 .cs-btn-icon {
   background: none;
@@ -2404,7 +2427,6 @@ html, body {
 .cs-session-meta { font-size: 9px; color: var(--cs-text-dim); }
 
 .cs-session-remove {
-  display: none;
   background: none;
   border: none;
   outline: none;
@@ -2415,10 +2437,12 @@ html, body {
   font-size: 9px;
   line-height: 1;
   flex-shrink: 0;
-  transition: color 0.12s;
+  opacity: 0;
+  pointer-events: none;
+  transition: color 0.12s, opacity 0.12s;
 }
 
-.cs-session-item:hover .cs-session-remove { display: flex; align-items: center; }
+.cs-session-item:hover .cs-session-remove { opacity: 1; pointer-events: auto; }
 .cs-session-remove:hover { color: #ef4444; }
 
 /* ── Footer ────────────────────────────────────────────────────── */
