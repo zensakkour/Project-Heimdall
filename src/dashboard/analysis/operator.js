@@ -3104,15 +3104,21 @@ function updateActiveCaseBadge() {
 // ─── INIT CASE SIDEBAR ────────────────────────────────────────────────────────
 function initCaseSidebar() {
   const shell = document.querySelector(".app-shell");
-  const expandTab = document.getElementById("btn-sidebar-expand-tab");
+  const collapseBtn = document.getElementById("btn-collapse-sidebar");
 
-  const toggleSidebar = () => {
-    const collapsed = shell?.classList.toggle("sidebar-collapsed");
-    if (expandTab) expandTab.style.display = collapsed ? "flex" : "none";
+  const syncCollapseIcon = () => {
+    if (!collapseBtn) return;
+    const collapsed = shell?.classList.contains("sidebar-collapsed");
+    collapseBtn.innerHTML = collapsed ? SVG_CHEVRON_RIGHT2 : SVG_CHEVRON_LEFT;
+    collapseBtn.title = collapsed ? "Expand sidebar" : "Collapse sidebar";
   };
 
-  document.getElementById("btn-collapse-sidebar")?.addEventListener("click", toggleSidebar);
-  document.getElementById("btn-sidebar-expand-tab")?.addEventListener("click", toggleSidebar);
+  const toggleSidebar = () => {
+    shell?.classList.toggle("sidebar-collapsed");
+    syncCollapseIcon();
+  };
+
+  collapseBtn?.addEventListener("click", toggleSidebar);
 
   // ── Open Case modal ──────────────────────────────────────────────
   const openCaseModal = () => {
@@ -3194,5 +3200,6 @@ function initCaseSidebar() {
     document.getElementById("note-photo-modal").style.display = "none";
   });
 
+  syncCollapseIcon();
   refreshSidebar();
 }

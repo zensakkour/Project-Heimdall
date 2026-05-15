@@ -2150,7 +2150,7 @@ button:focus-visible {
 }
 
 .app-shell.sidebar-collapsed {
-  grid-template-columns: 0px var(--left-w) 4px 1fr 4px var(--right-w);
+  grid-template-columns: 40px var(--left-w) 4px 1fr 4px var(--right-w);
 }
 
 /* ── Case Sidebar ──────────────────────────────────────────────── */
@@ -2162,12 +2162,19 @@ button:focus-visible {
   flex-direction: column;
   overflow: hidden;
   z-index: 20;
-  transition: width 0.18s ease;
+  transition: grid-template-columns 0.18s ease;
 }
 
-.app-shell.sidebar-collapsed .case-sidebar {
-  width: 0;
-  border-right: none;
+/* When collapsed: show only the header with the toggle button centered */
+.app-shell.sidebar-collapsed .case-sidebar-title,
+.app-shell.sidebar-collapsed .case-open-row,
+.app-shell.sidebar-collapsed .case-search-row,
+.app-shell.sidebar-collapsed .case-sidebar-body {
+  display: none !important;
+}
+.app-shell.sidebar-collapsed .case-sidebar-header {
+  justify-content: center;
+  padding: 0;
 }
 
 /* ── Sidebar Header ────────────────────────────────────────────── */
@@ -2175,7 +2182,7 @@ button:focus-visible {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 10px;
+  padding: 0 10px 0 12px;
   height: 40px;
   min-height: 40px;
   border-bottom: 1px solid var(--cs-border);
@@ -2228,32 +2235,15 @@ button:focus-visible {
   outline-offset: 1px;
 }
 
-/* ── Sidebar expand tab (fixed, shown only when sidebar is collapsed) ── */
-.sidebar-expand-tab {
-  position: fixed;
-  top: 70px;
-  left: 0;
-  background: var(--cs-bg);
-  border: 1px solid var(--cs-border);
-  border-left: none;
-  border-radius: 0 5px 5px 0;
-  color: var(--cs-text-dim);
-  padding: 8px 6px;
-  cursor: pointer;
-  z-index: 50;
-  display: none;
-  align-items: center;
-  justify-content: center;
-  transition: color 0.15s, background 0.15s;
-}
-.sidebar-expand-tab:hover {
-  color: var(--cs-text);
-  background: rgba(255, 255, 255, 0.05);
+/* ── Open Case row (above search) ─────────────────────────────── */
+.case-open-row {
+  padding: 8px 10px 6px;
+  flex-shrink: 0;
 }
 
 /* ── Search ────────────────────────────────────────────────────── */
 .case-search-row {
-  padding: 7px 10px;
+  padding: 6px 10px 7px;
   border-bottom: 1px solid var(--cs-border);
   flex-shrink: 0;
 }
@@ -2289,10 +2279,10 @@ button:focus-visible {
 .case-sidebar-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
 
 .cs-empty {
-  padding: 20px 14px;
+  padding: 16px 12px;
   font-size: 11px;
   color: var(--cs-text-dim);
-  text-align: center;
+  text-align: left;
   line-height: 1.6;
 }
 
@@ -2401,7 +2391,7 @@ button:focus-visible {
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 0 6px 0 20px;
+  padding: 0 8px 0 12px;
   height: 28px;
   cursor: pointer;
   border-radius: 4px;
@@ -2417,7 +2407,7 @@ button:focus-visible {
 .cs-session-item.active-session {
   background: rgba(16, 185, 129, 0.07);
   border-left: 2px solid var(--cs-accent);
-  padding-left: 18px;
+  padding-left: 10px;
 }
 
 /* ── Visibility Toggle Dot ─────────────────────────────────────── */
