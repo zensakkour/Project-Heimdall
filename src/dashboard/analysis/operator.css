@@ -2112,33 +2112,28 @@ html, body {
 
 :root {
   --case-w: 240px;
-  --cs-bg: rgba(11, 11, 11, 0.97);
+  --cs-bg: rgba(10, 10, 10, 0.98);
   --cs-border: rgba(255, 255, 255, 0.07);
   --cs-item-hover: rgba(255, 255, 255, 0.04);
   --cs-item-active: rgba(255, 255, 255, 0.08);
   --cs-accent: #10b981;
   --cs-text: #d0d0d0;
-  --cs-text-dim: #666;
-  --cs-tag-h: 28px;
+  --cs-text-dim: #555;
 }
 
-/* Extend the grid to include the case sidebar column */
+/* ── Grid: header spans ALL columns; casebar lives in row 2 only ── */
 .app-shell {
   grid-template-columns: var(--case-w) var(--left-w) 4px 1fr 4px var(--right-w);
   grid-template-areas:
-    "casebar  header  header   header  header   header"
-    "casebar  left    lhandle  map     rhandle  right";
+    "header  header  header  header  header  header"
+    "casebar left    lhandle map     rhandle right";
 }
 
 .app-shell.sidebar-collapsed {
   grid-template-columns: 0px var(--left-w) 4px 1fr 4px var(--right-w);
 }
 
-/* header still spans all but the sidebar (sidebar is its own row-span) */
-.operator-header {
-  grid-column: 2 / -1;
-}
-
+/* ── Case Sidebar ──────────────────────────────────────────────── */
 .case-sidebar {
   grid-area: casebar;
   background: var(--cs-bg);
@@ -2146,14 +2141,13 @@ html, body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  z-index: 30;
-  transition: width 0.2s ease;
+  z-index: 20;
+  transition: width 0.18s ease;
 }
 
 .app-shell.sidebar-collapsed .case-sidebar {
   width: 0;
   border-right: none;
-  overflow: hidden;
 }
 
 /* ── Sidebar Header ────────────────────────────────────────────── */
@@ -2162,7 +2156,8 @@ html, body {
   align-items: center;
   justify-content: space-between;
   padding: 0 10px;
-  height: 60px;
+  height: 40px;
+  min-height: 40px;
   border-bottom: 1px solid var(--cs-border);
   flex-shrink: 0;
 }
@@ -2170,22 +2165,27 @@ html, body {
 .case-sidebar-title {
   display: flex;
   align-items: center;
-  gap: 7px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--cs-text-dim);
+  white-space: nowrap;
+  user-select: none;
 }
 
 .case-sidebar-actions {
   display: flex;
-  gap: 4px;
+  gap: 2px;
+  flex-shrink: 0;
 }
 
+/* ── Icon Buttons (sidebar) ────────────────────────────────────── */
 .cs-icon-btn {
   background: none;
   border: none;
+  outline: none;
   color: var(--cs-text-dim);
   cursor: pointer;
   padding: 5px;
@@ -2194,21 +2194,27 @@ html, body {
   align-items: center;
   justify-content: center;
   transition: color 0.15s, background 0.15s;
+  line-height: 1;
 }
 
 .cs-icon-btn:hover {
   color: var(--cs-text);
-  background: var(--cs-item-hover);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.cs-icon-btn:focus-visible {
+  outline: 1px solid rgba(255, 255, 255, 0.2);
+  outline-offset: 1px;
 }
 
 .sidebar-toggle-btn {
-  margin-right: 6px;
   color: var(--text-secondary);
+  flex-shrink: 0;
 }
 
 /* ── Search ────────────────────────────────────────────────────── */
 .case-search-row {
-  padding: 8px 10px;
+  padding: 7px 10px;
   border-bottom: 1px solid var(--cs-border);
   flex-shrink: 0;
 }
@@ -2216,111 +2222,86 @@ html, body {
 .case-search-input {
   width: 100%;
   background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 5px;
   color: var(--cs-text);
   font-size: 11px;
   padding: 5px 8px;
   outline: none;
   box-sizing: border-box;
+  font-family: inherit;
   transition: border-color 0.15s;
 }
 
-.case-search-input:focus {
-  border-color: rgba(255, 255, 255, 0.2);
-}
+.case-search-input:focus { border-color: rgba(255, 255, 255, 0.18); }
+.case-search-input::placeholder { color: var(--cs-text-dim); }
 
-.case-search-input::placeholder {
-  color: var(--cs-text-dim);
-}
-
-/* ── Tabs ──────────────────────────────────────────────────────── */
-.case-sidebar-tabs {
-  display: flex;
-  border-bottom: 1px solid var(--cs-border);
-  flex-shrink: 0;
-}
-
-.cs-tab {
-  flex: 1;
-  background: none;
-  border: none;
-  color: var(--cs-text-dim);
-  font-size: 11px;
-  font-weight: 500;
-  padding: 7px 0;
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-  transition: color 0.15s, border-color 0.15s;
-}
-
-.cs-tab:hover { color: var(--cs-text); }
-
-.cs-tab.active {
-  color: var(--cs-text);
-  border-bottom-color: var(--cs-accent);
-}
-
-/* ── Sidebar Body (scrollable tree) ───────────────────────────── */
+/* ── Sidebar Body ──────────────────────────────────────────────── */
 .case-sidebar-body {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 6px 0;
+  padding: 4px 0;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255,255,255,0.1) transparent;
+  scrollbar-color: rgba(255,255,255,0.08) transparent;
 }
 
-.case-sidebar-body::-webkit-scrollbar { width: 4px; }
-.case-sidebar-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 2px; }
+.case-sidebar-body::-webkit-scrollbar { width: 3px; }
+.case-sidebar-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
 
 .cs-empty {
   padding: 20px 14px;
   font-size: 11px;
   color: var(--cs-text-dim);
   text-align: center;
+  line-height: 1.6;
+}
+
+/* ── Section Label ─────────────────────────────────────────────── */
+.cs-section-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cs-text-dim);
+  padding: 10px 12px 3px;
+  user-select: none;
 }
 
 /* ── Case Group ────────────────────────────────────────────────── */
-.cs-case-group {
-  margin-bottom: 2px;
-}
+.cs-case-group { margin-bottom: 1px; }
 
 .cs-case-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 8px;
-  height: 30px;
+  gap: 4px;
+  padding: 0 6px;
+  height: 28px;
   cursor: pointer;
   border-radius: 4px;
   margin: 1px 4px;
-  transition: background 0.12s;
+  transition: background 0.1s;
   user-select: none;
 }
 
 .cs-case-row:hover { background: var(--cs-item-hover); }
 .cs-case-row.active { background: var(--cs-item-active); }
 
-.cs-chevron {
+.cs-case-chevron {
   width: 14px;
-  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
   color: var(--cs-text-dim);
+  flex-shrink: 0;
   transition: transform 0.15s;
-  flex-shrink: 0;
-}
-
-.cs-case-row.open .cs-chevron { transform: rotate(90deg); }
-
-.cs-case-icon {
-  color: var(--cs-accent);
-  flex-shrink: 0;
 }
 
 .cs-case-name {
   flex: 1;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--cs-text);
   white-space: nowrap;
   overflow: hidden;
@@ -2328,132 +2309,116 @@ html, body {
 }
 
 .cs-case-count {
-  font-size: 10px;
+  font-size: 9px;
   color: var(--cs-text-dim);
-  background: rgba(255,255,255,0.07);
-  border-radius: 10px;
-  padding: 1px 6px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 8px;
+  padding: 1px 5px;
   flex-shrink: 0;
 }
 
-.cs-case-actions {
-  display: none;
-  gap: 2px;
-}
-
+.cs-case-actions { display: none; gap: 2px; flex-shrink: 0; }
 .cs-case-row:hover .cs-case-actions { display: flex; }
 
-.cs-case-action-btn {
+.cs-btn-icon {
   background: none;
   border: none;
+  outline: none;
   color: var(--cs-text-dim);
   cursor: pointer;
-  padding: 3px;
+  padding: 2px 4px;
   border-radius: 3px;
-  display: flex;
-  align-items: center;
+  font-size: 9px;
+  line-height: 1;
   transition: color 0.12s, background 0.12s;
 }
 
-.cs-case-action-btn:hover { color: var(--cs-text); background: rgba(255,255,255,0.08); }
-.cs-case-action-btn.danger:hover { color: #ef4444; }
+.cs-btn-icon:hover { color: #ef4444; background: rgba(239, 68, 68, 0.1); }
 
-/* ── Session Items ─────────────────────────────────────────────── */
-.cs-sessions-list {
-  padding-left: 8px;
-  overflow: hidden;
-  max-height: 0;
-  transition: max-height 0.2s ease;
-}
+/* ── Sessions List (collapsible) ───────────────────────────────── */
+.cs-sessions-list { overflow: hidden; max-height: 0; transition: max-height 0.2s ease; }
+.cs-sessions-list.open { max-height: 9000px; }
 
-.cs-sessions-list.open { max-height: 2000px; }
-
+/* ── Session Item ──────────────────────────────────────────────── */
 .cs-session-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 8px 0 14px;
-  height: 34px;
+  gap: 7px;
+  padding: 0 6px 0 20px;
+  height: 28px;
+  cursor: pointer;
   border-radius: 4px;
   margin: 1px 4px;
-  cursor: pointer;
-  transition: background 0.12s;
+  transition: background 0.1s;
   user-select: none;
-  position: relative;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .cs-session-item:hover { background: var(--cs-item-hover); }
 
 .cs-session-item.active-session {
-  background: rgba(16, 185, 129, 0.1);
+  background: rgba(16, 185, 129, 0.07);
   border-left: 2px solid var(--cs-accent);
-  padding-left: 12px;
+  padding-left: 18px;
 }
 
+/* ── Visibility Toggle Dot ─────────────────────────────────────── */
 .cs-session-vis {
   flex-shrink: 0;
-  width: 16px;
-  height: 16px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
-  border: 1.5px solid rgba(255,255,255,0.25);
+  border: 1.5px solid rgba(255,255,255,0.2);
   background: transparent;
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s;
-  position: relative;
 }
+
+.cs-session-vis:hover { border-color: rgba(255,255,255,0.45); }
 
 .cs-session-vis.visible {
-  border-color: var(--cs-accent);
-  background: var(--cs-accent);
+  border-color: var(--dot-color, var(--cs-accent));
+  background: var(--dot-color, var(--cs-accent));
 }
 
-.cs-session-vis.visible::after {
-  content: "";
-  position: absolute;
-  inset: 3px;
-  border-radius: 50%;
-  background: rgba(0,0,0,0.4);
-}
-
-.cs-session-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
+/* ── Session Info ──────────────────────────────────────────────── */
 .cs-session-info {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
   min-width: 0;
+  overflow: hidden;
 }
 
 .cs-session-name {
   font-size: 11px;
+  font-weight: 500;
   color: var(--cs-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  line-height: 1.3;
 }
 
-.cs-session-meta {
-  font-size: 10px;
-  color: var(--cs-text-dim);
-  line-height: 1.2;
-}
+.cs-session-meta { font-size: 9px; color: var(--cs-text-dim); }
 
 .cs-session-remove {
   display: none;
   background: none;
   border: none;
+  outline: none;
   color: var(--cs-text-dim);
   cursor: pointer;
-  padding: 3px;
+  padding: 2px 3px;
   border-radius: 3px;
+  font-size: 9px;
+  line-height: 1;
   flex-shrink: 0;
+  transition: color 0.12s;
 }
 
-.cs-session-item:hover .cs-session-remove { display: flex; }
+.cs-session-item:hover .cs-session-remove { display: flex; align-items: center; }
 .cs-session-remove:hover { color: #ef4444; }
 
 /* ── Footer ────────────────────────────────────────────────────── */
@@ -2464,195 +2429,207 @@ html, body {
 }
 
 .cs-footer-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
   width: 100%;
-  background: rgba(16, 185, 129, 0.08);
+  background: rgba(16, 185, 129, 0.07);
   border: 1px solid rgba(16, 185, 129, 0.2);
+  outline: none;
   border-radius: 6px;
   color: var(--cs-accent);
   cursor: pointer;
-  font-size: 11px;
-  padding: 7px 10px;
-  transition: background 0.15s;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  font-family: inherit;
+  transition: background 0.15s, border-color 0.15s;
 }
 
-.cs-footer-btn:hover { background: rgba(16, 185, 129, 0.14); }
+.cs-footer-btn:hover {
+  background: rgba(16, 185, 129, 0.14);
+  border-color: rgba(16, 185, 129, 0.38);
+}
 
-/* ── Active case badge in header ──────────────────────────────── */
+/* ── Active Case Badge (header) ────────────────────────────────── */
 .active-case-badge {
-  background: rgba(16, 185, 129, 0.15);
+  background: rgba(16, 185, 129, 0.12);
   border: 1px solid rgba(16, 185, 129, 0.3);
-  border-radius: 12px;
+  border-radius: 100px;
   color: var(--cs-accent);
   font-size: 10px;
   font-weight: 600;
-  padding: 2px 9px;
-  margin-left: 6px;
-  letter-spacing: 0.04em;
-  max-width: 160px;
+  padding: 2px 8px;
+  letter-spacing: 0.02em;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  flex-shrink: 0;
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   CANDIDATE CARD — REFUSE BUTTON & IMPROVED LAYOUT
+   CANDIDATE CARD ACTIONS
    ═══════════════════════════════════════════════════════════════ */
 
 .candidate-card-actions {
   display: flex;
   gap: 6px;
   margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid rgba(255,255,255,0.06);
 }
 
 .btn-refuse-candidate {
   flex: 1;
-  background: rgba(239, 68, 68, 0.08);
-  border: 1px solid rgba(239, 68, 68, 0.2);
+  background: rgba(239, 68, 68, 0.06);
+  border: 1px solid rgba(239, 68, 68, 0.16);
+  outline: none;
   border-radius: 6px;
   color: #ef4444;
   cursor: pointer;
   font-size: 10px;
   font-weight: 600;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
   padding: 5px 8px;
   text-transform: uppercase;
-  transition: background 0.15s, border-color 0.15s;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 4px;
+  font-family: inherit;
+  transition: background 0.15s, border-color 0.15s;
 }
 
 .btn-refuse-candidate:hover {
-  background: rgba(239, 68, 68, 0.15);
-  border-color: rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.13);
+  border-color: rgba(239, 68, 68, 0.32);
 }
 
 .btn-street-view-card {
   flex: 1;
   background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.08);
+  outline: none;
   border-radius: 6px;
   color: var(--text-secondary);
   cursor: pointer;
   font-size: 10px;
   font-weight: 500;
   padding: 5px 8px;
-  transition: background 0.15s, color 0.15s;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 4px;
+  font-family: inherit;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
 .btn-street-view-card:hover {
   background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.14);
   color: var(--text-primary);
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   IMPROVED NOTES
+   IMPROVED NOTE CARDS
    ═══════════════════════════════════════════════════════════════ */
 
 .note-card {
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.07);
+  background: rgba(255,255,255,0.025);
+  border: 1px solid rgba(255,255,255,0.06);
   border-radius: 8px;
   padding: 10px 12px;
   margin-bottom: 8px;
   transition: border-color 0.15s;
 }
 
-.note-card:hover { border-color: rgba(255,255,255,0.13); }
+.note-card:hover { border-color: rgba(255,255,255,0.11); }
 
 .note-card-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 6px;
+  margin-bottom: 5px;
 }
 
 .note-card-target {
-  font-size: 10px;
-  font-weight: 600;
+  font-size: 9px;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.07em;
   color: var(--cs-accent);
-  display: flex;
-  align-items: center;
-  gap: 4px;
 }
 
 .note-card-time {
-  font-size: 10px;
+  font-size: 9px;
   color: var(--cs-text-dim);
   white-space: nowrap;
+  font-family: "JetBrains Mono", monospace;
+  flex-shrink: 0;
 }
 
 .note-card-text {
   font-size: 12px;
-  color: var(--cs-text);
+  color: #c0c0c0;
   line-height: 1.5;
   word-break: break-word;
+  margin: 0;
 }
 
 .note-card-photos {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 5px;
   margin-top: 8px;
 }
 
 .note-photo-thumb {
-  width: 56px;
-  height: 56px;
+  width: 52px;
+  height: 52px;
   object-fit: cover;
   border-radius: 5px;
-  border: 1px solid rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.08);
   cursor: pointer;
   transition: opacity 0.15s;
 }
 
-.note-photo-thumb:hover { opacity: 0.8; }
+.note-photo-thumb:hover { opacity: 0.75; }
 
 .note-card-footer {
   display: flex;
+  align-items: center;
   gap: 6px;
   margin-top: 8px;
-  align-items: center;
 }
 
 .note-attach-btn {
   background: none;
-  border: 1px dashed rgba(255,255,255,0.15);
+  border: 1px dashed rgba(255,255,255,0.12);
+  outline: none;
   border-radius: 5px;
   color: var(--cs-text-dim);
   cursor: pointer;
   font-size: 10px;
   padding: 3px 8px;
+  font-family: inherit;
   transition: border-color 0.15s, color 0.15s;
   display: flex;
   align-items: center;
   gap: 4px;
 }
 
-.note-attach-btn:hover { border-color: rgba(255,255,255,0.3); color: var(--cs-text); }
+.note-attach-btn:hover { border-color: rgba(255,255,255,0.25); color: var(--cs-text); }
 
 .note-delete-btn {
   margin-left: auto;
   background: none;
   border: none;
+  outline: none;
   color: var(--cs-text-dim);
   cursor: pointer;
-  padding: 3px;
+  padding: 3px 5px;
   border-radius: 4px;
   font-size: 10px;
+  font-family: inherit;
   transition: color 0.15s;
 }
 
@@ -2660,25 +2637,23 @@ html, body {
 
 /* ── Session overlay markers ──────────────────────────────────── */
 .overlay-session-marker {
-  width: 22px;
-  height: 22px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
-  border: 2px solid rgba(255,255,255,0.7);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 9px;
-  font-weight: 700;
-  color: #fff;
+  background: var(--marker-color, #10b981);
+  border: 2px solid rgba(255,255,255,0.65);
   cursor: pointer;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.45);
+  transition: transform 0.12s;
 }
 
-/* ── Modal input styles ────────────────────────────────────────── */
+.overlay-session-marker:hover { transform: scale(1.2); }
+
+/* ── Modal text inputs ─────────────────────────────────────────── */
 .modal-text-input {
   width: 100%;
   background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.1);
   border-radius: 7px;
   color: var(--text-primary);
   font-family: inherit;
@@ -2690,7 +2665,7 @@ html, body {
   resize: vertical;
 }
 
-.modal-text-input:focus { border-color: rgba(255,255,255,0.25); }
+.modal-text-input:focus { border-color: rgba(255,255,255,0.22); }
 .modal-textarea { min-height: 70px; }
 
 .modal-file-input {
@@ -2698,6 +2673,7 @@ html, body {
   color: var(--text-secondary);
   font-size: 12px;
   padding: 8px 0;
+  outline: none;
 }
 
 /* ── Candidate pin markers (HTML) ─────────────────────────────── */
@@ -2707,3 +2683,4 @@ html, body {
 }
 
 .candidate-pin-marker:hover { transform: scale(1.12); }
+
