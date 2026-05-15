@@ -431,9 +431,14 @@ html, body {
 .inline-checkbox input[type="checkbox"] {
   appearance: none;
   -webkit-appearance: none;
-  flex: 0 0 auto;
+  -moz-appearance: none;
+  display: inline-block;
+  box-sizing: border-box;
+  flex: 0 0 13px;
   width: 13px;
   height: 13px;
+  min-width: 13px;
+  max-width: 13px;
   margin: 0;
   padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.25);
@@ -441,6 +446,7 @@ html, body {
   background: transparent;
   cursor: pointer;
   position: relative;
+  vertical-align: middle;
   transition: background 0.15s, border-color 0.15s;
 }
 
@@ -2200,13 +2206,14 @@ button:focus-visible {
   outline: none;
   color: var(--cs-text-dim);
   cursor: pointer;
-  padding: 5px;
-  border-radius: 5px;
+  padding: 3px;
+  border-radius: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: color 0.15s, background 0.15s;
   line-height: 1;
+  flex-shrink: 0;
 }
 
 .cs-icon-btn:hover {
@@ -2219,9 +2226,27 @@ button:focus-visible {
   outline-offset: 1px;
 }
 
-.sidebar-toggle-btn {
-  color: var(--text-secondary);
-  flex-shrink: 0;
+/* ── Sidebar expand tab (fixed, shown only when sidebar is collapsed) ── */
+.sidebar-expand-tab {
+  position: fixed;
+  top: 70px;
+  left: 0;
+  background: var(--cs-bg);
+  border: 1px solid var(--cs-border);
+  border-left: none;
+  border-radius: 0 5px 5px 0;
+  color: var(--cs-text-dim);
+  padding: 8px 6px;
+  cursor: pointer;
+  z-index: 50;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background 0.15s;
+}
+.sidebar-expand-tab:hover {
+  color: var(--cs-text);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 /* ── Search ────────────────────────────────────────────────────── */
@@ -2333,6 +2358,7 @@ button:focus-visible {
   display: flex;
   gap: 2px;
   flex-shrink: 0;
+  align-items: center;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.12s;
@@ -2349,14 +2375,20 @@ button:focus-visible {
   outline: none;
   color: var(--cs-text-dim);
   cursor: pointer;
-  padding: 2px 4px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
   border-radius: 3px;
-  font-size: 9px;
+  font-size: 10px;
   line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
   transition: color 0.12s, background 0.12s;
 }
 
-.cs-btn-icon:hover { color: #ef4444; background: rgba(239, 68, 68, 0.1); }
+.cs-btn-icon:hover { color: #ef4444; background: rgba(239, 68, 68, 0.12); }
 
 /* ── Sessions List (collapsible) ───────────────────────────────── */
 .cs-sessions-list { overflow: hidden; max-height: 0; transition: max-height 0.2s ease; }
@@ -2432,18 +2464,23 @@ button:focus-visible {
   outline: none;
   color: var(--cs-text-dim);
   cursor: pointer;
-  padding: 2px 3px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
   border-radius: 3px;
-  font-size: 9px;
+  font-size: 10px;
   line-height: 1;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   opacity: 0;
   pointer-events: none;
-  transition: color 0.12s, opacity 0.12s;
+  transition: color 0.12s, opacity 0.12s, background 0.12s;
 }
 
 .cs-session-item:hover .cs-session-remove { opacity: 1; pointer-events: auto; }
-.cs-session-remove:hover { color: #ef4444; }
+.cs-session-remove:hover { color: #ef4444; background: rgba(239, 68, 68, 0.1); }
 
 /* ── Footer ────────────────────────────────────────────────────── */
 .case-sidebar-footer {
@@ -2489,6 +2526,75 @@ button:focus-visible {
   letter-spacing: 0.02em;
   white-space: nowrap;
   flex-shrink: 0;
+}
+
+/* ── Active case sidebar header ─────────────────────────────────── */
+.cs-active-case-header {
+  padding: 8px 12px 5px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cs-accent);
+  user-select: none;
+  border-bottom: 1px solid var(--cs-border);
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Open Case Modal ────────────────────────────────────────────── */
+.open-case-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 4px 0;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.08) transparent;
+}
+.open-case-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: background 0.12s, border-color 0.12s;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+.open-case-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+.open-case-item.active-item {
+  background: rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.28);
+  color: #10b981;
+}
+.modal-create-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 10px;
+}
+.modal-create-row .modal-text-input {
+  flex: 1;
+  height: 36px;
+  padding: 0 10px;
+  margin: 0;
+}
+.modal-create-row .primary-btn {
+  white-space: nowrap;
+  height: 36px;
+  padding: 0 14px;
 }
 
 /* ═══════════════════════════════════════════════════════════════

@@ -2407,7 +2407,18 @@ function setupOperatorActions() {
         if (!savedId) { window.location.reload(); return; }
         localStorage.setItem("heimdallPendingLoad", savedId);
 
-        // Populate case dropdown in post-save modal
+        // Auto-attach to active case if one is open (backend also does this on save)
+        if (_activeCaseId) {
+            fetch("/api/cases/active/sessions", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ session_id: savedId }),
+            }).catch(() => {});
+        }
+        window.location.reload();
+
+        // (Legacy post-save modal code disabled — sessions auto-attach to active case)
+        if (false) {
         const modal = document.getElementById("post-save-modal");
         const sel = document.getElementById("post-save-case-select");
         if (modal && sel) {
@@ -2444,6 +2455,7 @@ function setupOperatorActions() {
         } else {
             window.location.reload();
         }
+        } // end if (false)
     }
 
     if (btnUpdateSession && sessionSaveModal) {
@@ -2822,6 +2834,7 @@ const SESSION_COLORS = [
 let _cases = [];
 let _allSessions = [];
 let _activeCaseId = null;
+let _activeCase = null;
 let _overlayMarkers = new Map();
 let _pendingPhotoNoteId = null;
 
@@ -2855,11 +2868,21 @@ async function loadAllSessions() {
   } catch (e) { console.error("loadAllSessions:", e); }
 }
 
+async function loadActiveCase() {
+  try {
+    const res = await fetch("/api/cases/active");
+    if (res.ok) {
+      const data = await res.json();
+      _activeCase = data.active_case || null;
+      _activeCaseId = _activeCase ? _activeCase.case_id : null;
+    }
+  } catch (e) { console.error("loadActiveCase:", e); }
+}
+
 async function refreshSidebar() {
-  await Promise.all([loadCases(), loadAllSessions()]);
+  await Promise.all([loadCases(), loadAllSessions(), loadActiveCase()]);
   renderSidebar();
   updateActiveCaseBadge();
-  updateFooterBtn();
 }
 
 // ─── SIDEBAR RENDER ───────────────────────────────────────────────────────────
@@ -2869,32 +2892,35 @@ function renderSidebar() {
   const query = (document.getElementById("case-search")?.value || "").toLowerCase();
   body.innerHTML = "";
 
-  const caseSessionIds = new Set(_cases.flatMap(c => c.sessions || []));
-
-  if (_cases.length > 0) {
-    _cases.forEach((c, ci) => {
-      const q = query;
-      if (q && !c.name.toLowerCase().includes(q) && !(c.description || "").toLowerCase().includes(q)) return;
-      body.appendChild(buildCaseGroup(c, ci, q));
-    });
+  if (!_activeCase) {
+    body.innerHTML = '<div class="cs-empty">No case open.<br>Click <b>Open Case</b> to start.</div>';
+    return;
   }
 
-  const unassigned = _allSessions.filter(s => !caseSessionIds.has(s.session_id));
-  if (unassigned.length > 0) {
-    const label = document.createElement("div");
-    label.className = "cs-section-label";
-    label.textContent = _cases.length > 0 ? "Unassigned Sessions" : "Sessions";
-    body.appendChild(label);
-    unassigned.forEach((sess, si) => {
-      const name = (sess.custom_name || sess.display_name || sess.session_id || "").toLowerCase();
-      if (query && !name.includes(query)) return;
-      body.appendChild(buildSessionItem(sess, si, null));
-    });
+  const caseHeader = document.createElement("div");
+  caseHeader.className = "cs-active-case-header";
+  caseHeader.textContent = _activeCase.name;
+  body.appendChild(caseHeader);
+
+  const sessionIds = _activeCase.sessions || [];
+  const sessions = sessionIds
+    .map(sid => _allSessions.find(s => s.session_id === sid))
+    .filter(Boolean);
+
+  if (sessions.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "cs-empty";
+    empty.style.paddingTop = "10px";
+    empty.textContent = "No sessions yet. Save a session to add it here.";
+    body.appendChild(empty);
+    return;
   }
 
-  if (_cases.length === 0 && _allSessions.length === 0) {
-    body.innerHTML = '<p class="cs-empty">No cases yet.<br>Click + to create one.</p>';
-  }
+  sessions.forEach((sess, si) => {
+    const name = (sess.custom_name || sess.display_name || sess.session_id || "").toLowerCase();
+    if (query && !name.includes(query)) return;
+    body.appendChild(buildSessionItem(sess, si, _activeCaseId));
+  });
 }
 
 function buildCaseGroup(c, ci, query) {
@@ -3066,9 +3092,8 @@ function loadSessionFromSidebar(sid) {
 function updateActiveCaseBadge() {
   const badge = document.getElementById("active-case-badge");
   if (!badge) return;
-  const c = _cases.find(x => x.case_id === _activeCaseId);
-  if (c) {
-    badge.textContent = c.name;
+  if (_activeCase) {
+    badge.textContent = _activeCase.name;
     badge.style.display = "";
   } else {
     badge.textContent = "";
@@ -3076,66 +3101,81 @@ function updateActiveCaseBadge() {
   }
 }
 
-function updateFooterBtn() {
-  const btn = document.getElementById("btn-add-session-to-case");
-  if (btn) btn.style.display = _activeCaseId ? "flex" : "none";
-}
-
 // ─── INIT CASE SIDEBAR ────────────────────────────────────────────────────────
 function initCaseSidebar() {
   const shell = document.querySelector(".app-shell");
-  const toggleSidebar = () => shell?.classList.toggle("sidebar-collapsed");
+  const expandTab = document.getElementById("btn-sidebar-expand-tab");
 
-  document.getElementById("btn-toggle-sidebar")?.addEventListener("click", toggleSidebar);
+  const toggleSidebar = () => {
+    const collapsed = shell?.classList.toggle("sidebar-collapsed");
+    if (expandTab) expandTab.style.display = collapsed ? "flex" : "none";
+  };
+
   document.getElementById("btn-collapse-sidebar")?.addEventListener("click", toggleSidebar);
+  document.getElementById("btn-sidebar-expand-tab")?.addEventListener("click", toggleSidebar);
 
-  document.getElementById("btn-new-case")?.addEventListener("click", () => {
-    document.getElementById("new-case-modal").style.display = "flex";
+  // ── Open Case modal ──────────────────────────────────────────────
+  const openCaseModal = () => {
+    const modal = document.getElementById("open-case-modal");
+    if (!modal) return;
+    const list = document.getElementById("open-case-list");
+    if (list) {
+      list.innerHTML = "";
+      if (_cases.length === 0) {
+        list.innerHTML = '<div class="cs-empty" style="padding:12px 0 4px;">No cases yet. Create one below.</div>';
+      } else {
+        _cases.forEach(c => {
+          const item = document.createElement("div");
+          item.className = "open-case-item" + (c.case_id === _activeCaseId ? " active-item" : "");
+          item.innerHTML = `<span style="flex:1;font-weight:500;">${c.name}</span><span style="font-size:10px;color:var(--cs-text-dim);">${(c.sessions || []).length} sessions</span>`;
+          item.addEventListener("click", async () => {
+            const res = await fetch("/api/cases/active", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ case_id: c.case_id }),
+            });
+            if (res.ok) {
+              modal.style.display = "none";
+              await refreshSidebar();
+            }
+          });
+          list.appendChild(item);
+        });
+      }
+    }
+    modal.style.display = "flex";
     document.getElementById("new-case-name")?.focus();
-  });
+  };
 
-  // HTML button ID is btn-create-case-confirm
+  document.getElementById("btn-open-case")?.addEventListener("click", openCaseModal);
+  document.getElementById("btn-open-case-footer")?.addEventListener("click", openCaseModal);
+
   document.getElementById("btn-create-case-confirm")?.addEventListener("click", async () => {
     const nameEl = document.getElementById("new-case-name");
     const name = nameEl?.value.trim();
     if (!name) { nameEl?.focus(); return; }
-    const desc = document.getElementById("new-case-desc")?.value.trim() || "";
-    const res = await fetch("/api/cases", {
+    const res = await fetch("/api/cases/active", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, description: desc }),
+      body: JSON.stringify({ name }),
     });
     if (res.ok) {
-      const c = await res.json();
-      _activeCaseId = c.case_id;
-      document.getElementById("new-case-modal").style.display = "none";
+      document.getElementById("open-case-modal").style.display = "none";
       if (nameEl) nameEl.value = "";
-      const descEl = document.getElementById("new-case-desc");
-      if (descEl) descEl.value = "";
       await refreshSidebar();
     }
   });
 
-  document.getElementById("btn-new-case-cancel")?.addEventListener("click", () => {
-    document.getElementById("new-case-modal").style.display = "none";
+  document.getElementById("btn-open-case-cancel")?.addEventListener("click", () => {
+    document.getElementById("open-case-modal").style.display = "none";
+  });
+  document.getElementById("open-case-backdrop")?.addEventListener("click", () => {
+    document.getElementById("open-case-modal").style.display = "none";
   });
 
   document.getElementById("case-search")?.addEventListener("input", () => renderSidebar());
 
-  document.getElementById("btn-add-session-to-case")?.addEventListener("click", async () => {
-    if (!_activeCaseId) { alert("Select a case first."); return; }
-    const sid = loadedSessionId;
-    if (!sid) { alert("No session is currently loaded."); return; }
-    const res = await fetch(`/api/cases/${_activeCaseId}/sessions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ session_id: sid }),
-    });
-    if (res.ok) refreshSidebar();
-    else alert("Could not add session to case.");
-  });
-
-  // HTML button ID is btn-attach-photo-confirm
+  // ── Note photo modal ─────────────────────────────────────────────
   document.getElementById("btn-attach-photo-confirm")?.addEventListener("click", async () => {
     const fileInput = document.getElementById("note-photo-file");
     if (!fileInput?.files.length || !_pendingPhotoNoteId) return;

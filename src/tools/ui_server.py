@@ -2424,7 +2424,17 @@ async def operator_save_session(request: Request) -> JSONResponse:
                 if src_path.exists() and not dst_path.exists():
                     import shutil
                     shutil.copy2(src_path, dst_path)
-        return JSONResponse({"status": "session_saved", "session_id": _OPERATOR_SESSION["session_id"]})
+        saved_session_id = _OPERATOR_SESSION["session_id"]
+        # Auto-attach to active case if one is open
+        if _ACTIVE_CASE_ID:
+            try:
+                case = _load_case(_ACTIVE_CASE_ID)
+                if case and saved_session_id not in case.get("sessions", []):
+                    case.setdefault("sessions", []).append(saved_session_id)
+                    _save_case(case)
+            except Exception as attach_err:
+                logging.warning(f"Could not auto-attach session to active case: {attach_err}")
+        return JSONResponse({"status": "session_saved", "session_id": saved_session_id, "active_case_id": _ACTIVE_CASE_ID})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 
@@ -2789,6 +2799,31 @@ async def operator_analyze(
 # ---------------------------------------------------------------------------
 
 CASES_DIR = APP_ROOT / "cases"
+ACTIVE_CASE_FILE = CASES_DIR / "_active_case.txt"
+
+_ACTIVE_CASE_ID: str | None = None
+
+
+def _load_active_case_id() -> str | None:
+    try:
+        if ACTIVE_CASE_FILE.exists():
+            cid = ACTIVE_CASE_FILE.read_text(encoding="utf-8").strip()
+            if cid:
+                return cid
+    except Exception:
+        pass
+    return None
+
+
+def _persist_active_case_id(case_id: str | None) -> None:
+    try:
+        CASES_DIR.mkdir(parents=True, exist_ok=True)
+        if case_id:
+            ACTIVE_CASE_FILE.write_text(case_id, encoding="utf-8")
+        elif ACTIVE_CASE_FILE.exists():
+            ACTIVE_CASE_FILE.unlink()
+    except Exception:
+        pass
 
 
 def _load_case(case_id: str) -> dict | None:
@@ -2832,6 +2867,86 @@ def list_cases() -> JSONResponse:
             if case:
                 cases.append(_case_summary(case))
     return JSONResponse({"cases": cases})
+
+
+@app.get("/api/cases/active")
+def get_active_case() -> JSONResponse:
+    global _ACTIVE_CASE_ID
+    if _ACTIVE_CASE_ID:
+        case = _load_case(_ACTIVE_CASE_ID)
+        if case:
+            return JSONResponse({"active_case": _case_summary(case)})
+        _ACTIVE_CASE_ID = None
+        _persist_active_case_id(None)
+    return JSONResponse({"active_case": None})
+
+
+@app.post("/api/cases/active")
+async def set_active_case(request: Request) -> JSONResponse:
+    global _ACTIVE_CASE_ID
+    body = await request.json()
+    case_id = body.get("case_id", "").strip()
+    name = body.get("name", "").strip()
+
+    if case_id:
+        case = _load_case(case_id)
+        if not case:
+            return JSONResponse({"error": "Case not found"}, status_code=404)
+        _ACTIVE_CASE_ID = case_id
+        _persist_active_case_id(case_id)
+        return JSONResponse({"active_case": _case_summary(case)})
+    elif name:
+        new_id = uuid.uuid4().hex
+        case = {
+            "case_id": new_id,
+            "name": name,
+            "description": body.get("description", ""),
+            "created_at": _utc_now_iso(),
+            "sessions": [],
+            "connections": [],
+        }
+        _save_case(case)
+        _ACTIVE_CASE_ID = new_id
+        _persist_active_case_id(new_id)
+        return JSONResponse({"active_case": _case_summary(case)}, status_code=201)
+    else:
+        return JSONResponse({"error": "Provide case_id or name"}, status_code=400)
+
+
+@app.delete("/api/cases/active")
+def clear_active_case() -> JSONResponse:
+    global _ACTIVE_CASE_ID
+    _ACTIVE_CASE_ID = None
+    _persist_active_case_id(None)
+    return JSONResponse({"active_case": None})
+
+
+@app.post("/api/cases/active/sessions")
+async def add_session_to_active_case(request: Request) -> JSONResponse:
+    global _ACTIVE_CASE_ID
+    if not _ACTIVE_CASE_ID:
+        return JSONResponse({"error": "No active case"}, status_code=400)
+    body = await request.json()
+    session_id = body.get("session_id", "").strip()
+    if not session_id:
+        return JSONResponse({"error": "session_id required"}, status_code=400)
+    case = _load_case(_ACTIVE_CASE_ID)
+    if not case:
+        return JSONResponse({"error": "Active case not found"}, status_code=404)
+    if session_id not in case["sessions"]:
+        case["sessions"].append(session_id)
+        _save_case(case)
+    return JSONResponse({"active_case": _case_summary(case)})
+
+
+# Initialize active case from persisted file
+def _bootstrap_active_case() -> None:
+    global _ACTIVE_CASE_ID
+    cid = _load_active_case_id()
+    if cid and _load_case(cid):
+        _ACTIVE_CASE_ID = cid
+
+_bootstrap_active_case()
 
 
 @app.post("/api/cases")
