@@ -3310,7 +3310,7 @@ async function refreshSidebar() {
 function renderSidebar() {
   const body = document.getElementById("case-sidebar-body");
   if (!body) return;
-  const query = (document.getElementById("case-search")?.value || "").toLowerCase();
+  const query = normalizeCaseSearch(document.getElementById("case-search")?.value || "");
   body.innerHTML = "";
 
   if (!_activeCase) {
@@ -3332,7 +3332,10 @@ function renderSidebar() {
     })
     .filter(Boolean);
 
-  if (sessions.length === 0) {
+  const filteredSessions = query ? sessions.filter(sess => sessionMatchesQuery(sess, query)) : sessions;
+  const caseMatches = query && caseMatchesQuery(_activeCase, query);
+
+  if (sessions.length === 0 && !caseMatches) {
     const empty = document.createElement("div");
     empty.className = "cs-empty";
     empty.style.paddingTop = "10px";
@@ -3341,11 +3344,44 @@ function renderSidebar() {
     return;
   }
 
-  sessions.forEach((sess, si) => {
-    const name = (sess.custom_name || sess.display_name || sess.session_id || "").toLowerCase();
-    if (query && !name.includes(query)) return;
+  if (query && !caseMatches && filteredSessions.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "cs-empty";
+    empty.style.paddingTop = "10px";
+    empty.textContent = "No matching sessions in this case.";
+    body.appendChild(empty);
+    return;
+  }
+
+  filteredSessions.forEach((sess, si) => {
     body.appendChild(buildSessionItem(sess, si, _activeCaseId));
   });
+}
+
+function normalizeCaseSearch(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function sessionSearchText(session) {
+  return [
+    session?.custom_name,
+    session?.display_name,
+    session?.source_filename,
+    session?.session_id,
+    session?.status,
+  ].filter(Boolean).join(" ").toLowerCase();
+}
+
+function sessionMatchesQuery(session, query) {
+  return !query || sessionSearchText(session).includes(query);
+}
+
+function caseMatchesQuery(caseData, query) {
+  return !query || [
+    caseData?.name,
+    caseData?.description,
+    caseData?.case_id,
+  ].filter(Boolean).join(" ").toLowerCase().includes(query);
 }
 
 function buildCaseGroup(c, ci, query) {
@@ -3409,8 +3445,7 @@ function buildCaseGroup(c, ci, query) {
   (c.sessions || []).forEach((sid, si) => {
     const sess = _allSessions.find(s => s.session_id === sid);
     if (!sess) return;
-    const name = (sess.custom_name || sess.display_name || sess.session_id || "").toLowerCase();
-    if (query && !name.includes(query)) return;
+    if (query && !sessionMatchesQuery(sess, query)) return;
     sessionsList.appendChild(buildSessionItem(sess, si, c.case_id));
   });
 
