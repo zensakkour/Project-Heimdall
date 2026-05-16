@@ -11,7 +11,6 @@ Use it as the first stop before adding new `.md` files.
 - `src/docs/GEO_TECH.md`: geolocation architecture, knobs, and technical behavior.
 - `src/docs/REPRODUCIBILITY.md`: reproducibility and evaluation procedures.
 - `docs/research/research.md`: chronological evidence ledger with before/after metrics.
-- `docs/engineering/AGENT.md`: operational rules for coding agents and per-prompt documentation sync.
 
 ## Governance and Community
 - `docs/governance/CONTRIBUTING.md`

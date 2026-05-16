@@ -2678,3 +2678,21 @@ Do not delete or edit past entries. Append new work at the end.
 - Metrics (before -> after): N/A (documentation/storage hygiene only).
 - Artifacts: N/A.
 - Decision: Keep if link checks and tests pass. No research-paper update is needed beyond path references because this changes repository organization, not model behavior or research conclusions.
+
+## 2026-05-16 Local Agent Guide Cleanup
+- Hypothesis: Agent instruction files should remain local scratch state and should not be part of public repository history.
+- Change:
+  - Rewrote repository history to remove tracked `AGENT.md` and `docs/engineering/AGENT.md` from current refs.
+  - Added agent-guide names and paths to `.gitignore`.
+  - Removed public README/docs-map references to the agent guide.
+- Files touched: `.gitignore`, `README.md`, `docs/DOCS_MAP.md`, `docs/engineering/PROGRESS.md`.
+- Validation commands:
+  - `git log --all --name-only --format= | rg "(^|/)AGENT\\.md$|(^|/)AGENTS\\.md$|(^|/)agnet\\.md$|docs/engineering/AGENT\\.md"`
+  - `git check-ignore -v AGENT.md AGENTS.md agnet.md docs/engineering/AGENT.md`
+  - `.\.venv\Scripts\python.exe -m src.tools.check_readme_links README.md docs/DOCS_MAP.md`
+  - `.\.venv\Scripts\python.exe -m pytest src\tests\test_check_readme_links.py -q`
+  - `$env:TMP=(Resolve-Path .pytest_tmp).Path; $env:TEMP=$env:TMP; .\.venv\Scripts\python.exe -m pytest -q`
+- Validation result: no agent-guide paths found in current ref history; ignore rules match; link tests `2 passed`; full suite `285 passed, 3 warnings`.
+- Metrics (before -> after): N/A (repository hygiene only).
+- Artifacts: local backup only, outside Git.
+- Decision: Keep if link checks and tests pass.

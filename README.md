@@ -978,7 +978,6 @@ $env:MAPILLARY_ACCESS_TOKEN="MLY|..."
 - Support: [docs/governance/SUPPORT.md](docs/governance/SUPPORT.md)
 - Changelog: [docs/governance/CHANGELOG.md](docs/governance/CHANGELOG.md)
 - Progress tracking: [docs/engineering/PROGRESS.md](docs/engineering/PROGRESS.md)
-- Agent/contributor operating guide: [docs/engineering/AGENT.md](docs/engineering/AGENT.md)
 - Cleanup/refactor report: [docs/CLEANUP_REPORT.md](docs/CLEANUP_REPORT.md)
 - Local data layout: [docs/DATA_LAYOUT.md](docs/DATA_LAYOUT.md)
 - Research ledger: [docs/research/research.md](docs/research/research.md)

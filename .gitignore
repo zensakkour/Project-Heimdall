@@ -23,9 +23,14 @@ venv/
 
 # Local AI/agent planning files
 plan.md
+AGENT.md
+AGENTS.md
+agnet.md
 AGENTS.local.md
 CLAUDE.local.md
 GEMINI.md
+docs/engineering/AGENT.md
+docs/engineering/AGENTS.md
 .agents/
 .claude/
 .codex/
