@@ -2714,3 +2714,21 @@ Do not delete or edit past entries. Append new work at the end.
 - Metrics (before -> after): N/A (UI/session workflow fix).
 - Artifacts: N/A.
 - Decision: Keep and merge through `refactor/cleanup-modernize` once full validation passes.
+
+## 2026-05-16 Case Session Delete Persistence
+- Hypothesis: Case session deletion must remove both the `case.json` reference and the mirrored case-session folder so reloads cannot rediscover deleted sessions.
+- Change:
+  - Removed mirrored case session directories when deleting a session from a case.
+  - Added a confirmation prompt before removing a case session from the sidebar.
+  - Tightened the sidebar delete button to a fixed 16px icon target so it cannot stretch into a wide red bar.
+  - Added a regression test covering add-to-case, delete-from-case, mirror removal, and reload listing behavior.
+- Files touched: `src/tools/ui_server.py`, `src/dashboard/analysis/operator.js`, `src/dashboard/analysis/operator.css`, `src/tests/test_ui_server_operator_session.py`.
+- Validation commands:
+  - `node --check src\dashboard\analysis\operator.js`
+  - `.\.venv\Scripts\python.exe -m compileall -q src`
+  - `$env:TMP=(Resolve-Path .pytest_tmp).Path; $env:TEMP=$env:TMP; .\.venv\Scripts\python.exe -m pytest src\tests\test_ui_server_operator_session.py -q`
+  - `$env:TMP=(Resolve-Path .pytest_tmp).Path; $env:TEMP=$env:TMP; .\.venv\Scripts\python.exe -m pytest -q`
+- Validation result: focused tests `10 passed, 3 warnings`; full suite `286 passed, 3 warnings`.
+- Metrics (before -> after): deleted case sessions reappeared after reload -> deleted case sessions stay removed after reload.
+- Artifacts: N/A.
+- Decision: Keep.

@@ -3023,6 +3023,22 @@ def _mirror_session_to_case(session_id: str, case_id: str) -> None:
     shutil.copytree(source_dir, target_dir, dirs_exist_ok=True)
 
 
+def _remove_case_session_mirrors(case_id: str, session_id: str) -> int:
+    import shutil
+    case_dir = _find_id_dir(CASES_DIR, case_id)
+    sessions_dir = (case_dir / "sessions") if case_dir else None
+    if not sessions_dir or not sessions_dir.exists():
+        return 0
+
+    removed = 0
+    session_suffix = f"_{session_id}"
+    for session_dir in sessions_dir.iterdir():
+        if session_dir.is_dir() and session_dir.name.endswith(session_suffix):
+            shutil.rmtree(session_dir)
+            removed += 1
+    return removed
+
+
 def _case_summary(case: dict) -> dict:
     return {
         "case_id": case.get("case_id"),
@@ -3212,6 +3228,7 @@ def remove_session_from_case(case_id: str, session_id: str) -> JSONResponse:
     case["sessions"] = [s for s in case["sessions"] if s != session_id]
     case["updated_at"] = _utc_now_iso()
     _save_case(case)
+    _remove_case_session_mirrors(case_id, session_id)
     return JSONResponse(_case_summary(case))
 
 

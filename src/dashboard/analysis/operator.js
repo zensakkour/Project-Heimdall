@@ -3393,11 +3393,30 @@ function buildSessionItem(session, colorIdx, caseId) {
     const removeBtn = document.createElement("button");
     removeBtn.className = "cs-session-remove";
     removeBtn.title = "Remove from case";
-    removeBtn.textContent = "✕";
+    removeBtn.setAttribute("aria-label", "Remove session from case");
+    removeBtn.textContent = "x";
     removeBtn.addEventListener("click", async (e) => {
       e.stopPropagation();
-      await fetch(`/api/cases/${caseId}/sessions/${sid}`, { method: "DELETE" });
-      refreshSidebar();
+      const sessionName = session.custom_name || session.display_name || (sid || "").slice(0, 14);
+      if (!window.confirm(`Remove "${sessionName}" from this case?`)) return;
+      try {
+        const res = await fetch(`/api/cases/${caseId}/sessions/${sid}`, { method: "DELETE" });
+        if (!res.ok) throw new Error(`DELETE returned ${res.status}`);
+        const overlay = _overlayMarkers.get(sid);
+        if (overlay) {
+          overlay.markers.forEach(marker => marker.remove());
+          _overlayMarkers.delete(sid);
+        }
+        _hiddenCaseSessions.delete(sid);
+        if (_activeCase?.sessions) {
+          _activeCase.sessions = _activeCase.sessions.filter(sessionId => sessionId !== sid);
+        }
+        await refreshSidebar();
+        renderCandidateList(lastResult);
+      } catch (err) {
+        console.error("Failed to remove session from case", err);
+        window.alert("Could not remove that session from the case.");
+      }
     });
     item.appendChild(removeBtn);
   }

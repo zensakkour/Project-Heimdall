@@ -161,3 +161,33 @@ def test_operator_session_image_serving():
     expected_bytes = base64.b64decode(pixel_b64)
     assert resp.content == expected_bytes
 
+def test_removing_case_session_deletes_case_mirror(tmp_path, monkeypatch):
+    from src.tools import ui_server
+
+    cases_dir = tmp_path / "cases"
+    monkeypatch.setattr(ui_server, "CASES_DIR", cases_dir)
+    monkeypatch.setattr(ui_server, "ACTIVE_CASE_FILE", cases_dir / "_active_case.txt")
+
+    client.post("/api/operator/reset")
+    save_resp = client.post("/api/operator/save", json={"name": "case session"})
+    assert save_resp.status_code == 200
+    session_id = save_resp.json()["session_id"]
+
+    case_resp = client.post("/api/cases", json={"name": "Delete Session Case"})
+    assert case_resp.status_code == 201
+    case_id = case_resp.json()["case_id"]
+
+    add_resp = client.post(f"/api/cases/{case_id}/sessions", json={"session_id": session_id})
+    assert add_resp.status_code == 200
+    case_dir = ui_server._find_id_dir(cases_dir, case_id)
+    mirrored_sessions = list((case_dir / "sessions").glob(f"*_{session_id}"))
+    assert len(mirrored_sessions) == 1
+
+    delete_resp = client.delete(f"/api/cases/{case_id}/sessions/{session_id}")
+    assert delete_resp.status_code == 200
+    assert delete_resp.json()["sessions"] == []
+    assert list((case_dir / "sessions").glob(f"*_{session_id}")) == []
+
+    reload_resp = client.get("/api/operator/sessions?include_case=1")
+    assert reload_resp.status_code == 200
+    assert all(s["session_id"] != session_id or s.get("case_id") != case_id for s in reload_resp.json()["sessions"])
