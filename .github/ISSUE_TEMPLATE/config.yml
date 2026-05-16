@@ -4,5 +4,5 @@ contact_links:
     url: https://github.com/zensakkour/Project-Heimdall/security/advisories/new
     about: Please report security issues privately.
   - name: Support and Troubleshooting
-    url: https://github.com/zensakkour/Project-Heimdall/blob/master/SUPPORT.md
+    url: https://github.com/zensakkour/Project-Heimdall/blob/master/docs/governance/SUPPORT.md
     about: Read support guidance before opening issues.

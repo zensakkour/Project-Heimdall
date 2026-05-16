@@ -21,6 +21,15 @@ venv/
 .env
 .env.*
 
+# Local AI/agent planning files
+plan.md
+AGENTS.local.md
+CLAUDE.local.md
+GEMINI.md
+.agents/
+.claude/
+.codex/
+
 # Test and runtime scratch output
 .pytest_cache/
 .pytest_tmp/

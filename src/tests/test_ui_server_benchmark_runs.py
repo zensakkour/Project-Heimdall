@@ -114,7 +114,8 @@ def test_compare_benchmark_runs_and_append_progress(monkeypatch) -> None:
         compares_dir = root / "benchmark_compares"
         runs_dir.mkdir(parents=True, exist_ok=True)
         compares_dir.mkdir(parents=True, exist_ok=True)
-        progress_path = root / "PROGRESS.md"
+        progress_path = root / "docs" / "engineering" / "PROGRESS.md"
+        progress_path.parent.mkdir(parents=True, exist_ok=True)
         progress_path.write_text("# Progress\n", encoding="utf-8")
 
         baseline = _make_run(

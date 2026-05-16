@@ -14,7 +14,7 @@ Describe the purpose of this change and the problem it solves.
 
 ## Checklist
 
-- [ ] I followed the contribution guidelines in `CONTRIBUTING.md`
+- [ ] I followed the contribution guidelines in `docs/governance/CONTRIBUTING.md`
 - [ ] I used clear commit messages
 - [ ] I did not include secrets or sensitive data
 

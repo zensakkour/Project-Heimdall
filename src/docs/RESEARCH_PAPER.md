@@ -5,7 +5,7 @@ Date: May 10, 2026
 Author: Zein Sakkour
 
 Companion external landscape review: `src/docs/MARKET_RESEARCH.md`.
-Chronological experiment ledger with the latest branch-era before/after metrics: `research.md`.
+Chronological experiment ledger with the latest branch-era before/after metrics: `docs/research/research.md`.
 
 ## Title
 Project Heimdall: Benchmark-Governed Geolocation from Imagery via Multi-Provider Retrieval, Robust Probabilistic Fusion, and Uncertainty-Aware Analysis
@@ -858,7 +858,7 @@ Mitigations implemented:
 
 ## 10. Reproducibility
 ### 10.1 Required Documents
-- `PROGRESS.md` (append-only engineering history)
+- `docs/engineering/PROGRESS.md` (append-only engineering history)
 - `src/docs/GEO_TECH.md` (geo stack details)
 - `src/docs/REPRODUCIBILITY.md` (repro procedures)
 
@@ -900,7 +900,7 @@ Mitigations implemented:
 ```
 
 ### 10.3 Validation Coverage Recorded in Project Log
-From `PROGRESS.md`:
+From `docs/engineering/PROGRESS.md`:
 - Full suite checkpoints reached `78 passed`, then `81 passed`, then `88 passed` during major iterations.
 - Focused/non-UI checkpoints reported `18 passed` and `105 passed`.
 - Some full-suite UI tests are dependency-limited in minimal environments.
@@ -1261,7 +1261,7 @@ To test the source-specific projection option, I added candidate-source filters 
 - `runs/geo_impact_latest.md`
 
 ## Appendix C: Internal References
-- `[R1]` `PROGRESS.md`
+- `[R1]` `docs/engineering/PROGRESS.md`
 - `[R2]` `src/docs/GEO_TECH.md`
 - `[R3]` `src/docs/REPRODUCIBILITY.md`
 - `[R4]` `docs/eval/` governance artifacts

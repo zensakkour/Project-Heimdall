@@ -519,8 +519,8 @@ async function runBenchmarkComparison(options = {}) {
     renderBenchmarkCompareSummary(payload);
     if (statusEl && appendProgress) {
       statusEl.textContent += payload.progress_appended
-        ? " | Appended to PROGRESS.md"
-        : " | Did not append to PROGRESS.md";
+        ? " | Appended to progress log"
+        : " | Did not append to progress log";
     }
 
     if (outputEl) {

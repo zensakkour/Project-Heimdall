@@ -26,7 +26,7 @@ $plan = @"
 ## Status
 - Branch purpose:
 - Completion policy:
-- Branch-specific note: replace this stub with this branch's own plan; do not reuse another branch's `plan.md` verbatim.
+- Branch-specific note: this file is local-only scratch state and is ignored by Git.
 
 ## Problem
 
@@ -44,7 +44,7 @@ $plan = @"
 
 ## Benchmarks and Evidence Rules
 - Use leakage-safe evaluation for improvement claims.
-- Record major results in `PROGRESS.md`.
+- Record major results in `docs/engineering/PROGRESS.md`.
 
 ## Immediate Next Actions
 1.
@@ -53,4 +53,4 @@ $plan = @"
 "@
 $plan | Set-Content -Path "plan.md" -Encoding utf8
 Write-Host "Switched to $branch"
-Write-Host "Created plan.md"
+Write-Host "Created ignored local plan.md"

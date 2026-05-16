@@ -2660,3 +2660,21 @@ Do not delete or edit past entries. Append new work at the end.
 - Metrics (before -> after): N/A (repository hygiene only).
 - Artifacts: `docs/CLEANUP_REPORT.md`.
 - Decision: Keep. No update to `src/docs/RESEARCH_PAPER.md` or `research.md` is needed because this cleanup does not change algorithms, datasets, metrics, or research conclusions.
+
+## 2026-05-16 Documentation Layout and Local Plan Cleanup
+- Hypothesis: Root-level Markdown can be reduced without losing discoverability by keeping `README.md` as the root entry point and moving supporting docs under `docs/`.
+- Change:
+  - Rewrote repository history to remove tracked `plan.md` from all local branch refs.
+  - Added `plan.md` and common local agent scratch paths to `.gitignore`.
+  - Moved governance docs to `docs/governance/`, engineering docs to `docs/engineering/`, and the research ledger to `docs/research/`.
+  - Updated README, docs map, PR/issue templates, contributor/agent guidance, benchmark append paths, and tests for the new document locations.
+- Files touched: `.gitignore`, `README.md`, `.github/`, `docs/`, `scripts/new-branch.ps1`, `src/tools/ui_server.py`, `src/tests/test_ui_server_benchmark_runs.py`, `src/dashboard/analysis/lab/`.
+- Validation commands:
+  - `.\.venv\Scripts\python.exe -m compileall -q src`
+  - `.\.venv\Scripts\python.exe -m src.tools.check_readme_links README.md src/dashboard/README.md docs/DOCS_MAP.md`
+  - `.\.venv\Scripts\python.exe -m pytest src\tests\test_ui_server_benchmark_runs.py src\tests\test_ui_server_operator_session.py -q`
+  - `$env:TMP=(Resolve-Path .pytest_tmp).Path; $env:TEMP=$env:TMP; .\.venv\Scripts\python.exe -m pytest -q`
+- Validation result: focused tests `13 passed`; full suite `285 passed, 3 warnings`.
+- Metrics (before -> after): N/A (documentation/storage hygiene only).
+- Artifacts: N/A.
+- Decision: Keep if link checks and tests pass. No research-paper update is needed beyond path references because this changes repository organization, not model behavior or research conclusions.

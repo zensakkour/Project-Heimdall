@@ -21,7 +21,7 @@ Examples:
 
 ## Workflow
 1. Branch off `master`.
-2. Create or update the branch root `plan.md` immediately after branching. It must describe that branch's own goal, comparison plan, decision gates, and intended next move. Do not copy another branch's `plan.md` verbatim.
+2. Keep any local planning in ignored `plan.md` or another untracked scratch file.
 3. Commit small, focused changes.
 4. Open a pull request using the PR template.
 5. Run local tests before merge (`python -m pytest -q`).
@@ -62,10 +62,10 @@ Use the helper to create a dated branch name:
 .\scripts\new-branch.ps1 -Type feat -Name "geo accuracy tuning"
 .\scripts\new-branch.ps1 -Type fix -Name "eval paths"
 ```
-This creates `feat/yyyymmdd-geo-accuracy-tuning` and switches to it.
+This creates `feat/yyyymmdd-geo-accuracy-tuning`, switches to it, and writes an ignored local `plan.md` scratch file.
 
 ## Notes
 - `master` is the default branch.
-- Keep `plan.md` branch-specific. When a branch is merged, the destination branch must keep or receive its own `plan.md` instead of inheriting the merged branch's plan unchanged.
+- Do not commit `plan.md`; it is local-only planning state.
 - Large datasets live outside git (see README).
 - Dependency and action updates are automated through Dependabot.

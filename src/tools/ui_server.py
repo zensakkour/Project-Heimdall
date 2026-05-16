@@ -205,7 +205,7 @@ def _benchmark_compares_dir() -> Path:
 
 
 def _progress_log_path() -> Path:
-    return APP_ROOT / "PROGRESS.md"
+    return APP_ROOT / "docs" / "engineering" / "PROGRESS.md"
 
 
 def _is_safe_run_id(run_id: str) -> bool:

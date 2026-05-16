@@ -4,7 +4,7 @@ Last updated: May 10, 2026
 
 This file is the compact research-facing ledger for the repo. It is not the paper itself; it is the evidence log behind the paper. It is different from:
 
-- `PROGRESS.md`: append-only engineering work log
+- `docs/engineering/PROGRESS.md`: append-only engineering work log
 - `src/docs/RESEARCH_PAPER.md`: narrative paper-style draft
 
 Use this file when you need the exact sequence of major geolocation changes, measured before/after performance, commands, and artifact paths without digging through every run output. Use `src/docs/RESEARCH_PAPER.md` when you want the authored narrative research write-up.

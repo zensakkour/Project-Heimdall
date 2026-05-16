@@ -27,6 +27,6 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## Notes
 
-- `CHANGELOG.md` is for release-oriented summaries.
-- Detailed engineering chronology lives in `PROGRESS.md` (append-only).
+- `docs/governance/CHANGELOG.md` is for release-oriented summaries.
+- Detailed engineering chronology lives in `docs/engineering/PROGRESS.md` (append-only).
 - Research-method details live in `src/docs/RESEARCH_PAPER.md`.

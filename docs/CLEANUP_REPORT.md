@@ -7,7 +7,7 @@ Tracked source/config/UI files are primarily:
 - Python: `167` tracked `.py` files under `src/`, with CLI entry points in `src/cli.py`, batch tooling in `src/batch_run.py`, domain modules under `src/core/`, schemas under `src/schemas/`, tests under `src/tests/`, and operational tools under `src/tools/`.
 - Frontend: vanilla HTML/CSS/JavaScript under `src/dashboard/`, including the analysis UI in `src/dashboard/analysis/`.
 - Configuration and workflows: JSON configs in `src/config/`, schemas in `src/schemas/`, benchmark contracts in `benchmarks/`, GitHub Actions in `.github/workflows/`, shell helpers in `src/scripts/`, PowerShell helpers in `scripts/`, and `run_heimdall.cmd`.
-- Documentation: `README.md`, `PROGRESS.md`, `research.md`, `docs/`, `src/docs/`, governance files, and dashboard-specific docs.
+- Documentation: `README.md`, `docs/`, `src/docs/`, governance files, and dashboard-specific docs.
 - Research/eval artifacts: selected tracked JSON/JSONL/NPZ artifacts under `runs/` and `docs/eval/`.
 
 Languages and frameworks:
@@ -36,7 +36,7 @@ Following the project goal of avoiding premature abstractions, this cleanup remo
 
 ## Preserved Items
 
-- `PROGRESS.md`, `research.md`, `src/docs/RESEARCH_PAPER.md`, `src/docs/GEO_TECH.md`, `src/docs/REPRODUCIBILITY.md`, and `docs/DATA_LAYOUT.md` are actively referenced and remain canonical.
+- `docs/engineering/PROGRESS.md`, `docs/research/research.md`, `src/docs/RESEARCH_PAPER.md`, `src/docs/GEO_TECH.md`, `src/docs/REPRODUCIBILITY.md`, and `docs/DATA_LAYOUT.md` are actively referenced and remain canonical.
 - `docs/eval/` and tracked `runs/` artifacts are preserved because README/research docs use them as benchmark evidence.
 - `branches/README.md` is preserved as repository workflow documentation.
 

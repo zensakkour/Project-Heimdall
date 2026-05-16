@@ -149,5 +149,4 @@ Shortlist for next implementation rounds:
 - Technical narrative and experiments: `src/docs/RESEARCH_PAPER.md`
 - Geolocation architecture and knobs: `src/docs/GEO_TECH.md`
 - Reproducibility process: `src/docs/REPRODUCIBILITY.md`
-- Engineering timeline and validation artifacts: `PROGRESS.md`
-
+- Engineering timeline and validation artifacts: `docs/engineering/PROGRESS.md`

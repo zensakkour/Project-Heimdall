@@ -8,11 +8,11 @@ Geospatial perception and analysis platform that combines object detection, geo-
 
 ## Project Status Tracking
 
-- Engineering progress log: [PROGRESS.md](PROGRESS.md)
+- Engineering progress log: [docs/engineering/PROGRESS.md](docs/engineering/PROGRESS.md)
 - What it is: append-only record of shipped changes, validation runs, and technical milestones.
 - How to use it: check the top snapshot for current status, then review dated entries for full history.
 - Benchmark governance: [docs/eval/latest_report.md](docs/eval/latest_report.md), [docs/eval/history.jsonl](docs/eval/history.jsonl), [docs/eval/baseline.json](docs/eval/baseline.json)
-- Chronological research ledger with before/after metrics: [research.md](research.md)
+- Chronological research ledger with before/after metrics: [docs/research/research.md](docs/research/research.md)
 - Full research-style write-up: [src/docs/RESEARCH_PAPER.md](src/docs/RESEARCH_PAPER.md)
 - External market and SOTA review: [src/docs/MARKET_RESEARCH.md](src/docs/MARKET_RESEARCH.md)
 - Optional publication formatting: the research draft can be converted to submission style (IMRaD with numbered equations and references).
@@ -356,7 +356,7 @@ Benchmark comparison in UI:
 1. Use `Saved runs` dropdown to load a previous run by date/time.
 1. Use `Show selected saved run` toggle to switch between viewing latest run output and a selected historical run.
 1. Use `Baseline run` + `Candidate run` and click `Compare Runs` to see metric deltas.
-1. Use `Append Compare To PROGRESS.md` to write a comparison snippet into `PROGRESS.md`.
+1. Use `Append Compare To Progress Log` to write a comparison snippet into `docs/engineering/PROGRESS.md`.
 
 Random sample geo check in UI:
 
@@ -674,7 +674,7 @@ How to benchmark different settings:
 How this connects to UI:
 1. Open `Scoring` tab in app.
 1. Use `Saved runs` dropdown to inspect past run payloads by timestamp.
-1. Use baseline/candidate selectors to compare two run ids and optionally append compare snippet to `PROGRESS.md`.
+1. Use baseline/candidate selectors to compare two run ids and optionally append a comparison snippet to `docs/engineering/PROGRESS.md`.
 
 ### Run test suite
 
@@ -972,12 +972,22 @@ $env:MAPILLARY_ACCESS_TOKEN="MLY|..."
 
 ## Engineering and Contribution
 
-- Contribution guide: [CONTRIBUTING.md](CONTRIBUTING.md)
-- Code of conduct: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
-- Security policy: [SECURITY.md](SECURITY.md)
-- Support: [SUPPORT.md](SUPPORT.md)
-- Changelog: [CHANGELOG.md](CHANGELOG.md)
-- Progress tracking: [PROGRESS.md](PROGRESS.md)
+- Contribution guide: [docs/governance/CONTRIBUTING.md](docs/governance/CONTRIBUTING.md)
+- Code of conduct: [docs/governance/CODE_OF_CONDUCT.md](docs/governance/CODE_OF_CONDUCT.md)
+- Security policy: [docs/governance/SECURITY.md](docs/governance/SECURITY.md)
+- Support: [docs/governance/SUPPORT.md](docs/governance/SUPPORT.md)
+- Changelog: [docs/governance/CHANGELOG.md](docs/governance/CHANGELOG.md)
+- Progress tracking: [docs/engineering/PROGRESS.md](docs/engineering/PROGRESS.md)
+- Agent/contributor operating guide: [docs/engineering/AGENT.md](docs/engineering/AGENT.md)
+- Cleanup/refactor report: [docs/CLEANUP_REPORT.md](docs/CLEANUP_REPORT.md)
+- Local data layout: [docs/DATA_LAYOUT.md](docs/DATA_LAYOUT.md)
+- Research ledger: [docs/research/research.md](docs/research/research.md)
+- Research paper: [src/docs/RESEARCH_PAPER.md](src/docs/RESEARCH_PAPER.md)
+- Market/SOTA review: [src/docs/MARKET_RESEARCH.md](src/docs/MARKET_RESEARCH.md)
+- Geo technical notes: [src/docs/GEO_TECH.md](src/docs/GEO_TECH.md)
+- Reproducibility guide: [src/docs/REPRODUCIBILITY.md](src/docs/REPRODUCIBILITY.md)
+- Dashboard docs: [src/dashboard/README.md](src/dashboard/README.md)
+- Worktree notes: [branches/README.md](branches/README.md)
 - Issue templates: [`.github/ISSUE_TEMPLATE`](.github/ISSUE_TEMPLATE)
 - PR template: [`.github/pull_request_template.md`](.github/pull_request_template.md)
 - CI workflow: [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
