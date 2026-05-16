@@ -22,6 +22,7 @@ Use it as the first stop before adding new `.md` files.
 ## Component-Specific Docs
 - `src/dashboard/README.md`: dashboard/analysis UI structure and endpoints.
 - `branches/README.md`: git worktree usage guidance.
+- `docs/CLEANUP_REPORT.md`: repository cleanup/refactor inventory and removal rationale.
 
 ## Generated / Run-Dependent Docs
 - `docs/eval/latest_report.md`: benchmark run report (generated).

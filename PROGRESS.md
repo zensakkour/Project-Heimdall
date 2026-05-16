@@ -2641,3 +2641,22 @@ Do not delete or edit past entries. Append new work at the end.
 - Metrics (before -> after): N/A (UI workflow addition)
 - Artifacts: N/A
 - Decision: Keep. The integration brings local state management for session tracking and lays ground for seamless pan-level inspection via local combined street image databases.
+
+## 2026-05-16 Repository Cleanup Branch
+- Hypothesis: The repository can be cleaned without behavior changes by removing proven stale files and tightening ignore rules instead of introducing broad abstractions over actively changing UI/server code.
+- Change:
+  - Created branch `refactor/cleanup-modernize`.
+  - Removed tracked `.orig` dashboard backups, the one-off `fix_research.py` patch script, and the root-level ad-hoc `test_image_save.py` smoke test.
+  - Organized `.gitignore` and added missing ignores for local runtime state (`cases/`, `.pytest_tmp/`, logs, editor files, and root model weights).
+  - Added `docs/CLEANUP_REPORT.md` and linked it from `docs/DOCS_MAP.md`.
+  - Replaced the stale branch-local `plan.md` with the cleanup branch plan.
+- Files touched: `.gitignore`, `docs/CLEANUP_REPORT.md`, `docs/DOCS_MAP.md`, `plan.md`, `PROGRESS.md`, removed stale backup/ad-hoc files.
+- Validation commands:
+  - `.\.venv\Scripts\python.exe -m compileall -q src`
+  - `.\.venv\Scripts\python.exe -m src.tools.check_readme_links README.md src/dashboard/README.md`
+  - `.\.venv\Scripts\python.exe -m pytest src\tests\test_ui_server_operator_session.py -q`
+  - `$env:TMP=(Resolve-Path .pytest_tmp).Path; $env:TEMP=$env:TMP; .\.venv\Scripts\python.exe -m pytest -q`
+- Validation note: full pytest fails with `PermissionError` when using the default Windows temp base `C:\Users\zen\AppData\Local\Temp\pytest-of-zen`; rerunning with repo-local `.pytest_tmp` passes.
+- Metrics (before -> after): N/A (repository hygiene only).
+- Artifacts: `docs/CLEANUP_REPORT.md`.
+- Decision: Keep. No update to `src/docs/RESEARCH_PAPER.md` or `research.md` is needed because this cleanup does not change algorithms, datasets, metrics, or research conclusions.

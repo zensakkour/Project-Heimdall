@@ -1,24 +1,44 @@
-# Python
+# Python caches and build output
 __pycache__/
 *.py[cod]
 *.pyd
 *.pyo
 *.pdb
 *.egg-info/
+*.egg
+dist/
+build/
+.coverage
+htmlcov/
+
+# Virtual environments
 .venv/
 .venv*/
+venv/
 .uv/
+
+# Secrets and local environment
 .env
 .env.*
-# Pytest
+
+# Test and runtime scratch output
 .pytest_cache/
+.pytest_tmp/
+*.log
+*.tmp
+dummy.jpg
+
+# Operator/runtime state
+operator_sessions/
+cases/
+
 # UI generated data
 /src/dashboard/data/*.json
 /src/dashboard/data/*.jsonl
 /src/dashboard/data/benchmark_runs/
 /src/dashboard/data/benchmark_compares/
-# C++ build artifacts
-build/
+
+# Native build artifacts
 out/
 *.o
 *.obj
@@ -28,7 +48,8 @@ out/
 *.dylib
 *.dll
 *.exe
-# Data and weights
+
+# Data, models, and generated run output
 /data/dota/*
 /data/dota_v1/*
 /data/weights/*
@@ -41,13 +62,17 @@ out/
 /data/test_paris/*
 /data/**
 /yolo11x-obb.pt
+/rf-detr-medium.pth
 /runs/
 /runs/benchmark_history/
 !**/.gitkeep
-# OS
+
+# OS and editor files
 .DS_Store
 Thumbs.db
+.vscode/
+.idea/
 
+# Model weights
 *.pth
-dummy.jpg
-operator_sessions/
+*.pt
