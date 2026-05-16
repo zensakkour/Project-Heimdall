@@ -415,6 +415,10 @@ html, body {
   flex: 1;
 }
 
+.dev-mode-row {
+  margin-top: 8px;
+}
+
 .inline-checkbox {
   align-items: center;
   color: var(--text-secondary);
@@ -630,6 +634,53 @@ button:focus-visible {
   opacity: 1;
 }
 
+.candidate-card.accepted-candidate {
+  background: rgba(16, 185, 129, 0.055);
+  border-left-color: rgba(16, 185, 129, 0.8);
+  opacity: 1;
+}
+
+.candidate-card.accepted-candidate .card-rank {
+  color: #6ee7b7;
+}
+
+.candidate-card.accepted-candidate .card-score {
+  background: rgba(16, 185, 129, 0.14);
+  border-color: rgba(16, 185, 129, 0.34);
+  color: #6ee7b7;
+}
+
+.session-candidate-divider {
+  align-items: center;
+  color: var(--text-secondary);
+  display: flex;
+  font-size: 10px;
+  font-weight: 700;
+  gap: 8px;
+  letter-spacing: 0.08em;
+  padding: 12px var(--panel-inset) 6px;
+  text-transform: uppercase;
+}
+
+.session-candidate-divider span {
+  background: var(--session-color, var(--accent));
+  border-radius: 999px;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--session-color, var(--accent)) 45%, transparent);
+  height: 8px;
+  width: 8px;
+}
+
+.session-candidate-card {
+  border-left-color: color-mix(in srgb, var(--session-color, var(--accent)) 70%, transparent);
+  opacity: 0.82;
+}
+
+.session-candidate-card.active,
+.session-candidate-card:hover {
+  background: color-mix(in srgb, var(--session-color, var(--accent)) 10%, transparent);
+  border-left-color: var(--session-color, var(--accent));
+}
+
 .result-card {
   padding: 16px;
   background: rgba(255,255,255,0.03);
@@ -645,6 +696,21 @@ button:focus-visible {
   opacity: 1;
   background: rgba(255, 255, 255, 0.075);
   box-shadow: inset 3px 0 0 var(--text-primary), 0 0 0 1px rgba(255, 255, 255, 0.16);
+}
+
+.pin-result-card {
+  border-radius: 8px;
+  margin-bottom: 8px;
+  opacity: 0.82;
+}
+
+.pin-card-kicker {
+  color: #f97316;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  margin-bottom: 5px;
+  text-transform: uppercase;
 }
 
 .card-top {
@@ -2410,6 +2476,16 @@ button:focus-visible {
   padding-left: 10px;
 }
 
+.cs-session-item.missing-session {
+  cursor: default;
+  opacity: 0.58;
+}
+
+.cs-session-item.missing-session .cs-session-vis {
+  cursor: not-allowed;
+  filter: grayscale(1);
+}
+
 /* ── Visibility Toggle Dot ─────────────────────────────────────── */
 .cs-session-vis {
   flex-shrink: 0;
@@ -2599,13 +2675,11 @@ button:focus-visible {
   margin-top: 8px;
 }
 
+.btn-accept-candidate,
 .btn-refuse-candidate {
   flex: 1;
-  background: rgba(239, 68, 68, 0.06);
-  border: 1px solid rgba(239, 68, 68, 0.16);
   outline: none;
   border-radius: 6px;
-  color: #ef4444;
   cursor: pointer;
   font-size: 10px;
   font-weight: 600;
@@ -2618,6 +2692,29 @@ button:focus-visible {
   gap: 4px;
   font-family: inherit;
   transition: background 0.15s, border-color 0.15s;
+}
+
+.btn-accept-candidate {
+  background: rgba(16, 185, 129, 0.07);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  color: #10b981;
+}
+
+.btn-accept-candidate:hover {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.38);
+}
+
+.accepted-candidate .btn-accept-candidate {
+  background: rgba(16, 185, 129, 0.18);
+  border-color: rgba(16, 185, 129, 0.45);
+  color: #6ee7b7;
+}
+
+.btn-refuse-candidate {
+  background: rgba(239, 68, 68, 0.06);
+  border: 1px solid rgba(239, 68, 68, 0.16);
+  color: #ef4444;
 }
 
 .btn-refuse-candidate:hover {
@@ -2771,6 +2868,22 @@ button:focus-visible {
 
 .overlay-session-marker:hover { transform: scale(1.2); }
 
+.manual-pin-marker {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #f97316;
+  border: 2px solid rgba(255,255,255,0.82);
+  box-shadow: 0 0 0 4px rgba(249,115,22,0.18), 0 4px 10px rgba(0,0,0,0.48);
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.manual-pin-marker:hover {
+  transform: scale(1.16);
+  box-shadow: 0 0 0 5px rgba(249,115,22,0.24), 0 6px 14px rgba(0,0,0,0.55);
+}
+
 /* ── Modal text inputs ─────────────────────────────────────────── */
 .modal-text-input {
   width: 100%;
@@ -2805,4 +2918,3 @@ button:focus-visible {
 }
 
 .candidate-pin-marker:hover { transform: scale(1.12); }
-

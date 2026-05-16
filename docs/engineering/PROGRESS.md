@@ -2696,3 +2696,21 @@ Do not delete or edit past entries. Append new work at the end.
 - Metrics (before -> after): N/A (repository hygiene only).
 - Artifacts: local backup only, outside Git.
 - Decision: Keep if link checks and tests pass.
+
+## 2026-05-16 Operator Case Session UI Fix
+- Hypothesis: The operator case UI should show a usable profile selector and should not duplicate the loaded session's candidates as both current candidates and session overlay candidates.
+- Change:
+  - Restored `Paris (Standard)` and `Paris (Test)` profile options in the analysis UI.
+  - Added a frontend fallback that repopulates the profile selector if the HTML options are absent.
+  - Excluded the currently loaded session from visible session-overlay candidate cards unless the current session is explicitly hidden.
+  - Kept the broader case/session persistence edits in `src/tools/ui_server.py` and related UI files.
+- Files touched: `src/dashboard/analysis/index.html`, `src/dashboard/analysis/operator.css`, `src/dashboard/analysis/operator.js`, `src/tools/ui_server.py`.
+- Validation commands:
+  - `node --check src\dashboard\analysis\operator.js`
+  - `.\.venv\Scripts\python.exe -m compileall -q src`
+  - `.\.venv\Scripts\python.exe -m pytest src\tests\test_ui_server_operator_session.py src\tests\test_ui_server_benchmark_runs.py -q`
+  - `$env:TMP=(Resolve-Path .pytest_tmp).Path; $env:TEMP=$env:TMP; .\.venv\Scripts\python.exe -m pytest -q`
+- Validation result: focused tests `13 passed, 3 warnings`; full suite `285 passed, 3 warnings`.
+- Metrics (before -> after): N/A (UI/session workflow fix).
+- Artifacts: N/A.
+- Decision: Keep and merge through `refactor/cleanup-modernize` once full validation passes.

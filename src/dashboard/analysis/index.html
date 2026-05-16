@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -58,16 +58,12 @@
       <header class="operator-header">
         <div class="brand">
           <img src="../assets/logo-mark.png" alt="Heimdall" />
-          <span class="brand-text">Project Heimdall — Paris</span>
+          <span class="brand-text">Project Heimdall â€” Paris</span>
           <span id="active-case-badge" class="active-case-badge" style="display:none;"></span>
         </div>
         <div class="header-actions">
           <button id="btn-new-session" class="btn-text header-btn">New Session</button>
           <button id="btn-save-session" class="primary-btn header-btn">Save Session</button>
-          <select id="load-session-select" class="header-select">
-             <option value="">— Load Session —</option>
-          </select>
-          <button id="btn-load-session" class="primary-btn header-btn">Load</button>
         </div>
       </header>
 
@@ -89,11 +85,11 @@
         </div>
 
         <div class="case-search-row">
-          <input id="case-search" class="case-search-input" type="search" placeholder="Filter cases & sessions…" autocomplete="off" />
+          <input id="case-search" class="case-search-input" type="search" placeholder="Filter cases & sessionsâ€¦" autocomplete="off" />
         </div>
 
         <div class="case-sidebar-body" id="case-sidebar-body">
-          <div class="cs-empty">Loading…</div>
+          <div class="cs-empty">Loadingâ€¦</div>
         </div>
       </aside>
 
@@ -309,7 +305,7 @@
           <div id="lightbox-intel" class="lightbox-intel"></div>
         </div>
         <div id="lightbox-filename" class="lightbox-filename"></div>
-        <button id="close-lightbox" class="lightbox-close">✕</button>
+        <button id="close-lightbox" class="lightbox-close">âœ•</button>
       </div>
     </div>
 
@@ -322,7 +318,7 @@
            <button id="copy-json-modal" class="primary-btn header-btn">COPY JSON</button>
         </div>
         <pre id="modal-json-text" class="raw-json json-modal-pre"></pre>
-        <button id="close-json-modal" class="lightbox-close">✕</button>
+        <button id="close-json-modal" class="lightbox-close">âœ•</button>
       </div>
     </div>
 
@@ -334,7 +330,7 @@
         <div class="sv-image-wrap" id="sv-image-wrap">
           <img id="sv-img" src="" alt="Street View" />
           <canvas id="sv-overlay-canvas" class="sv-overlay-canvas"></canvas>
-          <div id="sv-loading" class="sv-loading">Loading…</div>
+          <div id="sv-loading" class="sv-loading">Loadingâ€¦</div>
           <div id="sv-error" class="sv-error" style="display:none;"></div>
         </div>
 
@@ -343,14 +339,14 @@
 
           <div class="sv-ctrl-header">
             <span class="sv-ctrl-title">Street View</span>
-            <button id="close-street-view-modal" class="sv-close-btn">✕</button>
+            <button id="close-street-view-modal" class="sv-close-btn">âœ•</button>
           </div>
 
           <div id="sv-meta" class="sv-meta-text"></div>
 
           <div class="sv-heading-box">
             <span class="sv-ctrl-lbl">Heading</span>
-            <span id="sv-heading-label" class="sv-heading-val">--°</span>
+            <span id="sv-heading-label" class="sv-heading-val">--Â°</span>
           </div>
 
           <div class="sv-ctrl-block">
@@ -418,7 +414,6 @@
         <div id="summary"></div>
         <div id="metric-tier"></div>
         <div id="metric-mode"></div>
-        <select id="live-topn"><option value="20">20</option></select>
         <div id="geo-ranking"></div>
         <div id="detection-list"></div>
         <pre id="details"></pre>
@@ -434,7 +429,7 @@
         </div>
         <div id="open-case-list" class="open-case-list"></div>
         <div class="modal-create-row">
-          <input id="new-case-name" class="modal-text-input" type="text" placeholder="Create new case…" maxlength="80" />
+          <input id="new-case-name" class="modal-text-input" type="text" placeholder="Create new caseâ€¦" maxlength="80" />
           <button id="btn-create-case-confirm" class="primary-btn">Create</button>
         </div>
         <button id="btn-open-case-cancel" class="btn-text modal-action-btn" style="margin-top:6px;">Close</button>

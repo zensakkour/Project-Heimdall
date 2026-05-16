@@ -16,6 +16,7 @@ import math
 import multiprocessing as mp
 import os
 import random
+import re
 from queue import Empty as QueueEmpty
 import tempfile
 import time
@@ -48,6 +49,47 @@ from src.core.logic.visualize import draw_detections
 APP_ROOT = Path(__file__).resolve().parents[2]
 LIVE_DIR = APP_ROOT / "src" / "dashboard" / "analysis"
 DASHBOARD_DIR = APP_ROOT / "src" / "dashboard"
+
+
+def _storage_slug(value: str | None, fallback: str = "item") -> str:
+    text = (value or fallback).strip().lower()
+    text = re.sub(r"[^a-z0-9]+", "-", text).strip("-")
+    return text[:60] or fallback
+
+
+def _named_storage_dir(base_dir: Path, label: str | None, item_id: str) -> Path:
+    return base_dir / f"{_storage_slug(label)}_{item_id}"
+
+
+def _find_id_dir(base_dir: Path, item_id: str) -> Path | None:
+    if not item_id:
+        return None
+    if not base_dir.exists():
+        return None
+    matches = sorted(
+        (p for p in base_dir.iterdir() if p.is_dir() and p.name.endswith(f"_{item_id}")),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    return matches[0] if matches else None
+
+
+def _session_dir_for_save(session_id: str, label: str | None = None) -> Path:
+    return _named_storage_dir(APP_ROOT / "operator_sessions", label or "session", session_id)
+
+
+def _find_session_dir(session_id: str) -> Path | None:
+    return _find_id_dir(APP_ROOT / "operator_sessions", session_id)
+
+
+def _find_case_session_dir(session_id: str) -> Path | None:
+    cases_dir = APP_ROOT / "cases"
+    matches = sorted(
+        cases_dir.glob(f"*/sessions/*_{session_id}"),
+        key=lambda p: p.stat().st_mtime if p.exists() else 0,
+        reverse=True,
+    )
+    return matches[0] if matches else None
 
 
 # Operator Session State
@@ -88,8 +130,8 @@ def _save_operator_session(custom_name: str = None):
     sessions_dir = APP_ROOT / "operator_sessions"
     sessions_dir.mkdir(parents=True, exist_ok=True)
 
-    # Each session lives in its own folder named by session_id
-    session_dir = sessions_dir / session_id
+    # Each session lives in a readable folder: session-name_session-id.
+    session_dir = _find_session_dir(session_id) or _session_dir_for_save(session_id, custom_name or _OPERATOR_SESSION.get("display_name"))
     session_dir.mkdir(parents=True, exist_ok=True)
 
     # Pull out and save the source image as a separate file
@@ -118,6 +160,56 @@ def _save_operator_session(custom_name: str = None):
     # Remove legacy flat files for this session_id if any
     for old in sessions_dir.glob(f"session_*_{session_id}.json"):
         old.unlink(missing_ok=True)
+
+def _candidate_weight(item: dict) -> float:
+    for key in ("posterior_weight", "posterior", "score"):
+        try:
+            return float(item.get(key) or 0)
+        except Exception:
+            return 0.0
+    return 0.0
+
+def _persist_operator_session_if_saved() -> None:
+    session_id = _OPERATOR_SESSION.get("session_id")
+    if not session_id:
+        return
+    session_dir = _find_session_dir(session_id) or _find_case_session_dir(session_id)
+    if session_dir and (session_dir / "session.json").exists():
+        _save_operator_session()
+
+def _candidate_ordered_index(index) -> int | None:
+    return _candidate_ordered_index_in(_OPERATOR_SESSION.get("candidates", []), index)
+
+
+def _candidate_ordered_index_in(candidates: list, index) -> int | None:
+    try:
+        idx = int(index)
+    except Exception:
+        return None
+    ordered = sorted(enumerate(candidates), key=lambda pair: _candidate_weight(pair[1]), reverse=True)
+    if 0 <= idx < len(ordered):
+        return ordered[idx][0]
+    return None
+
+
+def _load_session_payload(session_id: str) -> tuple[dict | None, Path | None]:
+    session_dir = _find_session_dir(session_id) or _find_case_session_dir(session_id)
+    json_path = (session_dir / "session.json") if session_dir else None
+    if not json_path or not json_path.exists():
+        return None, None
+    try:
+        with open(json_path, "r", encoding="utf-8") as f:
+            return json.load(f), json_path
+    except Exception:
+        return None, None
+
+
+def _save_session_payload(data: dict, json_path: Path | None) -> None:
+    if not json_path:
+        return
+    json_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
 
 def _reset_operator_session():
     global _OPERATOR_SESSION
@@ -2261,9 +2353,10 @@ def _session_summary(data: dict) -> dict:
     }
 
 @app.get("/api/operator/sessions")
-def operator_list_sessions() -> JSONResponse:
+def operator_list_sessions(include_case: bool = False) -> JSONResponse:
     sessions_dir = APP_ROOT / "operator_sessions"
     sessions = []
+    seen_session_ids = set()
     if sessions_dir.exists():
         # Per-session folders (UUID-named)
         for session_dir in sessions_dir.iterdir():
@@ -2276,6 +2369,8 @@ def operator_list_sessions() -> JSONResponse:
                 with open(json_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 sessions.append(_session_summary(data))
+                if data.get("session_id"):
+                    seen_session_ids.add(data.get("session_id"))
             except Exception:
                 continue
         # Legacy: flat session_*.json files
@@ -2284,6 +2379,22 @@ def operator_list_sessions() -> JSONResponse:
                 with open(file_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 sessions.append(_session_summary(data))
+                if data.get("session_id"):
+                    seen_session_ids.add(data.get("session_id"))
+            except Exception:
+                continue
+    cases_dir = APP_ROOT / "cases"
+    if include_case and cases_dir.exists():
+        for json_path in cases_dir.glob("*/sessions/*/session.json"):
+            try:
+                with open(json_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                sid = data.get("session_id")
+                if sid and sid in seen_session_ids:
+                    continue
+                sessions.append(_session_summary(data))
+                if sid:
+                    seen_session_ids.add(sid)
             except Exception:
                 continue
     sessions.sort(key=lambda x: x.get("updated_at") or "", reverse=True)
@@ -2295,9 +2406,10 @@ def operator_get_session_by_id(session_id: str) -> JSONResponse:
     global _OPERATOR_SESSION
     sessions_dir = APP_ROOT / "operator_sessions"
 
-    # Per-session folder (UUID-named)
-    json_path = sessions_dir / session_id / "session.json"
-    if json_path.exists():
+    # Per-session folder: either legacy session_id or readable name_session_id.
+    session_dir = _find_session_dir(session_id)
+    json_path = (session_dir / "session.json") if session_dir else None
+    if json_path and json_path.exists():
         try:
             with open(json_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
@@ -2328,6 +2440,22 @@ def operator_get_session_by_id(session_id: str) -> JSONResponse:
         except Exception as e:
             return JSONResponse({"error": str(e)}, status_code=500)
 
+    # Case-local mirrored sessions
+    case_session_dir = _find_case_session_dir(session_id)
+    case_json_paths = [case_session_dir / "session.json"] if case_session_dir else []
+    for json_path in case_json_paths:
+        try:
+            with open(json_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            source = data.get("source")
+            if isinstance(source, dict):
+                if source.get("image_file") and not source.get("image_data_url"):
+                    data["source"]["has_session_image"] = True
+            _OPERATOR_SESSION = data
+            return JSONResponse(_OPERATOR_SESSION)
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=500)
+
     return JSONResponse({"error": "Session not found"}, status_code=404)
 
 
@@ -2344,10 +2472,15 @@ def operator_get_session_image(session_id: str):
     
     session_dir = None
     for base in potential_bases:
-        test_dir = (base / session_id).resolve()
-        if test_dir.exists() and test_dir.is_dir():
-            session_dir = test_dir
+        test_dir = _find_id_dir(base, session_id)
+        if test_dir and test_dir.exists() and test_dir.is_dir():
+            session_dir = test_dir.resolve()
             break
+
+    if not session_dir:
+        test_dir = _find_case_session_dir(session_id)
+        if test_dir and test_dir.exists() and test_dir.is_dir():
+            session_dir = test_dir.resolve()
             
     if not session_dir:
         logging.error(f"Session directory for {session_id} not found in any potential base.")
@@ -2414,9 +2547,8 @@ async def operator_save_session(request: Request) -> JSONResponse:
         # For save-as-new: copy the source image from the old session folder to the new one
         # (image_data_url is absent when loaded from disk; the file must be copied explicitly)
         if save_as_new and old_session_id:
-            sessions_dir = APP_ROOT / "operator_sessions"
-            old_dir = sessions_dir / old_session_id
-            new_dir = sessions_dir / _OPERATOR_SESSION["session_id"]
+            old_dir = _find_session_dir(old_session_id) or (APP_ROOT / "operator_sessions" / old_session_id)
+            new_dir = _find_session_dir(_OPERATOR_SESSION["session_id"]) or _session_dir_for_save(_OPERATOR_SESSION["session_id"], custom_name)
             old_source = (_OPERATOR_SESSION.get("source") or {}).get("image_file")
             if old_source:
                 src_path = old_dir / old_source
@@ -2432,6 +2564,8 @@ async def operator_save_session(request: Request) -> JSONResponse:
                 if case and saved_session_id not in case.get("sessions", []):
                     case.setdefault("sessions", []).append(saved_session_id)
                     _save_case(case)
+                if case:
+                    _mirror_session_to_case(saved_session_id, _ACTIVE_CASE_ID)
             except Exception as attach_err:
                 logging.warning(f"Could not auto-attach session to active case: {attach_err}")
         return JSONResponse({"status": "session_saved", "session_id": saved_session_id, "active_case_id": _ACTIVE_CASE_ID})
@@ -2451,14 +2585,18 @@ async def operator_add_pin(request: Request) -> JSONResponse:
         lon = data.get("lon")
         label = data.get("label", "Manual Pin")
         if lat is not None and lon is not None:
-            _OPERATOR_SESSION["operator_pins"].append({
+            pin = {
+                "pin_id": uuid.uuid4().hex,
                 "lat": float(lat),
                 "lon": float(lon),
                 "label": label,
                 "added_at": _utc_now_iso()
-            })
+            }
+            _OPERATOR_SESSION.setdefault("operator_pins", []).append(pin)
+            _OPERATOR_SESSION["updated_at"] = _utc_now_iso()
             _add_timeline_event(f"Operator added pin at {lat:.4f}, {lon:.4f}", "info")
-            return JSONResponse({"status": "pin_added"})
+            _persist_operator_session_if_saved()
+            return JSONResponse({"status": "pin_added", "pin": pin, "operator_pins": _OPERATOR_SESSION.get("operator_pins", [])})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     return JSONResponse({"error": "invalid payload"}, status_code=400)
@@ -2522,10 +2660,37 @@ async def operator_add_note(request: Request) -> JSONResponse:
 async def operator_confirm_candidate(request: Request) -> JSONResponse:
     try:
         data = await request.json()
+        session_id = data.get("session_id")
+        target_session = _OPERATOR_SESSION
+        target_path = None
+        if session_id and session_id != _OPERATOR_SESSION.get("session_id"):
+            loaded, target_path = _load_session_payload(session_id)
+            if not loaded:
+                return JSONResponse({"error": "Session not found"}, status_code=404)
+            target_session = loaded
         rank = data.get("rank")
         action = data.get("action") # "confirm" or "reject"
+        original_idx = _candidate_ordered_index_in(target_session.get("candidates", []), data.get("index"))
+        if original_idx is None and rank is not None:
+            try:
+                rank_int = int(rank)
+            except Exception:
+                rank_int = rank
+            for i, candidate in enumerate(target_session.get("candidates", [])):
+                if candidate.get("rank") == rank_int or candidate.get("rank") == rank:
+                    original_idx = i
+                    break
+        if action in {"accept", "confirm"} and original_idx is not None:
+            candidate = target_session["candidates"][original_idx]
+            candidate["accepted"] = True
+            candidate["rejected"] = False
+            target_session["updated_at"] = _utc_now_iso()
+            if target_session is _OPERATOR_SESSION:
+                _persist_operator_session_if_saved()
+            else:
+                _save_session_payload(target_session, target_path)
         _add_timeline_event(f"Operator {action}ed candidate rank {rank}", "info")
-        return JSONResponse({"status": "action_recorded"})
+        return JSONResponse({"status": "action_recorded", "candidates": target_session.get("candidates", [])})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 
@@ -2827,8 +2992,9 @@ def _persist_active_case_id(case_id: str | None) -> None:
 
 
 def _load_case(case_id: str) -> dict | None:
-    case_file = CASES_DIR / case_id / "case.json"
-    if not case_file.exists():
+    case_dir = _find_id_dir(CASES_DIR, case_id)
+    case_file = (case_dir / "case.json") if case_dir else None
+    if not case_file or not case_file.exists():
         return None
     try:
         with open(case_file, "r", encoding="utf-8") as f:
@@ -2838,10 +3004,23 @@ def _load_case(case_id: str) -> dict | None:
 
 
 def _save_case(case: dict) -> None:
-    case_dir = CASES_DIR / case["case_id"]
+    case_dir = _find_id_dir(CASES_DIR, case["case_id"]) or _named_storage_dir(CASES_DIR, case.get("name") or "case", case["case_id"])
     case_dir.mkdir(parents=True, exist_ok=True)
     with open(case_dir / "case.json", "w", encoding="utf-8") as f:
         json.dump(case, f, indent=2, ensure_ascii=False)
+
+
+def _mirror_session_to_case(session_id: str, case_id: str) -> None:
+    import shutil
+    source_dir = _find_session_dir(session_id)
+    if not source_dir or not source_dir.exists():
+        return
+    case = _load_case(case_id) or {"case_id": case_id, "name": "case"}
+    case_dir = _find_id_dir(CASES_DIR, case_id) or _named_storage_dir(CASES_DIR, case.get("name") or "case", case_id)
+    session_label = source_dir.name.rsplit("_", 1)[0] if "_" in source_dir.name else "session"
+    target_dir = case_dir / "sessions" / f"{session_label}_{session_id}"
+    target_dir.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(source_dir, target_dir, dirs_exist_ok=True)
 
 
 def _case_summary(case: dict) -> dict:
@@ -2863,7 +3042,14 @@ def list_cases() -> JSONResponse:
         for case_dir in sorted(CASES_DIR.iterdir(), key=lambda d: d.stat().st_mtime, reverse=True):
             if not case_dir.is_dir():
                 continue
-            case = _load_case(case_dir.name)
+            case_file = case_dir / "case.json"
+            if not case_file.exists():
+                continue
+            try:
+                with open(case_file, "r", encoding="utf-8") as f:
+                    case = json.load(f)
+            except Exception:
+                case = None
             if case:
                 cases.append(_case_summary(case))
     return JSONResponse({"cases": cases})
@@ -2936,6 +3122,7 @@ async def add_session_to_active_case(request: Request) -> JSONResponse:
     if session_id not in case["sessions"]:
         case["sessions"].append(session_id)
         _save_case(case)
+    _mirror_session_to_case(session_id, _ACTIVE_CASE_ID)
     return JSONResponse({"active_case": _case_summary(case)})
 
 
@@ -2993,8 +3180,8 @@ async def update_case(case_id: str, request: Request) -> JSONResponse:
 @app.delete("/api/cases/{case_id}")
 def delete_case(case_id: str) -> JSONResponse:
     import shutil
-    case_dir = CASES_DIR / case_id
-    if not case_dir.exists():
+    case_dir = _find_id_dir(CASES_DIR, case_id)
+    if not case_dir or not case_dir.exists():
         return JSONResponse({"error": "Case not found"}, status_code=404)
     shutil.rmtree(case_dir)
     return JSONResponse({"deleted": case_id})
@@ -3013,6 +3200,7 @@ async def add_session_to_case(case_id: str, request: Request) -> JSONResponse:
         case["sessions"].append(session_id)
         case["updated_at"] = _utc_now_iso()
         _save_case(case)
+    _mirror_session_to_case(session_id, case_id)
     return JSONResponse(_case_summary(case))
 
 
@@ -3047,19 +3235,48 @@ async def update_case_connections(case_id: str, request: Request) -> JSONRespons
 async def refuse_candidate(request: Request) -> JSONResponse:
     global _OPERATOR_SESSION
     body = await request.json()
+    session_id = body.get("session_id")
+    target_session = _OPERATOR_SESSION
+    target_path = None
+    if session_id and session_id != _OPERATOR_SESSION.get("session_id"):
+        loaded, target_path = _load_session_payload(session_id)
+        if not loaded:
+            return JSONResponse({"error": "Session not found"}, status_code=404)
+        target_session = loaded
     rank = body.get("rank")
-    if rank is None:
-        return JSONResponse({"error": "rank required"}, status_code=400)
-    candidates = _OPERATOR_SESSION.get("candidates", [])
+    index = body.get("index")
+    if rank is None and index is None:
+        return JSONResponse({"error": "rank or index required"}, status_code=400)
+    candidates = target_session.get("candidates", [])
     before = len(candidates)
-    _OPERATOR_SESSION["candidates"] = [c for c in candidates if c.get("rank") != rank]
+    removed = False
+    if index is not None:
+        remove_original_idx = _candidate_ordered_index_in(candidates, index)
+        if remove_original_idx is not None:
+            target_session["candidates"] = [
+                c for i, c in enumerate(candidates) if i != remove_original_idx
+            ]
+            removed = True
+    if not removed and rank is not None:
+        try:
+            rank_int = int(rank)
+        except Exception:
+            rank_int = rank
+        target_session["candidates"] = [
+            c for c in candidates if c.get("rank") != rank_int and c.get("rank") != rank
+        ]
     # Re-number remaining candidates
-    for i, c in enumerate(_OPERATOR_SESSION["candidates"]):
+    for i, c in enumerate(target_session["candidates"]):
         c["rank"] = i + 1
-    after = len(_OPERATOR_SESSION["candidates"])
+    after = len(target_session["candidates"])
     if before != after:
         _add_timeline_event(f"Candidate rank {rank} refused and removed", "info")
-    return JSONResponse({"ok": True, "removed": before != after, "remaining": after})
+        target_session["updated_at"] = _utc_now_iso()
+        if target_session is _OPERATOR_SESSION:
+            _persist_operator_session_if_saved()
+        else:
+            _save_session_payload(target_session, target_path)
+    return JSONResponse({"ok": True, "removed": before != after, "remaining": after, "candidates": target_session["candidates"]})
 
 
 # ---------------------------------------------------------------------------
@@ -3085,8 +3302,8 @@ async def attach_note_photo(
     photo_filename = f"photo_{photo_id}{ext}"
 
     # Store alongside session if it's been saved; otherwise keep in-memory as data URL
-    session_dir = APP_ROOT / "operator_sessions" / session_id
-    if session_dir.exists():
+    session_dir = _find_session_dir(session_id)
+    if session_dir and session_dir.exists():
         photos_dir = session_dir / "photos"
         photos_dir.mkdir(exist_ok=True)
         (photos_dir / photo_filename).write_bytes(data)
@@ -3108,8 +3325,9 @@ async def attach_note_photo(
 
 @app.get("/api/operator/sessions/{session_id}/photos/{filename}")
 def get_session_photo(session_id: str, filename: str):
-    photo_path = APP_ROOT / "operator_sessions" / session_id / "photos" / filename
-    if not photo_path.exists():
+    session_dir = _find_session_dir(session_id) or _find_case_session_dir(session_id)
+    photo_path = (session_dir / "photos" / filename) if session_dir else None
+    if not photo_path or not photo_path.exists():
         return JSONResponse({"error": "Photo not found"}, status_code=404)
     return FileResponse(str(photo_path))
 

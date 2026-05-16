@@ -5,6 +5,7 @@ let isDroppingPin = false;
 let isStreetWalkMode = false;
 let droppedPinLocation = null;
 let currentManualPinMarker = null;
+let operatorPinMarkers = [];
 
 // Street View interactive viewer state
 let svState = {
@@ -13,6 +14,10 @@ let svState = {
     candidates: [], minimap: null, minimapReady: null, minimapMarkers: [],
 };
 const SV_CAND_COLORS = ["#f2f2f2", "#c9c9c9", "#9f9f9f", "#777777", "#555555"];
+const profileOptions = [
+  { value: "paris", label: "Paris (Standard)" },
+  { value: "paris_test", label: "Paris (Test)" },
+];
 
 let loadedSessionId = null;
 
@@ -227,42 +232,45 @@ function operatorMapCoord(item) {
 
 const CAND_COLORS = ["#10b981", "#6366f1", "#f59e0b", "#ef4444", "#8b5cf6"];
 
-function renderCandidatePins(candidates) {
+function renderCandidatePins(candidateEntries) {
   clearCandidateMarkers();
   if (!liveMap) return;
 
-  candidates.slice(0, topLimit).forEach((item, idx) => {
+  candidateEntries.slice(0, topLimit + 1).forEach((entry, idx) => {
+    const item = entry.item || entry;
+    const listIndex = Number.isFinite(entry.listIndex) ? entry.listIndex : idx;
+    const rank = Number.isFinite(entry.rank) ? entry.rank : listIndex + 1;
     const coord = numericCandidateCoord(item);
     if (!coord) return;
 
-    const color = CAND_COLORS[idx] || "#4a5568";
-    const size = idx === 0 ? 28 : 24;
+    const color = entry.temporary ? "#ffffff" : CAND_COLORS[listIndex] || "#4a5568";
+    const size = entry.temporary || listIndex === 0 ? 28 : 24;
 
     const el = document.createElement("div");
     el.className = "candidate-pin-marker";
-    el.dataset.index = String(idx);
+    el.dataset.index = String(listIndex);
     Object.assign(el.style, {
       width: `${size}px`,
       height: `${size}px`,
       background: color,
-      border: "2.5px solid rgba(255,255,255,0.85)",
+      border: entry.temporary ? "3px solid #10b981" : "2.5px solid rgba(255,255,255,0.85)",
       borderRadius: "50%",
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
-      fontSize: idx === 0 ? "13px" : "11px",
+      fontSize: listIndex === 0 ? "13px" : "11px",
       fontWeight: "700",
-      color: "#ffffff",
+      color: entry.temporary ? "#111111" : "#ffffff",
       cursor: "pointer",
-      boxShadow: "0 2px 8px rgba(0,0,0,0.55)",
+      boxShadow: entry.temporary ? "0 0 0 4px rgba(16,185,129,0.28), 0 2px 10px rgba(0,0,0,0.6)" : "0 2px 8px rgba(0,0,0,0.55)",
       userSelect: "none",
     });
-    el.textContent = String(idx + 1);
-    el.title = `Candidate ${idx + 1}`;
+    el.textContent = String(rank);
+    el.title = entry.temporary ? `Selected candidate ${rank}` : `Candidate ${rank}`;
 
     el.addEventListener("click", (e) => {
       e.stopPropagation();
-      selectCandidate(idx);
+      selectCandidate(listIndex);
     });
 
     const marker = new maplibregl.Marker({ element: el, anchor: "center" })
@@ -768,6 +776,7 @@ function selectCandidate(index) {
 
   if (isAlreadySelected) {
       selectedIndex = -1;
+      if (lastResult) renderLiveMap(lastResult);
       updateSelectedMarker(-1);
       updateHtmlMarkerSelection(-1);
       const noteInput = byId("operator-note-input");
@@ -776,6 +785,7 @@ function selectCandidate(index) {
   }
 
   selectedIndex = index;
+  if (lastResult) renderLiveMap(lastResult);
   card.classList.add("active");
   updateSelectedMarker(index);
   updateHtmlMarkerSelection(index);
@@ -800,11 +810,21 @@ function selectCandidate(index) {
 
 function recordCandidateAction(action, index = selectedIndex) {
   if (index < 0) return Promise.resolve(null);
-  return postForm("/api/operator/confirm", JSON.stringify({ rank: index + 1, action }));
+  return postForm("/api/operator/confirm", JSON.stringify({ index, rank: index + 1, action }));
 }
 
 function candidateWeight(item) {
   return item?.posterior_weight ?? item?.posterior ?? item?.score ?? 0;
+}
+
+function candidateAccepted(item) {
+  return item?.accepted === true || item?.status === "accepted" || item?.operator_status === "accepted";
+}
+
+function reviewableSessionCandidates(data) {
+  const candidates = sortedCandidates(data);
+  const accepted = candidates.filter(candidateAccepted);
+  return accepted.length > 0 ? accepted : candidates;
 }
 
 function candidateLat(item) {
@@ -836,19 +856,137 @@ function sortedCandidates(result) {
   return [...candidates].sort((a, b) => candidateWeight(b) - candidateWeight(a));
 }
 
+function mapCandidateEntries(candidates) {
+  const entries = candidates.map((item, listIndex) => ({
+    item,
+    listIndex,
+    rank: listIndex + 1,
+    temporary: false
+  }));
+
+  if (!loadedSessionId) return entries.slice(0, topLimit);
+
+  const accepted = entries.filter(entry => candidateAccepted(entry.item));
+  const acceptedEntries = (accepted.length > 0 ? accepted : entries).slice(0, topLimit);
+  const selectedEntry = Number.isFinite(selectedIndex) && selectedIndex >= 0 ? entries[selectedIndex] : null;
+  if (selectedEntry && !acceptedEntries.some(entry => entry.listIndex === selectedEntry.listIndex)) {
+    acceptedEntries.push({ ...selectedEntry, temporary: true });
+  }
+  return acceptedEntries;
+}
+
+function visibleSessionEntries() {
+  return Array.from(_overlayMarkers.entries())
+    .filter(([sessionId, entry]) => {
+      if (!entry?.visible || !entry?.data) return false;
+      return sessionId !== loadedSessionId || isCurrentSessionHidden();
+    })
+    .map(([sessionId, entry]) => ({ sessionId, ...entry }));
+}
+
+function sessionDisplayName(sessionId, data = {}) {
+  const summary = _allSessions.find(s => s.session_id === sessionId) || {};
+  return summary.custom_name || data.custom_name || summary.display_name || data.display_name || (sessionId || "").slice(0, 10);
+}
+
+function appendSessionCandidateCards(container) {
+  const entries = visibleSessionEntries();
+  if (!entries.length) return 0;
+
+  let appended = 0;
+  entries.forEach(({ sessionId, data, color }) => {
+    const candidates = reviewableSessionCandidates(data).slice(0, topLimit);
+    if (!candidates.length) return;
+
+    const divider = document.createElement("div");
+    divider.className = "session-candidate-divider";
+    divider.style.setProperty("--session-color", color);
+    divider.innerHTML = `<span></span><strong>${sessionDisplayName(sessionId, data)}</strong>`;
+    container.appendChild(divider);
+
+    candidates.forEach((cand, idx) => {
+      const coord = numericCandidateCoord(cand);
+      if (!coord) return;
+      const rank = idx + 1;
+      const card = document.createElement("div");
+      card.className = "candidate-card session-candidate-card";
+      card.style.setProperty("--session-color", color);
+      card.dataset.lat = coord.lat;
+      card.dataset.lon = coord.lon;
+
+      const coordString = `${coord.lat.toFixed(6)}, ${coord.lon.toFixed(6)}`;
+      const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${coord.lat},${coord.lon}`;
+      const sourceId = cand.match_id || cand.source || "N/A";
+      card.innerHTML = `
+        <div class="card-top">
+          <span class="card-rank">S${rank}</span>
+          <span class="card-score">${candidateAccepted(cand) ? "ACCEPTED" : `${(candidateWeight(cand) * 100).toFixed(1)}%`}</span>
+        </div>
+        <div class="card-address">Session Point ${rank}</div>
+        <div class="card-sub">Session ${sessionDisplayName(sessionId, data)} - ${sourceId}</div>
+        <div class="card-coords-row">
+          <div class="card-coords">${coordString}</div>
+          <button class="btn-icon-small copy-coords" title="Copy Coordinates">COPY</button>
+        </div>
+        <div class="card-action-row">
+          <button class="btn-card-action open-maps">Open in Google Maps</button>
+          <button class="btn-card-action street-view-btn street-view-btn-accent" data-lat="${coord.lat}" data-lon="${coord.lon}">Street View</button>
+        </div>
+        <div class="candidate-card-actions">
+          <button class="btn-accept-candidate" type="button" title="Accept this session point">
+            <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+            ${candidateAccepted(cand) ? "Accepted" : "Accept"}
+          </button>
+          <button class="btn-refuse-candidate" type="button" title="Remove this point from the session">
+            <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            Remove
+          </button>
+        </div>
+      `;
+
+      card.querySelector(".copy-coords")?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(coordString);
+      });
+      card.querySelector(".open-maps")?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        window.open(mapsUrl, "_blank");
+      });
+      card.querySelector(".btn-accept-candidate")?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        acceptSessionCandidate(sessionId, idx, rank);
+      });
+      card.querySelector(".btn-refuse-candidate")?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        removeSessionCandidate(sessionId, idx, rank);
+      });
+      card.addEventListener("click", () => {
+        document.querySelectorAll(".candidate-card").forEach(c => c.classList.remove("active"));
+        card.classList.add("active");
+        flyToCentered({ center: [coord.lon, coord.lat], zoom: 16, pitch: 0, bearing: 0, duration: 900 });
+      });
+      container.appendChild(card);
+      appended += 1;
+    });
+  });
+  return appended;
+}
+
 function renderCandidateList(result) {
   const container = byId("results-list");
   if (!container) return;
   container.replaceChildren();
 
   const candidates = sortedCandidates(result);
+  const currentHidden = isCurrentSessionHidden();
+  const hasVisibleSessions = visibleSessionEntries().length > 0;
 
-  if (candidates.length === 0) {
+  if ((currentHidden || candidates.length === 0) && !hasVisibleSessions) {
     container.innerHTML = '<div class="empty-state">No candidates found.</div>';
     return;
   }
 
-  const slice = candidates.slice(0, topLimit);
+  const slice = currentHidden ? [] : candidates.slice(0, topLimit);
 
   slice.forEach((item, idx) => {
     const rank = idx + 1;
@@ -857,7 +995,8 @@ function renderCandidateList(result) {
     const lat = mapCoord?.lat ?? candidateMapLat(cand);
     const lon = mapCoord?.lon ?? candidateMapLon(cand);
     const card = document.createElement("div");
-    card.className = "candidate-card";
+    const isAccepted = candidateAccepted(cand);
+    card.className = `candidate-card${isAccepted ? " accepted-candidate" : ""}`;
     card.dataset.lat = lat;
     card.dataset.lon = lon;
     card.dataset.index = idx;
@@ -873,7 +1012,7 @@ function renderCandidateList(result) {
     card.innerHTML = `
       <div class="card-top">
         <span class="card-rank">#${rank}</span>
-        <span class="card-score">${(candidateWeight(item) * 100).toFixed(1)}%</span>
+        <span class="card-score">${isAccepted ? "ACCEPTED" : `${(candidateWeight(item) * 100).toFixed(1)}%`}</span>
       </div>
       <div class="card-address">Target Point ${rank}</div>
       <div class="card-sub-wrap">
@@ -946,23 +1085,29 @@ function renderCandidateList(result) {
     const actionsRow = document.createElement("div");
     actionsRow.className = "candidate-card-actions";
     actionsRow.innerHTML = `
+      <button class="btn-accept-candidate" type="button" title="Accept this geotag">
+        <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+        ${isAccepted ? "Accepted" : "Accept"}
+      </button>
       <button class="btn-refuse-candidate" type="button" title="Remove this candidate from the analysis">
         <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
         Remove
       </button>
-      <button class="btn-street-view-card street-view-btn" data-lat="${lat}" data-lon="${lon}" type="button">
-        <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12 Q12 2 21 12 Q12 22 3 12Z"/><circle cx="12" cy="12" r="3"/></svg>
-        Street View
-      </button>
     `;
     actionsRow.querySelector(".btn-refuse-candidate").addEventListener("click", (e) => {
       e.stopPropagation();
-      refuseCandidate(rank);
+      refuseCandidate(idx, rank);
+    });
+    actionsRow.querySelector(".btn-accept-candidate").addEventListener("click", (e) => {
+      e.stopPropagation();
+      acceptCandidate(idx, rank);
     });
     card.appendChild(actionsRow);
 
     container.appendChild(card);
   });
+
+  appendSessionCandidateCards(container);
 
   // Attach street view handlers
   container.querySelectorAll(".street-view-btn").forEach(btn => {
@@ -1385,10 +1530,9 @@ function renderLiveMap(result, { resetView = false } = {}) {
 
   const fusion = result?.fused_estimate;
   const candidates = sortedCandidates(result);
+  const mapEntries = mapCandidateEntries(candidates);
 
-  if (!fusion || candidates.length === 0) return;
-
-  const visibleCandidates = candidates.slice(0, topLimit);
+  if (isCurrentSessionHidden() || !fusion || mapEntries.length === 0) return;
 
   const ringRadius =
     (fusion.radius_km ? fusion.radius_km * 1000 : null) ||
@@ -1401,7 +1545,7 @@ function renderLiveMap(result, { resetView = false } = {}) {
   } : null;
 
   liveMapReady.then(() => {
-    renderCandidatePins(visibleCandidates);
+    renderCandidatePins(mapEntries);
     liveMap.getSource("ring")?.setData({ type: "FeatureCollection", features: ringFeature ? [ringFeature] : [] });
     bringCandidateLayersToFront();
     if (resetView) {
@@ -1451,6 +1595,7 @@ function renderSummary(result) {
 
   renderCandidateList(result);
   renderLiveMap(result, { resetView: true });
+  renderOperatorPinMarkers(result);
   renderTimeline(result);
   renderClues(result);
   selectedLightboxDetectionIndex = 0;
@@ -1474,6 +1619,7 @@ function clearAnalysisResults() {
   const rawJson = byId("raw-json");
   if (rawJson) rawJson.textContent = "{}";
   clearCandidateMarkers();
+  clearOperatorPinMarkers();
   activeCandidateItems = [];
   candidatePinsPopulated = false;
   lastResult = null;
@@ -2127,8 +2273,17 @@ function init() {
 
   const profileSelect = byId("profile-select");
   if (profileSelect) {
+    if (!profileSelect.options.length) {
+      profileOptions.forEach(({ value, label }) => {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = label;
+        profileSelect.appendChild(option);
+      });
+    }
     const stored = localStorage.getItem(profileStorageKey);
     if (stored) profileSelect.value = stored;
+    if (!profileSelect.value && profileSelect.options.length) profileSelect.value = profileOptions[0].value;
     profileSelect.addEventListener("change", () => localStorage.setItem(profileStorageKey, profileSelect.value));
   }
 
@@ -2552,12 +2707,18 @@ function setupOperatorActions() {
                          target_type: "note_id",
                          note_id: activeCard.dataset.noteId
                      };
+                 } else if (activeCard?.dataset.lat && activeCard?.dataset.lon) {
+                     targetData = {
+                         target_type: "manual_pin",
+                         lat: Number(activeCard.dataset.lat),
+                         lon: Number(activeCard.dataset.lon)
+                     };
                  }
              } else if (selectedIndex !== -1 && lastResult && lastResult.candidates) {
-                 const cand = lastResult.candidates[selectedIndex];
+                 const cand = sortedCandidates(lastResult)[selectedIndex];
                  targetData = {
                      target_type: "candidate",
-                     rank: cand.rank,
+                     rank: selectedIndex + 1,
                      source: cand.source
                  };
              } else if (droppedPinLocation) {
@@ -2576,7 +2737,7 @@ function setupOperatorActions() {
                      // Reset drop pin location after save
                      if (droppedPinLocation && dropPinBtn) {
                          droppedPinLocation = null;
-                         dropPinBtn.textContent = "📍 Drop Note Pin";
+                         dropPinBtn.textContent = "Drop Pin";
                      }
 
                      // Refresh notes list and map markers immediately
@@ -2639,16 +2800,15 @@ function setupOperatorActions() {
                   isDroppingPin = false;
 
                   if (dropPinBtn) {
-                      dropPinBtn.textContent = "📍 Dropped";
+                      dropPinBtn.textContent = "Dropped";
                       dropPinBtn.style.color = "";
                   }
 
                   // Deselect candidate if dropping a manual pin
                   selectedIndex = -1;
-                  renderCandidates();
+                  document.querySelectorAll(".candidate-card").forEach(c => c.classList.remove("active"));
 
                   const noteInput = byId("operator-note-input");
-                  if (noteInput) noteInput.value = "";
 
                   if (currentManualPinMarker) {
                       currentManualPinMarker.remove();
@@ -2671,6 +2831,25 @@ function setupOperatorActions() {
                   currentManualPinMarker = new maplibregl.Marker({ element: el })
                       .setLngLat([lon, lat])
                       .addTo(liveMap);
+
+                  const label = (noteInput?.value || "").trim() || "Custom Pin";
+                  fetch("/api/operator/pin", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ lat, lon, label }),
+                  })
+                    .then(r => r.ok ? r.json() : Promise.reject(r))
+                    .then(data => {
+                        if (!lastResult) lastResult = {};
+                        lastResult.operator_pins = data.operator_pins || [...(lastResult.operator_pins || []), data.pin].filter(Boolean);
+                        if (currentManualPinMarker) {
+                            currentManualPinMarker.remove();
+                            currentManualPinMarker = null;
+                        }
+                        renderOperatorPinMarkers(lastResult);
+                        renderNotesList();
+                    })
+                    .catch(err => console.error("drop pin failed:", err));
              }
         });
     }
@@ -2692,9 +2871,10 @@ function renderNoteMarkers() {
         data.notes.forEach(note => {
             let lat = null, lon = null;
             if (note.target_type === "candidate") {
-                if (data.candidates && data.candidates[note.rank - 1]) {
-                    lat = data.candidates[note.rank - 1].lat;
-                    lon = data.candidates[note.rank - 1].lon;
+                const cand = sortedCandidates(data)[note.rank - 1];
+                if (cand) {
+                    lat = candidateMapLat(cand);
+                    lon = candidateMapLon(cand);
                 }
             } else if (note.target_type === "manual_pin") {
                 lat = note.lat;
@@ -2730,18 +2910,88 @@ function renderNoteMarkers() {
     });
 }
 
+function clearOperatorPinMarkers() {
+    operatorPinMarkers.forEach(m => m.remove());
+    operatorPinMarkers = [];
+}
+
+function renderOperatorPinMarkers(data = lastResult) {
+    if (!liveMap) return;
+    clearOperatorPinMarkers();
+    const pins = Array.isArray(data?.operator_pins) ? data.operator_pins : [];
+    pins.forEach((pin) => {
+        const lat = Number(pin.lat);
+        const lon = Number(pin.lon);
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+
+        const el = document.createElement("div");
+        el.className = "manual-pin-marker";
+        el.title = pin.label || "Custom Pin";
+        el.addEventListener("click", (evt) => {
+            evt.stopPropagation();
+            droppedPinLocation = { lat, lon };
+            selectedIndex = -1;
+            document.querySelectorAll(".candidate-card").forEach(c => c.classList.remove("active"));
+            const noteInput = byId("operator-note-input");
+            if (noteInput) noteInput.value = pin.label || "";
+            loadNoteForTarget("manual_pin", lat, lon);
+        });
+
+        const marker = new maplibregl.Marker({ element: el, anchor: "center" })
+            .setLngLat([lon, lat])
+            .addTo(liveMap);
+        operatorPinMarkers.push(marker);
+    });
+}
+
 function renderNotesList() {
     const list = document.getElementById("notes-list");
     if (!list) return;
 
     fetch("/api/operator/session").then(r => r.json()).then(data => {
-        if (!data.notes || data.notes.length === 0) {
+        const notes = Array.isArray(data.notes) ? data.notes : [];
+        const pins = Array.isArray(data.operator_pins) ? data.operator_pins : [];
+        if (notes.length === 0 && pins.length === 0) {
             list.innerHTML = '<div class="empty-state">No notes saved.</div>';
             return;
         }
 
         list.innerHTML = "";
-        data.notes.forEach(note => {
+        pins.forEach(pin => {
+            const lat = Number(pin.lat);
+            const lon = Number(pin.lon);
+            if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+            const card = document.createElement("div");
+            card.className = "result-card pin-result-card";
+            card.dataset.pinId = pin.pin_id || "";
+            card.dataset.lat = String(lat);
+            card.dataset.lon = String(lon);
+            card.innerHTML = `
+                <div class="pin-card-kicker">Custom Pin</div>
+                <div class="card-sub note-text" style="color: #fff; font-size: 12px;">${pin.label || "Custom Pin"}</div>
+                <div class="card-coords-row">
+                  <div class="card-coords">${lat.toFixed(6)}, ${lon.toFixed(6)}</div>
+                  <button class="btn-icon-small copy-coords" type="button">COPY</button>
+                </div>
+            `;
+            card.querySelector(".copy-coords")?.addEventListener("click", (e) => {
+                e.stopPropagation();
+                navigator.clipboard.writeText(`${lat.toFixed(6)}, ${lon.toFixed(6)}`);
+            });
+            card.addEventListener("click", () => {
+                list.querySelectorAll(".result-card").forEach(c => c.classList.remove("active"));
+                card.classList.add("active");
+                droppedPinLocation = { lat, lon };
+                selectedIndex = -1;
+                if (liveMap) flyToCentered({ center: [lon, lat], zoom: 16, pitch: 0, bearing: 0, duration: 900 });
+                const noteInput = byId("operator-note-input");
+                if (noteInput) noteInput.value = pin.label || "";
+                loadNoteForTarget("manual_pin", lat, lon);
+            });
+            list.appendChild(card);
+        });
+
+        notes.forEach(note => {
             const card = document.createElement("div");
             card.className = "result-card";
             card.style.marginBottom = "8px";
@@ -2751,9 +3001,10 @@ function renderNotesList() {
             let lat = 0, lon = 0;
             if (note.target_type === "candidate") {
                 targetHtml = `<div style="color: var(--accent); font-size: 10px; margin-bottom: 4px;">Candidate Rank ${note.rank} • ${note.source}</div>`;
-                if (data.candidates && data.candidates[note.rank - 1]) {
-                    lat = data.candidates[note.rank - 1].lat;
-                    lon = data.candidates[note.rank - 1].lon;
+                const cand = sortedCandidates(data)[note.rank - 1];
+                if (cand) {
+                    lat = candidateMapLat(cand);
+                    lon = candidateMapLon(cand);
                 }
             } else if (note.target_type === "manual_pin") {
                 lat = note.lat;
@@ -2807,20 +3058,120 @@ function renderNotesList() {
 }
 
 // ─── REFUSE CANDIDATE ────────────────────────────────────────────────────────
-async function refuseCandidate(rank) {
-  if (!loadedSessionId || !lastResult) return;
+async function acceptCandidate(index, rank = index + 1) {
+  if (!lastResult) return;
+  try {
+    const target = sortedCandidates(lastResult)[index];
+    if (target) target.accepted = true;
+    renderCandidateList(lastResult);
+    renderLiveMap(lastResult);
+
+    const res = await fetch("/api/operator/confirm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ index, rank, action: "accept" }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    if (Array.isArray(data.candidates)) {
+      lastResult.candidates = data.candidates;
+      renderCandidateList(lastResult);
+      renderLiveMap(lastResult);
+    }
+  } catch (err) {
+    console.error("acceptCandidate error:", err);
+  }
+}
+
+function rebuildSessionOverlayMarkers(sessionId) {
+  const entry = _overlayMarkers.get(sessionId);
+  if (!entry || !liveMap) return;
+  entry.markers.forEach(marker => marker.remove());
+  entry.markers = [];
+  reviewableSessionCandidates(entry.data).forEach(c => {
+    const coord = numericCandidateCoord(c);
+    if (!coord) return;
+    const el = document.createElement("div");
+    el.className = "overlay-session-marker";
+    el.style.setProperty("--marker-color", entry.color);
+    el.title = `[${(sessionId || "").slice(0, 6)}] ${c.address || ""}`;
+    const marker = new maplibregl.Marker({ element: el })
+      .setLngLat([coord.lon, coord.lat])
+      .addTo(liveMap);
+    if (!entry.visible) marker.getElement().style.display = "none";
+    entry.markers.push(marker);
+  });
+}
+
+async function acceptSessionCandidate(sessionId, index, rank = index + 1) {
+  const entry = _overlayMarkers.get(sessionId);
+  if (!entry) return;
+  try {
+    const res = await fetch("/api/operator/confirm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: sessionId, index, rank, action: "accept" }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    if (Array.isArray(data.candidates)) {
+      entry.data.candidates = data.candidates;
+      rebuildSessionOverlayMarkers(sessionId);
+      renderCandidateList(lastResult);
+    }
+  } catch (err) {
+    console.error("acceptSessionCandidate error:", err);
+  }
+}
+
+async function removeSessionCandidate(sessionId, index, rank = index + 1) {
+  const entry = _overlayMarkers.get(sessionId);
+  if (!entry) return;
   try {
     const res = await fetch("/api/operator/refuse-candidate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ session_id: loadedSessionId, rank }),
+      body: JSON.stringify({ session_id: sessionId, index, rank }),
     });
     if (!res.ok) throw new Error(await res.text());
-    lastResult.candidates = (lastResult.candidates || [])
-      .filter(c => c.rank !== rank)
-      .map((c, i) => ({ ...c, rank: i + 1 }));
-    renderCandidateList(lastResult);
-    renderLiveMap(lastResult);
+    const data = await res.json();
+    if (Array.isArray(data.candidates)) {
+      entry.data.candidates = data.candidates;
+      rebuildSessionOverlayMarkers(sessionId);
+      renderCandidateList(lastResult);
+    }
+  } catch (err) {
+    console.error("removeSessionCandidate error:", err);
+  }
+}
+
+async function refuseCandidate(index, rank = index + 1) {
+  if (!lastResult) return;
+  const target = sortedCandidates(lastResult)[index];
+  lastResult.candidates = (lastResult.candidates || [])
+    .filter(c => c !== target && c.rank !== rank)
+    .map((c, i) => ({ ...c, rank: i + 1 }));
+  if (selectedIndex === index) selectedIndex = -1;
+  renderCandidateList(lastResult);
+  renderLiveMap(lastResult);
+  renderNoteMarkers();
+
+  try {
+    const payload = { index, rank };
+    const res = await fetch("/api/operator/refuse-candidate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.candidates)) {
+        lastResult.candidates = data.candidates;
+      }
+      renderCandidateList(lastResult);
+      renderLiveMap(lastResult);
+      renderNoteMarkers();
+    } else throw new Error(await res.text());
   } catch (err) {
     console.error("refuseCandidate error:", err);
   }
@@ -2837,6 +3188,11 @@ let _activeCaseId = null;
 let _activeCase = null;
 let _overlayMarkers = new Map();
 let _pendingPhotoNoteId = null;
+let _hiddenCaseSessions = new Set();
+
+function isCurrentSessionHidden() {
+  return Boolean(loadedSessionId && _hiddenCaseSessions.has(loadedSessionId));
+}
 
 function sessionColor(idx) {
   return SESSION_COLORS[idx % SESSION_COLORS.length];
@@ -2863,7 +3219,7 @@ async function loadCases() {
 
 async function loadAllSessions() {
   try {
-    const res = await fetch("/api/operator/sessions");
+    const res = await fetch("/api/operator/sessions?include_case=1");
     if (res.ok) _allSessions = (await res.json()).sessions || [];
   } catch (e) { console.error("loadAllSessions:", e); }
 }
@@ -2904,7 +3260,11 @@ function renderSidebar() {
 
   const sessionIds = _activeCase.sessions || [];
   const sessions = sessionIds
-    .map(sid => _allSessions.find(s => s.session_id === sid))
+    .map(sid => _allSessions.find(s => s.session_id === sid) || {
+      session_id: sid,
+      display_name: `Missing session ${(sid || "").slice(0, 8)}`,
+      missing: true
+    })
     .filter(Boolean);
 
   if (sessions.length === 0) {
@@ -2998,11 +3358,11 @@ function buildSessionItem(session, colorIdx, caseId) {
   const sid = session.session_id;
   const color = sessionColor(colorIdx);
   const overlay = _overlayMarkers.get(sid);
-  const isVisible = overlay?.visible || false;
+  const isVisible = !_hiddenCaseSessions.has(sid) && (overlay?.visible || loadedSessionId === sid);
   const isLoaded = loadedSessionId === sid;
 
   const item = document.createElement("div");
-  item.className = "cs-session-item" + (isLoaded ? " active-session" : "");
+  item.className = "cs-session-item" + (isLoaded ? " active-session" : "") + (session.missing ? " missing-session" : "");
   item.dataset.sessionId = sid;
 
   const vis = document.createElement("div");
@@ -3011,6 +3371,7 @@ function buildSessionItem(session, colorIdx, caseId) {
   vis.title = isVisible ? "Hide from map" : "Show on map";
   vis.addEventListener("click", (e) => {
     e.stopPropagation();
+    if (session.missing) return;
     toggleSessionOverlay(sid, color);
   });
 
@@ -3023,7 +3384,7 @@ function buildSessionItem(session, colorIdx, caseId) {
 
   const meta = document.createElement("span");
   meta.className = "cs-session-meta";
-  meta.textContent = relativeTime(session.updated_at || session.created_at);
+  meta.textContent = session.missing ? "missing saved data" : relativeTime(session.updated_at || session.created_at);
 
   info.append(nameEl, meta);
   item.append(vis, info);
@@ -3043,6 +3404,7 @@ function buildSessionItem(session, colorIdx, caseId) {
 
   item.addEventListener("click", (e) => {
     if (e.target.closest(".cs-session-vis") || e.target.closest(".cs-session-remove")) return;
+    if (session.missing) return;
     loadSessionFromSidebar(sid);
   });
 
@@ -3051,13 +3413,34 @@ function buildSessionItem(session, colorIdx, caseId) {
 
 // ─── OVERLAY MARKERS ──────────────────────────────────────────────────────────
 async function toggleSessionOverlay(sessionId, color) {
+  const willHide = !_hiddenCaseSessions.has(sessionId) && (_overlayMarkers.get(sessionId)?.visible || loadedSessionId === sessionId);
+  if (willHide) {
+    _hiddenCaseSessions.add(sessionId);
+    const entry = _overlayMarkers.get(sessionId);
+    if (entry) {
+      entry.visible = false;
+      entry.markers.forEach(m => { m.getElement().style.display = "none"; });
+    }
+    if (loadedSessionId === sessionId) {
+      renderCandidateList(lastResult);
+      renderLiveMap(lastResult);
+    } else {
+      renderCandidateList(lastResult);
+    }
+    renderSidebar();
+    return;
+  }
+
+  _hiddenCaseSessions.delete(sessionId);
   if (_overlayMarkers.has(sessionId)) {
     const entry = _overlayMarkers.get(sessionId);
-    entry.visible = !entry.visible;
+    entry.visible = true;
     entry.markers.forEach(m => {
-      m.getElement().style.display = entry.visible ? "" : "none";
+      m.getElement().style.display = "";
     });
+    if (loadedSessionId === sessionId) renderLiveMap(lastResult);
     renderSidebar();
+    renderCandidateList(lastResult);
     return;
   }
   try {
@@ -3065,25 +3448,29 @@ async function toggleSessionOverlay(sessionId, color) {
     if (!res.ok) return;
     const data = await res.json();
     const markers = [];
-    (data.candidates || []).forEach(c => {
-      if (!c.lat || !c.lon) return;
+    reviewableSessionCandidates(data).forEach(c => {
+      const coord = numericCandidateCoord(c);
+      if (!coord) return;
       const el = document.createElement("div");
       el.className = "overlay-session-marker";
       el.style.setProperty("--marker-color", color);
       el.title = `[${(sessionId || "").slice(0, 6)}] ${c.address || ""}`;
       const marker = new maplibregl.Marker({ element: el })
-        .setLngLat([c.lon, c.lat])
-        .addTo(window._map);
+        .setLngLat([coord.lon, coord.lat])
+        .addTo(liveMap);
       markers.push(marker);
     });
-    _overlayMarkers.set(sessionId, { markers, visible: true, color });
+    _overlayMarkers.set(sessionId, { markers, visible: true, color, data });
+    if (loadedSessionId === sessionId) renderLiveMap(lastResult);
     renderSidebar();
+    renderCandidateList(lastResult);
   } catch (e) { console.error("toggleSessionOverlay:", e); }
 }
 
 // ─── LOAD SESSION FROM SIDEBAR ────────────────────────────────────────────────
 function loadSessionFromSidebar(sid) {
   if (!sid) return;
+  _hiddenCaseSessions.delete(sid);
   doLoadSession(sid);
   setTimeout(() => renderSidebar(), 900);
 }
