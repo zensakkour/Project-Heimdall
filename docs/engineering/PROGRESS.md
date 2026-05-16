@@ -2732,3 +2732,22 @@ Do not delete or edit past entries. Append new work at the end.
 - Metrics (before -> after): deleted case sessions reappeared after reload -> deleted case sessions stay removed after reload.
 - Artifacts: N/A.
 - Decision: Keep.
+
+## 2026-05-16 Session Annotation Persistence
+- Hypothesis: Notes and custom pins should be saved as first-class session annotations, and source imagery should reload even when the sidecar image file is missing but embedded session data remains.
+- Change:
+  - Loaded sessions now restore `notes` and `operator_pins` into the active UI state.
+  - Manual-pin notes are merged into the custom-pin card instead of showing as a separate duplicate note.
+  - Added delete actions for notes and custom pins; deleting a custom pin also removes its linked manual-pin note.
+  - Persisted note and pin edits/deletes into saved sessions and mirrored active-case sessions.
+  - Added embedded source-image fallback for saved sessions whose `source.*` file is missing.
+- Files touched: `src/tools/ui_server.py`, `src/dashboard/analysis/operator.js`, `src/tests/test_ui_server_operator_session.py`.
+- Validation commands:
+  - `node --check src\dashboard\analysis\operator.js`
+  - `.\.venv\Scripts\python.exe -m compileall -q src`
+  - `$env:TMP=(Resolve-Path .pytest_tmp).Path; $env:TEMP=$env:TMP; .\.venv\Scripts\python.exe -m pytest src\tests\test_ui_server_operator_session.py -q`
+  - `$env:TMP=(Resolve-Path .pytest_tmp).Path; $env:TEMP=$env:TMP; .\.venv\Scripts\python.exe -m pytest -q`
+- Validation result: focused tests `12 passed, 3 warnings`; full suite `288 passed, 3 warnings`.
+- Metrics (before -> after): custom pins/manual-pin notes showed as duplicate undeletable items -> custom pin and note render as one deletable persisted annotation.
+- Artifacts: N/A.
+- Decision: Keep.

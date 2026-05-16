@@ -176,6 +176,21 @@ def _persist_operator_session_if_saved() -> None:
     session_dir = _find_session_dir(session_id) or _find_case_session_dir(session_id)
     if session_dir and (session_dir / "session.json").exists():
         _save_operator_session()
+        if _ACTIVE_CASE_ID:
+            case = _load_case(_ACTIVE_CASE_ID)
+            if case and session_id in case.get("sessions", []):
+                _mirror_session_to_case(session_id, _ACTIVE_CASE_ID)
+
+
+def _note_matches_pin(note: dict, pin: dict) -> bool:
+    if note.get("target_type") != "manual_pin":
+        return False
+    if note.get("pin_id") and pin.get("pin_id"):
+        return note.get("pin_id") == pin.get("pin_id")
+    try:
+        return abs(float(note.get("lat", 0)) - float(pin.get("lat", 0))) < 0.0001 and abs(float(note.get("lon", 0)) - float(pin.get("lon", 0))) < 0.0001
+    except Exception:
+        return False
 
 def _candidate_ordered_index(index) -> int | None:
     return _candidate_ordered_index_in(_OPERATOR_SESSION.get("candidates", []), index)
@@ -2524,6 +2539,23 @@ def operator_get_session_image(session_id: str):
             file_abs = file.resolve()
             logging.info(f"Serving session image (fallback): {file_abs}")
             return FileResponse(str(file_abs), media_type=_get_ct(file_abs))
+
+    if json_path.exists():
+        try:
+            with open(json_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            source = data.get("source") or {}
+            image_data_url = source.get("image_data_url")
+            if image_data_url:
+                header, b64_data = image_data_url.split(",", 1)
+                content_type = header.split(":")[1].split(";")[0]
+                return Response(content=base64.b64decode(b64_data), media_type=content_type)
+            source_image_data = data.get("source_image_data")
+            if source_image_data:
+                media_type = source.get("content_type") or _get_ct(Path(source.get("image_file") or "source.jpg"))
+                return Response(content=base64.b64decode(source_image_data), media_type=media_type)
+        except Exception as e:
+            logging.warning(f"Embedded image fallback failed: {e}")
     
     return JSONResponse({"error": "No image file found in session directory"}, status_code=404)
 
@@ -2637,6 +2669,8 @@ async def operator_add_note(request: Request) -> JSONResponse:
                 if abs(existing_note.get("lat", 0) - data.get("lat", 0)) < 0.0001 and abs(existing_note.get("lon", 0) - data.get("lon", 0)) < 0.0001:
                     existing_note["text"] = note
                     existing_note["timestamp"] = _utc_now_iso()
+                    if data.get("pin_id"):
+                        existing_note["pin_id"] = data.get("pin_id")
                     updated = True
                     break
 
@@ -2647,14 +2681,55 @@ async def operator_add_note(request: Request) -> JSONResponse:
             elif target_type == "manual_pin":
                 note_entry["lat"] = data.get("lat")
                 note_entry["lon"] = data.get("lon")
+                if data.get("pin_id"):
+                    note_entry["pin_id"] = data.get("pin_id")
             _OPERATOR_SESSION["notes"].append(note_entry)
 
         _OPERATOR_SESSION["operator_notes"] = note # Keep for backwards compat
+        if target_type == "manual_pin":
+            for pin in _OPERATOR_SESSION.get("operator_pins", []):
+                if _note_matches_pin({"target_type": "manual_pin", "lat": data.get("lat"), "lon": data.get("lon"), "pin_id": data.get("pin_id")}, pin):
+                    pin["label"] = note or pin.get("label") or "Custom Pin"
+                    pin["note_id"] = data.get("note_id") or next((n.get("note_id") for n in _OPERATOR_SESSION["notes"] if _note_matches_pin(n, pin)), None)
+                    break
 
         _add_timeline_event("Operator added a note", "info")
-        return JSONResponse({"status": "note_updated"})
+        _OPERATOR_SESSION["updated_at"] = _utc_now_iso()
+        _persist_operator_session_if_saved()
+        return JSONResponse({"status": "note_updated", "notes": _OPERATOR_SESSION.get("notes", []), "operator_pins": _OPERATOR_SESSION.get("operator_pins", [])})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@app.delete("/api/operator/notes/{note_id}")
+def operator_delete_note(note_id: str) -> JSONResponse:
+    notes = _OPERATOR_SESSION.get("notes", [])
+    note = next((n for n in notes if n.get("note_id") == note_id), None)
+    if not note:
+        return JSONResponse({"error": "Note not found"}, status_code=404)
+    _OPERATOR_SESSION["notes"] = [n for n in notes if n.get("note_id") != note_id]
+    if note.get("target_type") == "manual_pin":
+        _OPERATOR_SESSION["operator_pins"] = [p for p in _OPERATOR_SESSION.get("operator_pins", []) if not _note_matches_pin(note, p)]
+    else:
+        for pin in _OPERATOR_SESSION.get("operator_pins", []):
+            if pin.get("note_id") == note_id:
+                pin.pop("note_id", None)
+    _OPERATOR_SESSION["updated_at"] = _utc_now_iso()
+    _persist_operator_session_if_saved()
+    return JSONResponse({"status": "note_deleted", "notes": _OPERATOR_SESSION.get("notes", []), "operator_pins": _OPERATOR_SESSION.get("operator_pins", [])})
+
+
+@app.delete("/api/operator/pins/{pin_id}")
+def operator_delete_pin(pin_id: str) -> JSONResponse:
+    pins = _OPERATOR_SESSION.get("operator_pins", [])
+    pin = next((p for p in pins if p.get("pin_id") == pin_id), None)
+    if not pin:
+        return JSONResponse({"error": "Pin not found"}, status_code=404)
+    _OPERATOR_SESSION["operator_pins"] = [p for p in pins if p.get("pin_id") != pin_id]
+    _OPERATOR_SESSION["notes"] = [n for n in _OPERATOR_SESSION.get("notes", []) if not _note_matches_pin(n, pin)]
+    _OPERATOR_SESSION["updated_at"] = _utc_now_iso()
+    _persist_operator_session_if_saved()
+    return JSONResponse({"status": "pin_deleted", "notes": _OPERATOR_SESSION.get("notes", []), "operator_pins": _OPERATOR_SESSION.get("operator_pins", [])})
 
 @app.post("/api/operator/confirm")
 async def operator_confirm_candidate(request: Request) -> JSONResponse:

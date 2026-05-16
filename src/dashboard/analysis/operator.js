@@ -2049,10 +2049,13 @@ function doLoadSession(sid) {
             localStorage.setItem("heimdallSessionId", loadedSessionId);
 
             lastResult = {
+                ...data,
                 fused_estimate: data.fused_estimate,
-                candidates: data.candidates,
-                clues: data.clues,
-                detections: data.detections
+                candidates: Array.isArray(data.candidates) ? data.candidates : [],
+                clues: Array.isArray(data.clues) ? data.clues : [],
+                detections: Array.isArray(data.detections) ? data.detections : [],
+                notes: Array.isArray(data.notes) ? data.notes : [],
+                operator_pins: Array.isArray(data.operator_pins) ? data.operator_pins : [],
             };
 
             // Restore source image into the left-panel preview area.
@@ -2710,6 +2713,7 @@ function setupOperatorActions() {
                  } else if (activeCard?.dataset.lat && activeCard?.dataset.lon) {
                      targetData = {
                          target_type: "manual_pin",
+                         pin_id: activeCard.dataset.pinId || undefined,
                          lat: Number(activeCard.dataset.lat),
                          lon: Number(activeCard.dataset.lon)
                      };
@@ -2724,13 +2728,20 @@ function setupOperatorActions() {
              } else if (droppedPinLocation) {
                  targetData = {
                      target_type: "manual_pin",
+                     pin_id: droppedPinLocation.pin_id,
                      lat: droppedPinLocation.lat,
                      lon: droppedPinLocation.lon
                  };
              }
 
              postForm("/api/operator/note", JSON.stringify({note: noteInput.value, ...targetData}))
-                 .then(() => {
+                 .then((data) => {
+                     if (!lastResult) lastResult = {};
+                     if (Array.isArray(data.notes)) lastResult.notes = data.notes;
+                     if (Array.isArray(data.operator_pins)) {
+                         lastResult.operator_pins = data.operator_pins;
+                         renderOperatorPinMarkers(lastResult);
+                     }
                      saveNoteBtn.textContent = "Saved";
                      noteInput.blur();
 
@@ -2842,6 +2853,7 @@ function setupOperatorActions() {
                     .then(data => {
                         if (!lastResult) lastResult = {};
                         lastResult.operator_pins = data.operator_pins || [...(lastResult.operator_pins || []), data.pin].filter(Boolean);
+                        if (data.pin?.pin_id) droppedPinLocation = { lat, lon, pin_id: data.pin.pin_id };
                         if (currentManualPinMarker) {
                             currentManualPinMarker.remove();
                             currentManualPinMarker = null;
@@ -2929,7 +2941,7 @@ function renderOperatorPinMarkers(data = lastResult) {
         el.title = pin.label || "Custom Pin";
         el.addEventListener("click", (evt) => {
             evt.stopPropagation();
-            droppedPinLocation = { lat, lon };
+            droppedPinLocation = { lat, lon, pin_id: pin.pin_id };
             selectedIndex = -1;
             document.querySelectorAll(".candidate-card").forEach(c => c.classList.remove("active"));
             const noteInput = byId("operator-note-input");
@@ -2942,6 +2954,44 @@ function renderOperatorPinMarkers(data = lastResult) {
             .addTo(liveMap);
         operatorPinMarkers.push(marker);
     });
+}
+
+function noteMatchesPin(note, pin) {
+    if (!note || !pin || note.target_type !== "manual_pin") return false;
+    if (note.pin_id && pin.pin_id) return note.pin_id === pin.pin_id;
+    const noteLat = Number(note.lat);
+    const noteLon = Number(note.lon);
+    const pinLat = Number(pin.lat);
+    const pinLon = Number(pin.lon);
+    return Number.isFinite(noteLat) && Number.isFinite(noteLon)
+        && Number.isFinite(pinLat) && Number.isFinite(pinLon)
+        && Math.abs(noteLat - pinLat) < 0.0001
+        && Math.abs(noteLon - pinLon) < 0.0001;
+}
+
+function applyAnnotationPayload(data) {
+    if (!lastResult) lastResult = {};
+    if (Array.isArray(data?.notes)) lastResult.notes = data.notes;
+    if (Array.isArray(data?.operator_pins)) lastResult.operator_pins = data.operator_pins;
+    renderOperatorPinMarkers(lastResult);
+    renderNoteMarkers();
+    renderNotesList();
+}
+
+async function deleteOperatorNote(noteId) {
+    if (!noteId) return;
+    if (!window.confirm("Delete this note?")) return;
+    const res = await fetch(`/api/operator/notes/${noteId}`, { method: "DELETE" });
+    if (!res.ok) throw new Error(await res.text());
+    applyAnnotationPayload(await res.json());
+}
+
+async function deleteOperatorPin(pinId) {
+    if (!pinId) return;
+    if (!window.confirm("Delete this custom pin and its note?")) return;
+    const res = await fetch(`/api/operator/pins/${pinId}`, { method: "DELETE" });
+    if (!res.ok) throw new Error(await res.text());
+    applyAnnotationPayload(await res.json());
 }
 
 function renderNotesList() {
@@ -2961,37 +3011,45 @@ function renderNotesList() {
             const lat = Number(pin.lat);
             const lon = Number(pin.lon);
             if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+            const note = notes.find(n => noteMatchesPin(n, pin));
             const card = document.createElement("div");
             card.className = "result-card pin-result-card";
             card.dataset.pinId = pin.pin_id || "";
             card.dataset.lat = String(lat);
             card.dataset.lon = String(lon);
+            if (note?.note_id) card.dataset.noteId = note.note_id;
             card.innerHTML = `
                 <div class="pin-card-kicker">Custom Pin</div>
-                <div class="card-sub note-text" style="color: #fff; font-size: 12px;">${pin.label || "Custom Pin"}</div>
+                <div class="card-sub note-text" style="color: #fff; font-size: 12px;">${note?.text || pin.label || "Custom Pin"}</div>
                 <div class="card-coords-row">
                   <div class="card-coords">${lat.toFixed(6)}, ${lon.toFixed(6)}</div>
                   <button class="btn-icon-small copy-coords" type="button">COPY</button>
+                  <button class="note-delete-btn" type="button" title="Delete custom pin">DELETE</button>
                 </div>
             `;
             card.querySelector(".copy-coords")?.addEventListener("click", (e) => {
                 e.stopPropagation();
                 navigator.clipboard.writeText(`${lat.toFixed(6)}, ${lon.toFixed(6)}`);
             });
+            card.querySelector(".note-delete-btn")?.addEventListener("click", (e) => {
+                e.stopPropagation();
+                deleteOperatorPin(pin.pin_id).catch(err => console.error("delete pin failed:", err));
+            });
             card.addEventListener("click", () => {
                 list.querySelectorAll(".result-card").forEach(c => c.classList.remove("active"));
                 card.classList.add("active");
-                droppedPinLocation = { lat, lon };
+                droppedPinLocation = { lat, lon, pin_id: pin.pin_id };
                 selectedIndex = -1;
                 if (liveMap) flyToCentered({ center: [lon, lat], zoom: 16, pitch: 0, bearing: 0, duration: 900 });
                 const noteInput = byId("operator-note-input");
-                if (noteInput) noteInput.value = pin.label || "";
+                if (noteInput) noteInput.value = note?.text || pin.label || "";
                 loadNoteForTarget("manual_pin", lat, lon);
             });
             list.appendChild(card);
         });
 
         notes.forEach(note => {
+            if (note.target_type === "manual_pin" && pins.some(pin => noteMatchesPin(note, pin))) return;
             const card = document.createElement("div");
             card.className = "result-card";
             card.style.marginBottom = "8px";
@@ -3020,9 +3078,16 @@ function renderNotesList() {
                   <div class="card-sub note-text" style="color: #fff; font-size: 12px;">${note.text}</div>
                   <button class="source-more note-more" type="button" hidden>Show more</button>
                 </div>
-                <div style="font-size: 9px; color: var(--text-secondary); text-align: right; border-top: none;">${timeStr}</div>
+                <div class="note-card-footer">
+                  <span style="font-size: 9px; color: var(--text-secondary); border-top: none;">${timeStr}</span>
+                  <button class="note-delete-btn" type="button" title="Delete note">DELETE</button>
+                </div>
             `;
             if (note.note_id) card.dataset.noteId = note.note_id;
+            card.querySelector(".note-delete-btn")?.addEventListener("click", (e) => {
+                e.stopPropagation();
+                deleteOperatorNote(note.note_id).catch(err => console.error("delete note failed:", err));
+            });
 
             card.addEventListener("click", () => {
                 list.querySelectorAll(".result-card").forEach(c => c.classList.remove("active"));

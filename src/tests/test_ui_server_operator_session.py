@@ -161,6 +161,69 @@ def test_operator_session_image_serving():
     expected_bytes = base64.b64decode(pixel_b64)
     assert resp.content == expected_bytes
 
+def test_session_image_serving_falls_back_to_embedded_source_data():
+    import base64
+    from src.tools import ui_server
+
+    client.post("/api/operator/reset")
+    pixel_b64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+    data_url = f"data:image/png;base64,{pixel_b64}"
+    ui_server._OPERATOR_SESSION["source_image_data"] = pixel_b64
+    ui_server._OPERATOR_SESSION["source"] = {
+        "filename": "fallback.png",
+        "image_data_url": data_url,
+    }
+
+    save_resp = client.post("/api/operator/save", json={"name": "fallback image"})
+    assert save_resp.status_code == 200
+    session_id = save_resp.json()["session_id"]
+    session_dir = ui_server._find_session_dir(session_id)
+    assert session_dir is not None
+    (session_dir / "source.png").unlink()
+
+    resp = client.get(f"/api/operator/sessions/{session_id}/image")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "image/png"
+    assert resp.content == base64.b64decode(pixel_b64)
+
+def test_saved_session_pin_note_merge_and_delete_persists():
+    client.post("/api/operator/reset")
+    save_resp = client.post("/api/operator/save", json={"name": "pin note session"})
+    assert save_resp.status_code == 200
+    session_id = save_resp.json()["session_id"]
+
+    pin_resp = client.post("/api/operator/pin", json={"lat": 12.34, "lon": 56.78, "label": "Custom Pin"})
+    assert pin_resp.status_code == 200
+    pin = pin_resp.json()["pin"]
+
+    note_resp = client.post("/api/operator/note", json={
+        "note": "Pinned observation",
+        "target_type": "manual_pin",
+        "pin_id": pin["pin_id"],
+        "lat": 12.34,
+        "lon": 56.78,
+    })
+    assert note_resp.status_code == 200
+    assert note_resp.json()["operator_pins"][0]["label"] == "Pinned observation"
+    note_id = note_resp.json()["notes"][0]["note_id"]
+
+    reload_resp = client.get(f"/api/operator/sessions/{session_id}")
+    assert reload_resp.status_code == 200
+    reloaded = reload_resp.json()
+    assert reloaded["operator_pins"][0]["note_id"] == note_id
+    assert reloaded["operator_pins"][0]["label"] == "Pinned observation"
+    assert reloaded["notes"][0]["text"] == "Pinned observation"
+
+    delete_resp = client.delete(f"/api/operator/pins/{pin['pin_id']}")
+    assert delete_resp.status_code == 200
+    assert delete_resp.json()["operator_pins"] == []
+    assert delete_resp.json()["notes"] == []
+
+    reload_after_delete = client.get(f"/api/operator/sessions/{session_id}")
+    assert reload_after_delete.status_code == 200
+    assert reload_after_delete.json()["operator_pins"] == []
+    assert reload_after_delete.json()["notes"] == []
+
 def test_removing_case_session_deletes_case_mirror(tmp_path, monkeypatch):
     from src.tools import ui_server
 
