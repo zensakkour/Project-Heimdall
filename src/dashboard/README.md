@@ -82,6 +82,11 @@ Optional (include `Analyze Image` run if deps are healthy):
 .\.venv\Scripts\python -m src.tools.record_demo_video --with-analyze
 ```
 
+Default analyzed sample:
+
+- `data/analysis_tests/paris_street/images/mapillary__1021055432583866.jpg`
+- profile: `paris_test`
+
 Recommended demo interactions to include:
 
 1. Upload image and run `Analyze Image`.

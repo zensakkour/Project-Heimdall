@@ -48,6 +48,18 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Run Analyze Image during recording (requires healthy model dependencies).",
     )
+    parser.add_argument(
+        "--sample-image",
+        type=str,
+        default="data/analysis_tests/paris_street/images/mapillary__1021055432583866.jpg",
+        help="Sample image to upload when --with-analyze is enabled.",
+    )
+    parser.add_argument(
+        "--profile",
+        type=str,
+        default="paris_test",
+        help="Analysis profile to select before running Analyze Image.",
+    )
     return parser.parse_args()
 
 
@@ -64,7 +76,9 @@ def main() -> None:
         shutil.rmtree(temp_dir)
     temp_dir.mkdir(parents=True, exist_ok=True)
 
-    sample_image = root / "data" / "dota_v1" / "DOTAv1" / "images" / "test" / "P0006.jpg"
+    sample_image = Path(args.sample_image)
+    if not sample_image.is_absolute():
+        sample_image = root / sample_image
     host = "127.0.0.1"
     port = _find_open_port(host, 8050, 8150)
     base = f"http://{host}:{port}"
@@ -86,7 +100,7 @@ def main() -> None:
     )
 
     try:
-        _wait_for_server(base + "/analysis/")
+        _wait_for_server(base + "/analysis/", timeout_s=90)
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             context = browser.new_context(
@@ -100,10 +114,34 @@ def main() -> None:
             page.wait_for_timeout(1200)
 
             if args.with_analyze and sample_image.exists():
+                page.select_option("#profile-select", value=str(args.profile))
                 page.set_input_files("#image-file", str(sample_image))
                 page.wait_for_timeout(300)
-                page.click("#geolocate-image")
-                page.wait_for_timeout(3000)
+                with page.expect_response(
+                    lambda response: response.request.method == "POST" and "/api/operator/analyze" in response.url,
+                    timeout=180000,
+                ) as analyze_response:
+                    page.click("#geolocate-image")
+                response = analyze_response.value
+                payload = response.json()
+                if not response.ok:
+                    raise RuntimeError(f"Analyze Image failed with HTTP {response.status}: {payload}")
+                if payload.get("safe_demo"):
+                    raise RuntimeError(f"Analyze Image returned safe_demo payload: {payload}")
+                if payload.get("error"):
+                    raise RuntimeError(f"Analyze Image returned error payload: {payload}")
+                page.wait_for_function(
+                    """
+                    () => {
+                      const raw = document.querySelector("#raw-json")?.textContent || "";
+                      const status = document.querySelector("#diag-model-status")?.textContent || "";
+                      const progress = document.querySelector("#progress");
+                      return raw.trim() !== "{}" && status.trim() && status.trim() !== "-" && progress?.style.display === "none";
+                    }
+                    """,
+                    timeout=180000,
+                )
+                page.wait_for_timeout(1200)
 
             map_box = page.locator("#live-map").bounding_box()
             if not map_box:
@@ -160,6 +198,9 @@ def main() -> None:
         shutil.move(str(recorded_path), str(destination))
         print(f"Demo video created: {destination}")
         print(f"Demo screenshot created: {screenshot_path}")
+        if args.with_analyze:
+            print(f"Analyze sample used: {sample_image}")
+            print(f"Analyze profile used: {args.profile}")
     finally:
         try:
             server.terminate()
