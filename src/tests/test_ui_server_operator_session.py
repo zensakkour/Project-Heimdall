@@ -224,6 +224,83 @@ def test_saved_session_pin_note_merge_and_delete_persists():
     assert reload_after_delete.json()["operator_pins"] == []
     assert reload_after_delete.json()["notes"] == []
 
+def test_candidate_investigator_status_persists_on_saved_current_session():
+    from src.tools import ui_server
+
+    client.post("/api/operator/reset")
+    ui_server._OPERATOR_SESSION["candidates"] = [{
+        "rank": 1,
+        "lat": 48.8566,
+        "lon": 2.3522,
+        "posterior_weight": 0.72,
+        "match_id": "candidate-1",
+    }]
+
+    save_resp = client.post("/api/operator/save", json={"name": "status current session"})
+    assert save_resp.status_code == 200
+    session_id = save_resp.json()["session_id"]
+
+    confirm_resp = client.post("/api/operator/confirm", json={
+        "index": 0,
+        "rank": 1,
+        "investigator_status": "lead",
+    })
+    assert confirm_resp.status_code == 200
+    updated = confirm_resp.json()["candidates"][0]
+    assert updated["investigator_status"] == "lead"
+    assert updated["accepted"] is False
+    assert updated["rejected"] is False
+    assert updated["operator_status"] == "lead"
+
+    reload_resp = client.get(f"/api/operator/sessions/{session_id}")
+    assert reload_resp.status_code == 200
+    reloaded = reload_resp.json()
+    assert reloaded["candidates"][0]["investigator_status"] == "lead"
+    assert reloaded["candidates"][0]["operator_status"] == "lead"
+    assert reloaded["candidates"][0]["accepted"] is False
+    assert reloaded["candidates"][0]["rejected"] is False
+    assert any("marked candidate rank 1 as lead" in entry["message"].lower() for entry in reloaded["timeline"])
+
+def test_candidate_investigator_status_persists_when_targeting_saved_session_by_id():
+    from src.tools import ui_server
+
+    client.post("/api/operator/reset")
+    ui_server._OPERATOR_SESSION["candidates"] = [{
+        "rank": 1,
+        "lat": 48.8606,
+        "lon": 2.3376,
+        "posterior_weight": 0.64,
+        "match_id": "candidate-2",
+    }]
+
+    save_resp = client.post("/api/operator/save", json={"name": "status remote session"})
+    assert save_resp.status_code == 200
+    session_id = save_resp.json()["session_id"]
+
+    client.post("/api/operator/reset")
+
+    confirm_resp = client.post("/api/operator/confirm", json={
+        "session_id": session_id,
+        "index": 0,
+        "rank": 1,
+        "investigator_status": "needs_followup",
+    })
+    assert confirm_resp.status_code == 200
+    updated = confirm_resp.json()["candidates"][0]
+    assert updated["investigator_status"] == "needs_followup"
+    assert updated["accepted"] is False
+    assert updated["rejected"] is False
+    assert updated["operator_status"] == "needs_followup"
+
+    reload_resp = client.get(f"/api/operator/sessions/{session_id}")
+    assert reload_resp.status_code == 200
+    reloaded = reload_resp.json()
+    assert reloaded["candidates"][0]["investigator_status"] == "needs_followup"
+    assert reloaded["candidates"][0]["operator_status"] == "needs_followup"
+    assert reloaded["candidates"][0]["accepted"] is False
+    assert reloaded["candidates"][0]["rejected"] is False
+    assert any("needs followup" in entry["message"].lower() or "needs follow up" in entry["message"].lower() for entry in reloaded["timeline"])
+
 def test_removing_case_session_deletes_case_mirror(tmp_path, monkeypatch):
     from src.tools import ui_server
 

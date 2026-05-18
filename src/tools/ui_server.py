@@ -253,6 +253,35 @@ def _add_timeline_event(message: str, level: str = "info"):
     })
 
 
+_INVESTIGATOR_STATUSES = {
+    "lead": {"accepted": False, "rejected": False},
+    "possible": {"accepted": False, "rejected": False},
+    "needs_followup": {"accepted": False, "rejected": False},
+    "ruled_out": {"accepted": False, "rejected": True},
+    "confirmed": {"accepted": True, "rejected": False},
+}
+
+
+def _append_timeline_event_to(session: dict, message: str, level: str = "info") -> None:
+    session.setdefault("timeline", [])
+    session["timeline"].append({
+        "timestamp": _utc_now_iso(),
+        "message": message,
+        "level": level,
+    })
+
+
+def _apply_candidate_investigator_status(candidate: dict, investigator_status: str) -> None:
+    normalized = str(investigator_status or "").strip().lower()
+    if normalized not in _INVESTIGATOR_STATUSES:
+        raise ValueError(f"invalid investigator status: {investigator_status}")
+    flags = _INVESTIGATOR_STATUSES[normalized]
+    candidate["investigator_status"] = normalized
+    candidate["accepted"] = bool(flags["accepted"])
+    candidate["rejected"] = bool(flags["rejected"])
+    candidate["operator_status"] = "accepted" if flags["accepted"] else ("rejected" if flags["rejected"] else normalized)
+
+
 app = FastAPI()
 
 from fastapi.middleware.cors import CORSMiddleware
@@ -2744,7 +2773,8 @@ async def operator_confirm_candidate(request: Request) -> JSONResponse:
                 return JSONResponse({"error": "Session not found"}, status_code=404)
             target_session = loaded
         rank = data.get("rank")
-        action = data.get("action") # "confirm" or "reject"
+        action = str(data.get("action") or "").strip().lower()  # legacy
+        investigator_status = str(data.get("investigator_status") or "").strip().lower()
         original_idx = _candidate_ordered_index_in(target_session.get("candidates", []), data.get("index"))
         if original_idx is None and rank is not None:
             try:
@@ -2755,16 +2785,31 @@ async def operator_confirm_candidate(request: Request) -> JSONResponse:
                 if candidate.get("rank") == rank_int or candidate.get("rank") == rank:
                     original_idx = i
                     break
-        if action in {"accept", "confirm"} and original_idx is not None:
-            candidate = target_session["candidates"][original_idx]
-            candidate["accepted"] = True
-            candidate["rejected"] = False
-            target_session["updated_at"] = _utc_now_iso()
-            if target_session is _OPERATOR_SESSION:
-                _persist_operator_session_if_saved()
+        if original_idx is None:
+            return JSONResponse({"error": "Candidate not found"}, status_code=404)
+
+        if not investigator_status:
+            if action in {"accept", "confirm"}:
+                investigator_status = "confirmed"
+            elif action in {"reject", "ruled_out", "rule_out"}:
+                investigator_status = "ruled_out"
+            elif action in _INVESTIGATOR_STATUSES:
+                investigator_status = action
             else:
-                _save_session_payload(target_session, target_path)
-        _add_timeline_event(f"Operator {action}ed candidate rank {rank}", "info")
+                return JSONResponse({"error": "investigator_status or supported action required"}, status_code=400)
+
+        candidate = target_session["candidates"][original_idx]
+        _apply_candidate_investigator_status(candidate, investigator_status)
+        target_session["updated_at"] = _utc_now_iso()
+        _append_timeline_event_to(
+            target_session,
+            f"Operator marked candidate rank {rank} as {investigator_status.replace('_', ' ')}",
+            "info",
+        )
+        if target_session is _OPERATOR_SESSION:
+            _persist_operator_session_if_saved()
+        else:
+            _save_session_payload(target_session, target_path)
         return JSONResponse({"status": "action_recorded", "candidates": target_session.get("candidates", [])})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=400)

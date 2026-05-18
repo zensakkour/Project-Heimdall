@@ -650,6 +650,27 @@ button:focus-visible {
   color: #6ee7b7;
 }
 
+.candidate-card.investigator-lead {
+  border-left-color: rgba(245, 158, 11, 0.82);
+}
+
+.candidate-card.investigator-possible {
+  border-left-color: rgba(59, 130, 246, 0.82);
+}
+
+.candidate-card.investigator-followup {
+  border-left-color: rgba(168, 85, 247, 0.82);
+}
+
+.candidate-card.investigator-ruledout {
+  background: rgba(239, 68, 68, 0.045);
+  border-left-color: rgba(239, 68, 68, 0.72);
+}
+
+.candidate-card.investigator-confirmed {
+  border-left-color: rgba(16, 185, 129, 0.82);
+}
+
 .session-candidate-divider {
   align-items: center;
   color: var(--text-secondary);
@@ -751,6 +772,40 @@ button:focus-visible {
 .active .card-score {
   background: rgba(16, 185, 129, 0.12);
   border-color: rgba(16, 185, 129, 0.3);
+  color: #6ee7b7;
+}
+
+.investigator-status-badge {
+  letter-spacing: 0.08em;
+}
+
+.investigator-status-badge-lead {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.34);
+  color: #fbbf24;
+}
+
+.investigator-status-badge-possible {
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(59, 130, 246, 0.34);
+  color: #93c5fd;
+}
+
+.investigator-status-badge-followup {
+  background: rgba(168, 85, 247, 0.13);
+  border-color: rgba(168, 85, 247, 0.34);
+  color: #d8b4fe;
+}
+
+.investigator-status-badge-ruledout {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.28);
+  color: #fca5a5;
+}
+
+.investigator-status-badge-confirmed {
+  background: rgba(16, 185, 129, 0.14);
+  border-color: rgba(16, 185, 129, 0.34);
   color: #6ee7b7;
 }
 
@@ -2683,8 +2738,13 @@ button:focus-visible {
 
 .candidate-card-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   margin-top: 8px;
+}
+
+.candidate-card-actions-secondary {
+  margin-top: 6px;
 }
 
 .btn-accept-candidate,
@@ -2732,6 +2792,64 @@ button:focus-visible {
 .btn-refuse-candidate:hover {
   background: rgba(239, 68, 68, 0.13);
   border-color: rgba(239, 68, 68, 0.32);
+}
+
+.btn-investigator-status {
+  min-width: calc(33.333% - 4px);
+  flex: 1 1 calc(33.333% - 4px);
+  outline: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 6px 8px;
+  text-transform: uppercase;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-secondary);
+  font-family: inherit;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
+}
+
+.btn-investigator-status:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: var(--text-primary);
+}
+
+.btn-investigator-status.is-active {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.btn-investigator-status-lead.is-active {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: rgba(245, 158, 11, 0.42);
+  color: #fbbf24;
+}
+
+.btn-investigator-status-possible.is-active {
+  background: rgba(59, 130, 246, 0.14);
+  border-color: rgba(59, 130, 246, 0.38);
+  color: #93c5fd;
+}
+
+.btn-investigator-status-followup.is-active {
+  background: rgba(168, 85, 247, 0.15);
+  border-color: rgba(168, 85, 247, 0.4);
+  color: #d8b4fe;
+}
+
+.btn-investigator-status-ruledout.is-active {
+  background: rgba(239, 68, 68, 0.14);
+  border-color: rgba(239, 68, 68, 0.38);
+  color: #fca5a5;
+}
+
+.btn-investigator-status-confirmed.is-active {
+  background: rgba(16, 185, 129, 0.16);
+  border-color: rgba(16, 185, 129, 0.4);
+  color: #6ee7b7;
 }
 
 .btn-street-view-card {

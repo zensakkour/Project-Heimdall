@@ -817,14 +817,61 @@ function candidateWeight(item) {
   return item?.posterior_weight ?? item?.posterior ?? item?.score ?? 0;
 }
 
+const INVESTIGATOR_STATUS_OPTIONS = [
+  { value: "lead", label: "Lead", tone: "lead" },
+  { value: "possible", label: "Possible", tone: "possible" },
+  { value: "needs_followup", label: "Follow Up", tone: "followup" },
+  { value: "ruled_out", label: "Rule Out", tone: "ruledout" },
+  { value: "confirmed", label: "Confirm", tone: "confirmed" },
+];
+
+function candidateInvestigatorStatus(item) {
+  const raw = String(item?.investigator_status ?? item?.operator_status ?? item?.status ?? "").trim().toLowerCase();
+  if (raw === "accept" || raw === "accepted") return "confirmed";
+  if (raw === "reject" || raw === "rejected") return "ruled_out";
+  return raw;
+}
+
+function candidateStatusLabel(item) {
+  const status = candidateInvestigatorStatus(item);
+  if (!status) return null;
+  return status.replace(/_/g, " ").toUpperCase();
+}
+
+function candidateStatusTone(item) {
+  const status = candidateInvestigatorStatus(item);
+  const meta = INVESTIGATOR_STATUS_OPTIONS.find((option) => option.value === status);
+  return meta?.tone || null;
+}
+
 function candidateAccepted(item) {
-  return item?.accepted === true || item?.status === "accepted" || item?.operator_status === "accepted";
+  const status = candidateInvestigatorStatus(item);
+  return item?.accepted === true || status === "confirmed";
 }
 
 function reviewableSessionCandidates(data) {
   const candidates = sortedCandidates(data);
+  const flagged = candidates.filter((candidate) => {
+    const status = candidateInvestigatorStatus(candidate);
+    return status && status !== "ruled_out";
+  });
+  if (flagged.length > 0) return flagged;
   const accepted = candidates.filter(candidateAccepted);
   return accepted.length > 0 ? accepted : candidates;
+}
+
+function candidateStatusButtonsHtml(item) {
+  const currentStatus = candidateInvestigatorStatus(item);
+  return INVESTIGATOR_STATUS_OPTIONS.map((option) => `
+    <button
+      class="btn-investigator-status btn-investigator-status-${option.tone}${currentStatus === option.value ? " is-active" : ""}"
+      type="button"
+      data-investigator-status="${option.value}"
+      title="Mark candidate as ${option.label.toLowerCase()}"
+    >
+      ${option.label}
+    </button>
+  `).join("");
 }
 
 function candidateLat(item) {
@@ -909,7 +956,10 @@ function appendSessionCandidateCards(container) {
       if (!coord) return;
       const rank = idx + 1;
       const card = document.createElement("div");
-      card.className = "candidate-card session-candidate-card";
+      const statusLabel = candidateStatusLabel(cand);
+      const statusTone = candidateStatusTone(cand);
+      const isAccepted = candidateAccepted(cand);
+      card.className = `candidate-card session-candidate-card${isAccepted ? " accepted-candidate" : ""}${statusTone ? ` investigator-${statusTone}` : ""}`;
       card.style.setProperty("--session-color", color);
       card.dataset.lat = coord.lat;
       card.dataset.lon = coord.lon;
@@ -920,7 +970,7 @@ function appendSessionCandidateCards(container) {
       card.innerHTML = `
         <div class="card-top">
           <span class="card-rank">S${rank}</span>
-          <span class="card-score">${candidateAccepted(cand) ? "ACCEPTED" : `${(candidateWeight(cand) * 100).toFixed(1)}%`}</span>
+          <span class="card-score${statusTone ? ` investigator-status-badge investigator-status-badge-${statusTone}` : ""}">${statusLabel || `${(candidateWeight(cand) * 100).toFixed(1)}%`}</span>
         </div>
         <div class="card-address">Session Point ${rank}</div>
         <div class="card-sub">Session ${sessionDisplayName(sessionId, data)} - ${sourceId}</div>
@@ -933,10 +983,9 @@ function appendSessionCandidateCards(container) {
           <button class="btn-card-action street-view-btn street-view-btn-accent" data-lat="${coord.lat}" data-lon="${coord.lon}">Street View</button>
         </div>
         <div class="candidate-card-actions">
-          <button class="btn-accept-candidate" type="button" title="Accept this session point">
-            <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
-            ${candidateAccepted(cand) ? "Accepted" : "Accept"}
-          </button>
+          ${candidateStatusButtonsHtml(cand)}
+        </div>
+        <div class="candidate-card-actions candidate-card-actions-secondary">
           <button class="btn-refuse-candidate" type="button" title="Remove this point from the session">
             <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
             Remove
@@ -952,9 +1001,11 @@ function appendSessionCandidateCards(container) {
         e.stopPropagation();
         window.open(mapsUrl, "_blank");
       });
-      card.querySelector(".btn-accept-candidate")?.addEventListener("click", (e) => {
-        e.stopPropagation();
-        acceptSessionCandidate(sessionId, idx, rank);
+      card.querySelectorAll("[data-investigator-status]")?.forEach((button) => {
+        button.addEventListener("click", (e) => {
+          e.stopPropagation();
+          updateSessionCandidateStatus(sessionId, idx, button.dataset.investigatorStatus, rank);
+        });
       });
       card.querySelector(".btn-refuse-candidate")?.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -996,7 +1047,9 @@ function renderCandidateList(result) {
     const lon = mapCoord?.lon ?? candidateMapLon(cand);
     const card = document.createElement("div");
     const isAccepted = candidateAccepted(cand);
-    card.className = `candidate-card${isAccepted ? " accepted-candidate" : ""}`;
+    const statusLabel = candidateStatusLabel(cand);
+    const statusTone = candidateStatusTone(cand);
+    card.className = `candidate-card${isAccepted ? " accepted-candidate" : ""}${statusTone ? ` investigator-${statusTone}` : ""}`;
     card.dataset.lat = lat;
     card.dataset.lon = lon;
     card.dataset.index = idx;
@@ -1012,7 +1065,7 @@ function renderCandidateList(result) {
     card.innerHTML = `
       <div class="card-top">
         <span class="card-rank">#${rank}</span>
-        <span class="card-score">${isAccepted ? "ACCEPTED" : `${(candidateWeight(item) * 100).toFixed(1)}%`}</span>
+        <span class="card-score${statusTone ? ` investigator-status-badge investigator-status-badge-${statusTone}` : ""}">${statusLabel || `${(candidateWeight(item) * 100).toFixed(1)}%`}</span>
       </div>
       <div class="card-address">Target Point ${rank}</div>
       <div class="card-sub-wrap">
@@ -1085,24 +1138,28 @@ function renderCandidateList(result) {
     const actionsRow = document.createElement("div");
     actionsRow.className = "candidate-card-actions";
     actionsRow.innerHTML = `
-      <button class="btn-accept-candidate" type="button" title="Accept this geotag">
-        <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
-        ${isAccepted ? "Accepted" : "Accept"}
-      </button>
+      ${candidateStatusButtonsHtml(cand)}
+    `;
+    const secondaryActionsRow = document.createElement("div");
+    secondaryActionsRow.className = "candidate-card-actions candidate-card-actions-secondary";
+    secondaryActionsRow.innerHTML = `
       <button class="btn-refuse-candidate" type="button" title="Remove this candidate from the analysis">
         <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
         Remove
       </button>
     `;
-    actionsRow.querySelector(".btn-refuse-candidate").addEventListener("click", (e) => {
+    secondaryActionsRow.querySelector(".btn-refuse-candidate").addEventListener("click", (e) => {
       e.stopPropagation();
       refuseCandidate(idx, rank);
     });
-    actionsRow.querySelector(".btn-accept-candidate").addEventListener("click", (e) => {
-      e.stopPropagation();
-      acceptCandidate(idx, rank);
+    actionsRow.querySelectorAll("[data-investigator-status]").forEach((button) => {
+      button.addEventListener("click", (e) => {
+        e.stopPropagation();
+        updateCandidateStatus(idx, button.dataset.investigatorStatus, rank);
+      });
     });
     card.appendChild(actionsRow);
+    card.appendChild(secondaryActionsRow);
 
     container.appendChild(card);
   });
@@ -3124,17 +3181,25 @@ function renderNotesList() {
 
 // ─── REFUSE CANDIDATE ────────────────────────────────────────────────────────
 async function acceptCandidate(index, rank = index + 1) {
+  return updateCandidateStatus(index, "confirmed", rank);
+}
+
+async function updateCandidateStatus(index, investigatorStatus, rank = index + 1) {
   if (!lastResult) return;
   try {
     const target = sortedCandidates(lastResult)[index];
-    if (target) target.accepted = true;
+    if (target) {
+      target.investigator_status = investigatorStatus;
+      target.accepted = investigatorStatus === "confirmed";
+      target.rejected = investigatorStatus === "ruled_out";
+    }
     renderCandidateList(lastResult);
     renderLiveMap(lastResult);
 
     const res = await fetch("/api/operator/confirm", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ index, rank, action: "accept" }),
+      body: JSON.stringify({ index, rank, investigator_status: investigatorStatus }),
     });
     if (!res.ok) throw new Error(await res.text());
     const data = await res.json();
@@ -3144,7 +3209,7 @@ async function acceptCandidate(index, rank = index + 1) {
       renderLiveMap(lastResult);
     }
   } catch (err) {
-    console.error("acceptCandidate error:", err);
+    console.error("updateCandidateStatus error:", err);
   }
 }
 
@@ -3169,13 +3234,17 @@ function rebuildSessionOverlayMarkers(sessionId) {
 }
 
 async function acceptSessionCandidate(sessionId, index, rank = index + 1) {
+  return updateSessionCandidateStatus(sessionId, index, "confirmed", rank);
+}
+
+async function updateSessionCandidateStatus(sessionId, index, investigatorStatus, rank = index + 1) {
   const entry = _overlayMarkers.get(sessionId);
   if (!entry) return;
   try {
     const res = await fetch("/api/operator/confirm", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ session_id: sessionId, index, rank, action: "accept" }),
+      body: JSON.stringify({ session_id: sessionId, index, rank, investigator_status: investigatorStatus }),
     });
     if (!res.ok) throw new Error(await res.text());
     const data = await res.json();
@@ -3185,7 +3254,7 @@ async function acceptSessionCandidate(sessionId, index, rank = index + 1) {
       renderCandidateList(lastResult);
     }
   } catch (err) {
-    console.error("acceptSessionCandidate error:", err);
+    console.error("updateSessionCandidateStatus error:", err);
   }
 }
 
