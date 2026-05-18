@@ -69,6 +69,13 @@ Optional (include Analyze Image run if model deps are healthy):
 .\.venv\Scripts\python -m src.tools.record_demo_video --with-analyze
 ```
 
+By default this uploads `data/analysis_tests/paris_street/images/mapillary__1021055432583866.jpg`
+with the `paris_test` profile. Override the sample if needed:
+
+```powershell
+.\.venv\Scripts\python -m src.tools.record_demo_video --with-analyze --sample-image data/analysis_tests/paris_street/images/panoramax_osm-fr__29fc50e6-c5ce-4952-b75b-c3d509ea57be.jpg
+```
+
 ### Demo Recording Checklist (for replacement video)
 
 Record the new demo while showing these interactions:
